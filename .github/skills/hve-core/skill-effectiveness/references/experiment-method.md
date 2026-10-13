@@ -55,18 +55,19 @@ tag still selects the older release. No custom OAuth provider is supplied here;
 applications adding HTTP OAuth must also follow the MCP advisory's credential
 issuer-binding and migration requirements.
 The CLI brings its server dependency transitively; no separate server pin is
-needed here. YAML is used by template tests. Committed lockfiles must use canonical public registry URLs and SHA-512 integrity
-hashes. Regenerate only where the public registry supplies the pinned packages.
-The imported lockfile requires regeneration before upstream acceptance; public
-registry access was unavailable during integration. Do not hand-repair hashes or
-resolve through a private mirror. On an authorized public-registry connection,
-remove only this package's old lockfile and regenerate with:
+needed here. YAML is used by template tests. The committed lockfile was
+regenerated from public npm and uses canonical registry URLs and SHA-512
+integrity hashes. Preserve direct pins and security overrides when regenerating.
+Do not hand-repair hashes or resolve through a private mirror. Use a clean
+resolution directory with copies of this package's manifest and registry
+configuration, no existing lockfile, and no installed dependencies:
 
 ```powershell
 npm install --package-lock-only --ignore-scripts --registry=https://registry.npmjs.org/
 ```
 
-Then run `npm ci`, the package tests, and the host's public dependency-feed check.
+Inspect and replace only this package's lockfile. Then run `npm ci`, the package
+tests, and the host's public dependency-feed check.
 
 ## Author A Native Package
 

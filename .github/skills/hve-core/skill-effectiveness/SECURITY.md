@@ -37,7 +37,7 @@ establish that later context is uncontaminated.
 | Trust buckets      | B1 local content and evidence; B2 runtime and model                             |
 | Credentials        | SDK/CLI-managed account authentication; no custom token store                   |
 | Network egress     | Copilot runtime/model services selected by the SDK and account                  |
-| Open residual gaps | 4; highest severity High                                                        |
+| Open residual gaps | 3; highest severity High                                                        |
 
 ## Contents
 
@@ -221,18 +221,18 @@ Vally candidate. Dependencies and the local runtime execute with host privileges
 | Unauthorized content sent to model     | Med        | High   | Med           | Partially mitigated; supervised input selection |
 | Ambient context invalidates comparison | Med        | High   | High          | Detection only; no enforced isolation           |
 | Calls exceed required spending cap     | Med        | High   | High          | Paid path blocked when a hard cap is required   |
-| Dependency integrity inadequate        | Med        | High   | High          | Imported lockfile regeneration required         |
+| Dependency integrity inadequate        | Low        | High   | Med           | Mitigated; canonical URLs and SHA-512 integrity |
 
 ## Enterprise Readiness Gaps
 
 Ratings are qualitative project assessments, not CVSS scores.
 
-| Id      | Gap                                                                                                    | Severity         | Status                                                                               |
-|---------|--------------------------------------------------------------------------------------------------------|------------------|--------------------------------------------------------------------------------------|
-| G-INF-1 | Prompt, image, and inventory evidence has no redaction or custom access control                        | InfoDisc-Med     | Operator must protect inputs and outputs and review before sharing                   |
-| G-TAM-1 | Startup capture does not enforce candidate isolation or cover later context                            | Tampering-High   | Supervised inspection and symmetric exclusions required                              |
-| G-DOS-1 | Pinned native execution and review paths lack an enforced credit cap; media also lacks a byte-size cap | DoS-High         | Do not authorize paid execution requiring an unavailable hard cap                    |
-| G-SUP-1 | Imported lockfile contains SHA-1 entries and public-registry regeneration is not yet possible          | SupplyChain-High | Upstream acceptance blocked until canonical SHA-512 regeneration and validation pass |
+| Id      | Gap                                                                                                    | Severity         | Status                                                                          |
+|---------|--------------------------------------------------------------------------------------------------------|------------------|---------------------------------------------------------------------------------|
+| G-INF-1 | Prompt, image, and inventory evidence has no redaction or custom access control                        | InfoDisc-Med     | Operator must protect inputs and outputs and review before sharing              |
+| G-TAM-1 | Startup capture does not enforce candidate isolation or cover later context                            | Tampering-High   | Supervised inspection and symmetric exclusions required                         |
+| G-DOS-1 | Pinned native execution and review paths lack an enforced credit cap; media also lacks a byte-size cap | DoS-High         | Do not authorize paid execution requiring an unavailable hard cap               |
+| G-SUP-1 | Imported lockfile previously contained SHA-1 entries                                                   | SupplyChain-High | Resolved; regenerated from public npm with canonical URLs and SHA-512 integrity |
 
 ## References
 
