@@ -19,7 +19,7 @@ inventory capture, and evidence persistence. B2 covers the Copilot runtime and
 external model review. Each bucket enumerates all six STRIDE categories.
 Tests use mocks by default; native startup smoke coverage is separately opt-in.
 
-> See also: [repo-wide STRIDE model](../../../../docs/security/security-model.md#skill-security-models).
+> See also: [repo-wide STRIDE model](https://github.com/microsoft/hve-core/blob/main/docs/security/security-model.md#skill-security-models).
 
 ## Executive Summary
 

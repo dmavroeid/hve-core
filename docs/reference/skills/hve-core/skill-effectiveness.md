@@ -41,6 +41,32 @@ Authoring and model-free tests do not authorize paid execution. Candidate runs,
 prompt graders, and image reviews require explicit scope, budget, and adequate
 spending controls. The pinned runtime lacks the required hard credit cap.
 
+### Choosing the right skill
+
+* [hve-builder](hve-builder) helps you create, improve, and review a skill or other
+  Copilot artifact against authoring and quality requirements.
+* [vally-tests](vally-tests) helps you author conformance tests: does the artifact
+  follow the behaviors it claims?
+* skill-effectiveness helps you author a matched A/B comparison: does the same
+  agent perform a realistic task better with the skill than without it?
+
+These workflows are complementary. An artifact can meet authoring requirements
+and pass conformance tests without demonstrating added task value. Use
+skill-effectiveness when that added value is the question; ties, regressions,
+and strong baseline performance are useful findings too.
+
+## How to use it
+
+Install or copy the complete skill using your chat host's supported mechanism,
+then confirm that the host discovers it. Invoke `/skill-effectiveness` where
+supported, or explicitly ask your agent to use the skill.
+
+For standalone setup and model-free validation, use Node.js 24+ and follow the
+[copy-and-test guide](https://github.com/microsoft/hve-core/blob/main/.github/skills/hve-core/skill-effectiveness/references/experiment-method.md#copy-and-test-the-reusable-skill).
+`npm ci` installs dependencies; it does not install or register the skill with
+the chat host. Authoring and validation do not authorize paid candidate runs
+or model reviews.
+
 ## Example usage
 
 ```text

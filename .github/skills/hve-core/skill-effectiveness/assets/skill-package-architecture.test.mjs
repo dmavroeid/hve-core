@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -95,19 +96,35 @@ test("the transferable package has only declared content and two small runtime h
     ["assets/native-inventory.mjs", "assets/review-images.mjs"]);
 });
 
-test("skill metadata and shipped documentation links remain valid", () => {
+test("skill metadata and shipped documentation links remain valid in a standalone copy", t => {
   const skill = readFileSync(join(skillRoot, "SKILL.md"), "utf8");
   const frontmatter = parse(skill.match(/^---\r?\n([\s\S]*?)\r?\n---/)[1]);
   assert.equal(frontmatter.name, "skill-effectiveness");
   assert.equal(frontmatter.license, "MIT AND CC-BY-4.0");
   assert.equal(frontmatter["user-invocable"], true);
   assert.ok(frontmatter.description.startsWith("Use when"));
-  const files = [join(skillRoot, "SKILL.md"), join(skillRoot, "SECURITY.md"), join(assets, "EVALS.template.md"),
-    ...readdirSync(join(skillRoot, "references")).map(name => join(skillRoot, "references", name))];
-  for (const file of files) {
-    for (const match of readFileSync(file, "utf8").matchAll(/\[[^\]]+\]\(([^)]+)\)/g)) {
-      if (/^[a-z]+:/i.test(match[1]) || match[1].startsWith("#")) continue;
-      assert.ok(existsSync(resolve(dirname(file), match[1].split("#")[0])), `${file}: missing ${match[1]}`);
+  const documents = ["SKILL.md", "SECURITY.md", "assets/EVALS.template.md",
+    ...readdirSync(join(skillRoot, "references")).map(name => `references/${name}`)];
+  const checkLinks = root => {
+    for (const name of documents) {
+      const file = join(root, name);
+      for (const match of readFileSync(file, "utf8").matchAll(/\[[^\]]+\]\(([^)]+)\)/g)) {
+        if (/^[a-z]+:/i.test(match[1]) || match[1].startsWith("#")) continue;
+        assert.ok(existsSync(resolve(dirname(file), match[1].split("#")[0])), `${file}: missing ${match[1]}`);
+      }
     }
+  };
+  checkLinks(skillRoot);
+
+  const standalone = mkdtempSync(join(tmpdir(), "skill-effectiveness-docs-"));
+  t.after(() => rmSync(standalone, { recursive: true, force: true }));
+  for (const name of [".gitignore", ".npmrc", "SKILL.md", "SECURITY.md", "package.json", "package-lock.json",
+    "assets", "references"]) {
+    cpSync(join(skillRoot, name), join(standalone, name), { recursive: true });
   }
+  checkLinks(standalone);
+
+  const copiedSkill = join(standalone, "SKILL.md");
+  writeFileSync(copiedSkill, `${skill}\n[Missing internal document](references/missing.md)\n`);
+  assert.throws(() => checkLinks(standalone), /missing references\/missing\.md/);
 });

@@ -5,8 +5,6 @@ license: MIT AND CC-BY-4.0
 user-invocable: true
 compatibility: "Node.js 24+, Vally 0.17.0, Copilot CLI 1.0.85 and SDK 1.0.14. Windows is the tested native platform."
 ---
-<!-- cspell:ignore Dimitrios Mavroeidis -->
-
 # Evaluate Skill Effectiveness
 
 ## Goal
@@ -195,16 +193,17 @@ favorable examples, and distinguish a curated demonstration from broader evidenc
 * Report dependency, checker, runtime, and evidence failures explicitly; do not
   convert them into effectiveness scores or silently retry.
 
-## Attribution and Licensing
+## Licensing
 
-The contribution originates from `gim-home/agent-skill-bench` at commit
-`9187c65`, authored by Dimitrios Mavroeidis, with HVE integration adaptations.
 Historical experiments and review attachments are not shipped in this package.
 
 | Material                                                                     | License   |
 |------------------------------------------------------------------------------|-----------|
 | Skill and reference prose, evaluation-notes template, and security model     | CC-BY-4.0 |
 | JavaScript helpers and tests, YAML/JSON templates, and package configuration | MIT       |
+
+License terms: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) and
+[MIT](https://github.com/microsoft/hve-core/blob/main/LICENSE).
 
 Dependencies retain their own licenses; no dependency source is vendored.
 Read [the security model](SECURITY.md) before changing executable helpers or
