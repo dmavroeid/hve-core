@@ -14,7 +14,8 @@ retain their own code and pins; do not upgrade completed experiments in place.
 Copy `SKILL.md`, `SECURITY.md`, `assets/`, `references/`, `package.json`,
 `package-lock.json`, `.npmrc` and `.gitignore` as one folder.
 No parent-repository helpers are needed.
-Exclude node_modules, temporary test directories, logs and previous outputs.
+Exclude node_modules, temporary test directories, logs, generated coverage
+reports and previous outputs.
 
 From the copied skill folder:
 
@@ -28,6 +29,10 @@ code-plus-prompt evidence wiring, inventory capture and SDK image attachments.
 Ordinary tests use mocked SDK sessions and do not require the optional Copilot
 binary. Native session-startup coverage is skipped unless explicitly selected.
 These tests do not judge output quality or prove model vision.
+
+The host's coverage-enabled Node runner writes `coverage-node.info` in the skill
+folder. This generated report is ignored by Git and the package-content check;
+other undeclared package files remain errors.
 
 After separately authorizing local runtime startup and installing optional
 dependencies, select the model-free native smoke test:

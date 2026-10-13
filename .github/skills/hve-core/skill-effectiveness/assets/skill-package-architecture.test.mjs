@@ -75,7 +75,7 @@ test("the recorder and native executor share the pinned Copilot runtime", () => 
 });
 
 test("the transferable package has only declared content and two small runtime helpers", () => {
-  const files = readdirSync(skillRoot).filter(name => !["node_modules", "assets", "references"].includes(name)
+  const files = readdirSync(skillRoot).filter(name => !["node_modules", "assets", "references", "coverage-node.info"].includes(name)
     && !name.startsWith(".native-package-test-"));
   files.push(...readdirSync(assets).map(name => `assets/${name}`),
     ...readdirSync(join(skillRoot, "references")).map(name => `references/${name}`));
