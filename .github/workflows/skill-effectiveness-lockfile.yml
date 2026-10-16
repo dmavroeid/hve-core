@@ -1,0 +1,105 @@
+# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# SPDX-License-Identifier: MIT
+name: Skill Effectiveness Canonical Lockfile
+
+on:
+  push:
+    branches:
+      - automation/skill-effectiveness-lockfile-20261016
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  generate:
+    name: Generate public npm lockfile
+    if: github.repository == 'dmavroeid/hve-core'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions: {}
+    env:
+      NPM_CONFIG_REGISTRY: https://registry.npmjs.org/
+      NPM_CONFIG_IGNORE_SCRIPTS: "true"
+      PACKAGE_MANIFEST: |
+        {
+          "name": "skill-effectiveness",
+          "version": "0.1.0",
+          "private": true,
+          "type": "module",
+          "license": "MIT AND CC-BY-4.0",
+          "description": "Experimental native Vally skill-evaluation authoring; model-free asset tests",
+          "engines": {
+            "node": ">=24"
+          },
+          "scripts": {
+            "test": "node --test tests/*.test.mjs"
+          },
+          "devDependencies": {
+            "@github/copilot": "1.0.89",
+            "@github/copilot-sdk": "1.0.15",
+            "@microsoft/vally": "0.19.0",
+            "@microsoft/vally-cli": "0.19.0",
+            "sharp": "0.35.5",
+            "yaml": "2.9.1"
+          },
+          "overrides": {
+            "@modelcontextprotocol/sdk": "1.31.0",
+            "@azure/monitor-opentelemetry-exporter": "1.0.0-beta.46"
+          }
+        }
+    steps:
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Generate and verify canonical lockfile without installing packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir lockfile-output
+          cd lockfile-output
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          fs.writeFileSync("package.json", JSON.stringify(JSON.parse(process.env.PACKAGE_MANIFEST), null, 2) + "\n");
+          fs.writeFileSync(".npmrc", "registry=https://registry.npmjs.org/\nignore-scripts=true\n");
+          NODE
+          node --version
+          npm --version
+          npm install --package-lock-only --ignore-scripts --registry=https://registry.npmjs.org/ --no-audit --no-fund
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import fs from "node:fs";
+          const manifest = JSON.parse(fs.readFileSync("package.json", "utf8"));
+          const lock = JSON.parse(fs.readFileSync("package-lock.json", "utf8"));
+          assert.deepEqual(lock.packages[""].devDependencies, manifest.devDependencies);
+          for (const [name, version] of Object.entries(manifest.devDependencies)) {
+            assert.equal(lock.packages[`node_modules/${name}`].version, version);
+          }
+          for (const [name, entry] of Object.entries(lock.packages)) {
+            if (!name) continue;
+            const url = new URL(entry.resolved);
+            assert.equal(url.protocol, "https:");
+            assert.equal(url.hostname, "registry.npmjs.org");
+            assert.equal(url.username, "");
+            assert.equal(url.password, "");
+            assert.match(entry.integrity, /^sha512-/);
+          }
+          assert.equal(fs.existsSync("node_modules"), false);
+          NODE
+          sha256sum package.json package-lock.json > SHA256SUMS
+
+      - name: Upload canonical dependency artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: skill-effectiveness-canonical-lockfile
+          path: |
+            lockfile-output/package.json
+            lockfile-output/package-lock.json
+            lockfile-output/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 7
