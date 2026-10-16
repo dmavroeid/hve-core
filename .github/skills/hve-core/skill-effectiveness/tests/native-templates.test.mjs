@@ -129,7 +129,6 @@ test("native staging specs pass available CLI lint and mock experiment dry-run w
     assert.equal(result.status, 0, result.stdout + result.stderr);
   }
   f.spec.defaults.executor = "mock";
-  delete f.experiment.executor_plugins;
   f.write("evals/task.eval.yaml", stringify(f.spec));
   const reversed = { ...f.experiment, name: "treatment-first", baseline: "b-baseline", variants: {
     "a-treatment": f.experiment.variants["b-treatment"], "b-baseline": f.experiment.variants["a-baseline"],
@@ -588,6 +587,7 @@ test("native mock runs preserve identities, task failures and operational errors
       "--output-dir", output, "--workspace", join(f.temporary, "workspaces", name), "--workers", "1"],
     { SKILL_EVAL_INVENTORY_DIR: join(f.temporary, "inventories", name) });
     assert.equal(result.status, expectedExit, result.stdout + result.stderr);
+    assert.ok(existsSync(output), result.stdout + result.stderr);
     const outputs = files(output);
     assert.ok(outputs.some(file => file.endsWith("report.md")));
     return outputs.filter(file => file.endsWith(".jsonl")).flatMap(file =>

@@ -23,7 +23,8 @@ alternative when a required control is missing. There is no automatic fallback
 to the local backend.
 
 The source-preparation target is published Vally core/CLI 0.19.0, SDK 1.0.15 and
-the SDK's Copilot CLI baseline 1.0.89, on Node.js 24+. Published package inspection
+the separately pinned Copilot CLI 1.0.89, on Node.js 24+. Actual SDK runtime
+selection remains unverified. Published package inspection
 is not installed-stack verification. The default native image tag is
 `vally.azurecr.io/vally-task:0.19.0`; its digest and contents are unverified.
 Dependency migration, image selection and runtime acceptance are separate work.
@@ -70,7 +71,7 @@ or automatic fallback to less restrictive behavior.
 
 | Addition                      | Replacement contract                                                                                                                          | Integration points to remove or update                                                                          |
 |-------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------|
-| Session-policy plugin         | Equivalent explicit tool visibility, permission decisions and fresh environment-scoped session behavior, verified on the selected runtime     | `executor_plugins`, eval executor/config, plugin module and its focused contract tests                          |
+| Session-policy plugin         | Equivalent explicit tool visibility, permission decisions and fresh environment-scoped session behavior, verified on the selected runtime     | `study:*`'s `--executor-plugin`, eval executor/config, plugin module and its focused contract tests             |
 | Diagnostic inventory preload  | Actual full skill inventory before the first prompt; a protected original when authoritative evidence is required, not merely generic tracing | `study:run`'s `--import`, inventory environment setting, recorder and capture/composition tests                 |
 | Optional image-review command | Actual PNG/JPEG delivery, bounded approved inputs, no execution tools and retained usage/failure evidence, not text-only snapshots            | `review:images`, image helper, decoder dependency and image-review tests; human visual review remains available |
 
@@ -86,8 +87,11 @@ record the replacement as a methodology change for future runs.
 
 Copy the [plugin](../scripts/restricted-copilot-executor.mjs) to the same
 `scripts/restricted-copilot-executor.mjs` path in generated packages.
-The experiment's shared `executor_plugins` selects it; the eval selects
-`restricted-copilot-sdk`. Both arms inherit the same eval policy.
+The generated `study:dry-run` and `study:run` commands load it through native
+`--executor-plugin`; the eval selects `restricted-copilot-sdk`. Relative plugin
+paths resolve from the experiment file's directory, so keep the documented
+`experiments/` and `scripts/` layout. `executor_plugins` is not a supported
+experiment YAML field. Both arms inherit the same eval policy.
 It imports the released `@microsoft/vally/executor` and public SDK interfaces.
 Only **fresh environment-scoped sessions** are supported. The template's shared
 `agent_environment.env` selects Vally's environment-aware `createEnvClient`

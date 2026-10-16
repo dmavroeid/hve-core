@@ -4,6 +4,7 @@
 import assert from "node:assert/strict";
 import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -18,8 +19,9 @@ test("generated commands invoke native Vally directly and only execution preload
   const cli = "node_modules/@microsoft/vally-cli/dist/index.js";
   assert.equal(pkg.engines.node, ">=24");
   assert.equal(pkg.scripts.vally, `node ${cli}`);
-  assert.equal(pkg.scripts["study:dry-run"], `node ${cli} experiment run --dry-run`);
-  assert.equal(pkg.scripts["study:run"], `node --import ./scripts/native-inventory.mjs ${cli} experiment run`);
+  const plugin = "--executor-plugin ../scripts/restricted-copilot-executor.mjs";
+  assert.equal(pkg.scripts["study:dry-run"], `node ${cli} experiment run --dry-run ${plugin}`);
+  assert.equal(pkg.scripts["study:run"], `node --import ./scripts/native-inventory.mjs ${cli} experiment run ${plugin}`);
   assert.equal(pkg.scripts["review:images"], "node scripts/review-images.mjs");
 });
 
@@ -72,12 +74,17 @@ test("locked MCP and OpenTelemetry dependencies include the advisory fixes", () 
   }
 });
 
-test("the recorder and native executor share the pinned Copilot runtime", () => {
+test("the recorder and native executor resolve the same pinned SDK and the separate CLI pin is installed", () => {
   const local = JSON.parse(readFileSync(join(skillRoot, "package.json"), "utf8"));
-  const native = JSON.parse(readFileSync(join(skillRoot, "node_modules", "@microsoft", "vally", "package.json"), "utf8"));
+  const nativeManifest = join(skillRoot, "node_modules", "@microsoft", "vally", "package.json");
+  const native = JSON.parse(readFileSync(nativeManifest, "utf8"));
   assert.equal(native.version, local.devDependencies["@microsoft/vally"]);
+  assert.equal(native.dependencies["@github/copilot-sdk"], local.devDependencies["@github/copilot-sdk"]);
+  assert.equal(createRequire(nativeManifest).resolve("@github/copilot-sdk"),
+    createRequire(join(skillRoot, "package.json")).resolve("@github/copilot-sdk"));
   for (const name of ["@github/copilot", "@github/copilot-sdk"]) {
-    assert.equal(native.dependencies[name], local.devDependencies[name]);
+    const installed = JSON.parse(readFileSync(join(skillRoot, "node_modules", ...name.split("/"), "package.json"), "utf8"));
+    assert.equal(installed.version, local.devDependencies[name]);
   }
 });
 
@@ -164,7 +171,7 @@ test("skill metadata and shipped documentation links remain valid in a standalon
     read("native-review-eval.template.yaml"));
   const experiment = parse(read("native-experiment.template.yaml"));
   const evaluation = parse(read("native-eval.template.yaml"));
-  assert.deepEqual(experiment.executor_plugins, ["../scripts/restricted-copilot-executor.mjs"]);
+  assert.equal(experiment.executor_plugins, undefined);
   assert.deepEqual(experiment.vary, ["/environment/skills"]);
   assert.equal(evaluation.defaults.executor.name, "restricted-copilot-sdk");
   assert.deepEqual(evaluation.defaults.executor.config.sessionPolicy,

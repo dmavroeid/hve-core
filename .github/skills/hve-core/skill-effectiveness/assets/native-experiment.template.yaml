@@ -6,9 +6,6 @@ name: <experiment-name>
 evals:
   - ../evals/<task>.eval.yaml
 
-executor_plugins:
-  - ../scripts/restricted-copilot-executor.mjs
-
 vary:
   - /environment/skills
 
