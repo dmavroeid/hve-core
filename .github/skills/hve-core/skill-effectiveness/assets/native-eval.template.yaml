@@ -1,0 +1,75 @@
+# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# SPDX-License-Identifier: MIT
+#
+# Copy to evals/<task>.eval.yaml and replace every angle-bracket value.
+name: <task-name>
+description: <ordinary user task being compared>
+version: "1.0.0"
+type: capability
+# Vally also supports regression. This classification does not select graders.
+
+defaults:
+  runs: 1
+  timeout: 60m
+  executor:
+    name: restricted-copilot-sdk
+    config:
+      # No-grants starting shape, not a runnable task policy.
+      sessionPolicy:
+        availableTools: []
+        permissions:
+          allow: []
+          deny: []
+  model: "${AGENT_MODEL=MUST-SET-AGENT-MODEL}"
+
+agent_environment:
+  # Explicit native environment selects the environment-aware client factory.
+  env:
+    DO_NOT_TRACK: "1"
+  skills: []
+  files:
+    - src: ../fixtures/<task>/public
+      dest: task-fixture
+
+# Reviewed originals live outside candidate inputs. Vally overlays this tree in
+# its grading workspace after execution, not into the preserved candidate tree.
+grading_environment:
+  files:
+    - src: ../grading/<task>
+      dest: evaluator
+
+# Offline executable grading only: no LLM graders or global judge_provider.
+# Native experiment run collects candidates and performs these offline checks.
+# Backend containment, credential removal and denied egress are separate gates.
+# Semantic assessment uses the review spec, never this executable-grading view.
+# No aggregate threshold: native trial success requires every grader to pass.
+# Otherwise a mean score could hide a failed test or require a perfect judge score.
+scoring: {}
+
+stimuli:
+  - name: <task-name>
+    constraints:
+      max_agent_duration: 45m
+      max_duration: 60m
+    artifacts:
+      include:
+        - "deliverable/**"
+    prompt: |
+      <real user request; disclose required interfaces without prescribing a method>
+      Save the required output to deliverable/<artifact>.
+      Public task inputs are in task-fixture.
+      <disclose the output contract and observable checks applied equally to both arms>
+      The private evaluator is unavailable during this task; do not try to run it.
+    graders:
+      - type: completed
+      - type: file-exists
+        name: delivery
+        config:
+          path: deliverable/<artifact>
+      - type: run-command
+        name: behavior
+        config:
+          command: node
+          args: ["evaluator/check.mjs", "deliverable/<artifact>"]
+          expected_exit_code: 0
+          timeout: 3m

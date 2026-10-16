@@ -1,0 +1,96 @@
+# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# SPDX-License-Identifier: MIT
+name: Temporary skill-effectiveness model-free validation
+
+on:
+  push:
+    branches:
+      - automation/skill-effectiveness-validation-20261017
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    if: github.repository == 'dmavroeid/hve-core'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+        working-directory: .github/skills/hve-core/skill-effectiveness
+    env:
+      DO_NOT_TRACK: '1'
+      VALLY_TELEMETRY_OPTOUT: '1'
+      SKILL_EFFECTIVENESS_NATIVE_PREFLIGHT: '0'
+    steps:
+      - name: Checkout exact snapshot without persisting credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Set up Node 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24'
+      - name: Record revision and prepare dependency-free standalone copy
+        id: prepare
+        working-directory: .
+        run: |
+          mkdir -p "$RUNNER_TEMP/evidence" "$RUNNER_TEMP/standalone/.github/skills/hve-core"
+          cp -a .github/skills/hve-core/skill-effectiveness "$RUNNER_TEMP/standalone/.github/skills/hve-core/"
+          cp LICENSE "$RUNNER_TEMP/standalone/LICENSE"
+          {
+            git rev-parse HEAD
+            git status --porcelain
+            node --version
+            npm --version
+            uname -a
+          } > "$RUNNER_TEMP/evidence/environment.txt"
+          cd .github/skills/hve-core/skill-effectiveness
+          sha256sum package.json package-lock.json assets/package.template.json scripts/*.mjs tests/*.mjs \
+            > "$RUNNER_TEMP/evidence/source-sha256.txt"
+          test ! -e node_modules
+          test ! -e "$RUNNER_TEMP/standalone/.github/skills/hve-core/skill-effectiveness/node_modules"
+      - name: Restore and validate repository package without native startup
+        run: |
+          npm ci --ignore-scripts --registry=https://registry.npmjs.org/ --fetch-retries=0 --fetch-timeout=60000 --no-audit --no-fund \
+            2>&1 | tee "$RUNNER_TEMP/evidence/repository-restore.txt"
+          node --input-type=module -e 'import sharp from "sharp"; console.log(JSON.stringify(sharp.versions));' \
+            2>&1 | tee "$RUNNER_TEMP/evidence/repository-codec.txt"
+          npm test 2>&1 | tee "$RUNNER_TEMP/evidence/repository-tests.txt"
+          node --experimental-test-coverage --test --test-reporter=spec --test-reporter=lcov \
+            --test-reporter-destination=stdout --test-reporter-destination="$RUNNER_TEMP/evidence/repository.lcov" \
+            tests/*.test.mjs 2>&1 | tee "$RUNNER_TEMP/evidence/repository-coverage.txt"
+      - name: Independently restore and validate standalone package
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        working-directory: ${{ runner.temp }}/standalone/.github/skills/hve-core/skill-effectiveness
+        run: |
+          npm ci --ignore-scripts --registry=https://registry.npmjs.org/ --fetch-retries=0 --fetch-timeout=60000 --no-audit --no-fund \
+            2>&1 | tee "$RUNNER_TEMP/evidence/standalone-restore.txt"
+          node --input-type=module -e 'import sharp from "sharp"; console.log(JSON.stringify(sharp.versions));' \
+            2>&1 | tee "$RUNNER_TEMP/evidence/standalone-codec.txt"
+          npm test 2>&1 | tee "$RUNNER_TEMP/evidence/standalone-tests.txt"
+          node --experimental-test-coverage --test --test-reporter=spec --test-reporter=lcov \
+            --test-reporter-destination=stdout --test-reporter-destination="$RUNNER_TEMP/evidence/standalone.lcov" \
+            tests/*.test.mjs 2>&1 | tee "$RUNNER_TEMP/evidence/standalone-coverage.txt"
+      - name: Verify source bytes stayed unchanged in both copies
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: |
+          sha256sum --check "$RUNNER_TEMP/evidence/source-sha256.txt"
+          cd "$RUNNER_TEMP/standalone/.github/skills/hve-core/skill-effectiveness"
+          sha256sum --check "$RUNNER_TEMP/evidence/source-sha256.txt"
+      - name: Upload only model-free validation evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: skill-effectiveness-model-free-validation
+          path: ${{ runner.temp }}/evidence/
+          if-no-files-found: error
+          retention-days: 14
