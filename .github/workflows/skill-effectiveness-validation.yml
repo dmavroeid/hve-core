@@ -45,14 +45,15 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/evidence" "$RUNNER_TEMP/native-probe/home" "$RUNNER_TEMP/native-probe/tmp"
-          git diff --exit-code 118d373b753a607a5c3680680bc5c02b4c8eb454 -- .github/skills/hve-core/skill-effectiveness
           {
             git rev-parse HEAD
+            git rev-parse HEAD:.github/skills/hve-core/skill-effectiveness
             git status --porcelain
             node --version
             npm --version
             uname -a
           } > "$RUNNER_TEMP/evidence/environment.txt"
+          test "$(git rev-parse HEAD:.github/skills/hve-core/skill-effectiveness)" = 03edec80cd4f6bb377d1a9d32085834c6d7fe09f
           cd .github/skills/hve-core/skill-effectiveness
           sha256sum package.json package-lock.json assets/package.template.json scripts/*.mjs tests/*.mjs \
             > "$RUNNER_TEMP/evidence/source-sha256.txt"
