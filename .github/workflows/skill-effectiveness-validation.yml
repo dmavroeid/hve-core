@@ -183,6 +183,10 @@ jobs:
           assert.equal(image.architecture, "amd64");
           assert.equal(image.id, process.env.IMAGE);
           assert.equal(image.user, "1000:1000");
+          write("readonly-grade.compose.yaml", stringify({
+            services: { grade: { image: image.id, profiles: ["vally-grade"],
+              volumes: [{ type: "volume", target: "/workspace", read_only: true }] } },
+          }));
           const checker = `// Copyright (c) 2026 Microsoft Corporation. All rights reserved.
           // SPDX-License-Identifier: MIT
           import assert from "node:assert/strict";
@@ -206,16 +210,31 @@ jobs:
             checkerWritable: writable(import.meta.filename),
             artifactWritable: writable("deliverable/result.txt"),
           };
-          assert.notEqual(facts.uid, 0);
+          assert.ok(Number.isInteger(facts.uid) && facts.uid > 0);
           assert.deepEqual(facts.externalInterfaces, []);
           assert.deepEqual(facts.authKeysPresent, []);
           assert.equal(facts.taskOnlyCanaryPresent, false);
           assert.equal(facts.checkerHashMatches, true);
           assert.equal(facts.artifactMatches, true);
+          assert.equal(facts.checkerWritable, false);
+          assert.equal(facts.artifactWritable, false);
           console.log(JSON.stringify({ name: "native-runtime-facts", kind: "code", passed: true,
             score: 1, evidence: JSON.stringify(facts) }));
           `;
           const checkerHash = createHash("sha256").update(checker).digest("hex");
+          const integrityCommand = [
+            'import assert from "node:assert/strict";',
+            'import { createHash } from "node:crypto";',
+            'import { readFileSync } from "node:fs";',
+            'import { pathToFileURL } from "node:url";',
+            'const checkerPath = "/workspace/evaluator/check.mjs";',
+            'assert.equal(process.argv[1], checkerPath);',
+            'const expectedHash = process.argv[2];',
+            'assert.match(expectedHash, /^[a-f0-9]{64}$/, "Invalid trusted checker digest");',
+            'const actualHash = createHash("sha256").update(readFileSync(checkerPath)).digest("hex");',
+            'assert.equal(actualHash, expectedHash, "Trusted checker integrity mismatch");',
+            'await import(pathToFileURL(checkerPath).href);',
+          ].join("\n");
           write("grading/check.mjs", checker);
           write("fixtures/public/deliverable/result.txt", "Synthetic native Docker artifact.\n");
           const mockOutput = "Synthetic mock output; no model call.";
@@ -243,7 +262,8 @@ jobs:
                 { type: "completed" },
                 { type: "file-exists", name: "delivery", config: { path: "deliverable/result.txt" } },
                 { type: "program", name: "native-runtime-facts",
-                  config: { program: "node", args: ["evaluator/check.mjs", checkerHash], timeout: "30s" } },
+                  config: { program: "node", args: ["--input-type=module", "-e", integrityCommand,
+                    "/workspace/evaluator/check.mjs", checkerHash], timeout: "30s" } },
               ],
             }],
           };
@@ -263,16 +283,66 @@ jobs:
           cli="$PWD/node_modules/@microsoft/vally-cli/dist/index.js"
           root="$RUNNER_TEMP/docker-smoke"
           cd "$root"
+          grep -Fx 'Docker Compose version v2.38.2' "$RUNNER_TEMP/evidence/compose-version.txt"
           env -i PATH="$PATH" HOME="$root/home" TMPDIR="$root/tmp" CI=1 DO_NOT_TRACK=1 VALLY_TELEMETRY_OPTOUT=1 \
             node "$cli" lint --strict --eval-spec "$root/evals/smoke.eval.yaml" \
             2>&1 | tee "$RUNNER_TEMP/evidence/lint.txt"
           IMAGE="$IMAGE" node --input-type=module > "$RUNNER_TEMP/evidence/container-observer.txt" 2>&1 <<'NODE' &
           import { spawn, execFileSync } from "node:child_process";
-          import { appendFileSync } from "node:fs";
+          import assert from "node:assert/strict";
+          import { appendFileSync, constants, openSync, closeSync, fstatSync, readSync, realpathSync, mkdirSync, writeFileSync } from "node:fs";
+          import { createHash } from "node:crypto";
           import path from "node:path";
           import { createInterface } from "node:readline";
           const evidence = path.join(process.env.RUNNER_TEMP, "evidence");
           const env = { PATH: process.env.PATH, HOME: path.join(process.env.RUNNER_TEMP, "docker-smoke/home") };
+          const root = realpathSync(path.join(process.env.RUNNER_TEMP, "docker-smoke"));
+          const scratch = path.join(root, "captured-compose");
+          mkdirSync(scratch, { mode: 0o700 });
+          const captured = new Map();
+          const stableBytes = file => {
+            assert.equal(realpathSync(file), file, "Noncanonical Compose input");
+            const fd = openSync(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+            try {
+              const before = fstatSync(fd);
+              assert.ok(before.isFile() && before.size > 0 && before.size <= 1048576, "Invalid Compose input size/type");
+              const bytes = Buffer.alloc(before.size + 1);
+              assert.equal(readSync(fd, bytes, 0, bytes.length, 0), before.size, "Incomplete Compose input read");
+              const after = fstatSync(fd);
+              assert.ok(["dev", "ino", "size", "mtimeMs", "ctimeMs"].every(key => before[key] === after[key]), "Changed Compose input");
+              return bytes.subarray(0, before.size);
+            } finally { closeSync(fd); }
+          };
+          const capture = (fact, configFiles, projectDirectory, envFile) => {
+            if (fact.service === null) {
+              assert.ok(fact.project === null && !configFiles && !projectDirectory && !envFile, "Unknown compatibility container");
+              return;
+            }
+            const role = ["task", "task-init", "evidence"].includes(fact.service) ? "task" : "grade";
+            assert.ok(["task", "task-init", "evidence", "grade", "grade-init"].includes(fact.service), "Unknown native role");
+            assert.match(fact.project, /^vally-[a-f0-9]{8}$/, "Unknown native project");
+            assert.ok(projectDirectory === root && !envFile, "Unexpected Compose context");
+            const files = configFiles.split(",");
+            assert.ok(files.length === 2 && files[0] === path.join(root, "readonly-grade.compose.yaml"), "Unexpected Compose input order");
+            assert.ok(files[1].startsWith(`${root}/tmp/`) && path.resolve(files[1]) === files[1] &&
+              path.basename(files[1]) === `docker-compose.${role}.generated.yml`, "Unknown native overlay");
+            const inputs = files.map(sourcePath => ({ sourcePath, bytes: stableBytes(sourcePath) }));
+            const hashes = inputs.map(input => createHash("sha256").update(input.bytes).digest("hex"));
+            const identity = JSON.stringify({ role, files, hashes });
+            if (captured.has(fact.project)) {
+              assert.equal(captured.get(fact.project), identity, "Changed project inputs");
+              return;
+            }
+            assert.ok(captured.size < 4, "Too many native projects");
+            const record = { project: fact.project, role, profile: `vally-${role}`, projectDirectory, containerId: fact.id,
+              inputs: inputs.map((input, index) => {
+                const capturedPath = path.join(scratch, `${fact.project}-${index}.yaml`);
+                writeFileSync(capturedPath, input.bytes, { flag: "wx", mode: 0o600 });
+                return { sourcePath: input.sourcePath, capturedPath, sha256: hashes[index] };
+              }) };
+            appendFileSync(path.join(scratch, "captures.jsonl"), JSON.stringify(record) + "\n");
+            captured.set(fact.project, identity);
+          };
           const events = spawn("docker", ["events", "--since", new Date().toISOString(),
             "--filter", "type=container", "--filter", "event=create", "--filter", `image=${process.env.IMAGE}`,
             "--format", "{{json .}}"], { env, stdio: ["ignore", "pipe", "inherit"] });
@@ -290,11 +360,15 @@ jobs:
             for await (const line of createInterface({ input: events.stdout })) {
               const event = JSON.parse(line);
               if (!/^[a-f0-9]{64}$/.test(event.Actor?.ID)) throw Error("Invalid Docker event container ID");
-              const format = '{"id":{{json .Id}},"image":{{json .Image}},"service":{{json (index .Config.Labels "com.docker.compose.service")}},"project":{{json (index .Config.Labels "com.docker.compose.project")}},"mounts":{{json .Mounts}},"networkMode":{{json .HostConfig.NetworkMode}}}';
-              const fact = JSON.parse(execFileSync("docker", ["inspect", "--format", format, event.Actor.ID],
+              const format = '{"id":{{json .Id}},"image":{{json .Image}},"service":{{json (index .Config.Labels "com.docker.compose.service")}},"project":{{json (index .Config.Labels "com.docker.compose.project")}},"mounts":{{json .Mounts}},"networkMode":{{json .HostConfig.NetworkMode}},"configFiles":{{json (index .Config.Labels "com.docker.compose.project.config_files")}},"projectDirectory":{{json (index .Config.Labels "com.docker.compose.project.working_dir")}},"envFile":{{json (index .Config.Labels "com.docker.compose.project.environment_file")}}}';
+              const { configFiles, projectDirectory, envFile, ...fact } = JSON.parse(execFileSync("docker", ["inspect", "--format", format, event.Actor.ID],
                 { env, encoding: "utf8", timeout: 5000 }));
+              capture(fact, configFiles, projectDirectory, envFile);
               appendFileSync(path.join(evidence, "native-container-facts.jsonl"), JSON.stringify(fact) + "\n");
             }
+          } catch (error) {
+            console.error("Native container/Compose observation failed:", error.code ?? error.name);
+            process.exitCode = 1;
           } finally {
             events.kill("SIGTERM");
           }
@@ -309,6 +383,7 @@ jobs:
             node "$cli" experiment run "$root/experiments/smoke.experiment.yaml" \
             --backend docker --backend-args "task-image=$IMAGE" --backend-args "grade-image=$IMAGE" \
             --backend-args task-network=none --backend-args grade-network=none \
+            --backend-args "compose-file=$root/readonly-grade.compose.yaml" \
             --backend-args task-env=PROBE_TASK_ONLY \
             --output-dir "$RUNNER_TEMP/native-output" --workspace "$RUNNER_TEMP/native-workspaces" \
             --workers 1 --require-pass 2>&1 | tee "$RUNNER_TEMP/evidence/native-run.txt"
@@ -322,10 +397,15 @@ jobs:
           OUTPUT="$RUNNER_TEMP/native-output" EVIDENCE="$RUNNER_TEMP/evidence" node --input-type=module <<'NODE'
           import assert from "node:assert/strict";
           import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+          import { execFileSync } from "node:child_process";
+          import { createHash } from "node:crypto";
+          import { parse, stringify } from "yaml";
           import path from "node:path";
           import { hasGraderError } from "@microsoft/vally";
           const summary = { scope: "Native Docker mock-task/offline executable-grading integration only",
-            status: "unverified", trials: [] };
+            status: "unverified", trials: [], compose: { status: "unverified", projects: [] } };
+          let stage = "native";
+          let composeStage = "capture manifest";
           const files = dir => existsSync(dir) ? readdirSync(dir, { withFileTypes: true }).flatMap(entry =>
             entry.isDirectory() ? files(path.join(dir, entry.name)) : [path.join(dir, entry.name)]) : [];
           try {
@@ -359,20 +439,72 @@ jobs:
               assert.equal(hasGraderError(records[index].gradeResult), false, "Native grader tree contains an error");
               assert.ok(trial.observations.length > 0, "Native grader did not retain runtime facts");
               for (const facts of trial.observations) {
-                assert.notEqual(facts.uid, 0);
+                assert.ok(Number.isInteger(facts.uid) && facts.uid > 0);
                 assert.deepEqual(facts.externalInterfaces, []);
                 assert.deepEqual(facts.authKeysPresent, []);
                 assert.equal(facts.taskOnlyCanaryPresent, false);
                 assert.equal(facts.checkerHashMatches, true);
                 assert.equal(facts.artifactMatches, true);
+                assert.equal(facts.checkerWritable, false);
+                assert.equal(facts.artifactWritable, false);
               }
             }
             const containers = readFileSync(path.join(process.env.EVIDENCE, "native-container-facts.jsonl"), "utf8")
               .trim().split("\n").map(line => JSON.parse(line));
-            for (const role of ["task", "grade"]) {
-              assert.ok(containers.some(item => item.service === role), `Missing actual ${role} container evidence`);
+            assert.equal(containers.length, 14, "Unexpected native container count");
+            const targets = {
+              task: ["/workspace", "/var/lib/vally/task-home", "/var/lib/vally/artifacts",
+                "/run/vally/control", "/ipc-task", "/run/vally/turn-acks", "/var/lib/vally/task-inputs"],
+              grade: ["/workspace", "/run/vally/control", "/ipc-grade"],
+              "task-init": ["/workspace", "/var/lib/vally/task-home"],
+              "grade-init": ["/workspace", "/source-workspace", "/hidden-grader-files"],
+              evidence: ["/workspace", "/var/lib/vally", "/run/vally/control", "/ipc-grade"],
+            };
+            const workspace = container => {
+              const mounts = container.mounts.filter(mount => mount.Destination === "/workspace");
+              assert.equal(mounts.length, 1, "Expected one native workspace mount");
+              assert.equal(mounts[0].Type, "volume");
+              assert.ok(typeof mounts[0].Source === "string" && mounts[0].Source.length > 0);
+              return mounts[0];
+            };
+            const tasks = containers.filter(item => item.service === "task");
+            const grades = containers.filter(item => item.service === "grade");
+            for (const role of Object.keys(targets)) {
+              const actual = containers.filter(item => item.service === role);
+              assert.equal(actual.length, 2, `Expected two actual ${role} containers`);
+              assert.equal(new Set(actual.map(item => item.project)).size, 2, `Reused ${role} project`);
+              for (const container of actual) {
+                assert.ok(typeof container.project === "string" && container.project.length > 0);
+                assert.deepEqual(container.mounts.map(mount => mount.Destination).sort(), [...targets[role]].sort());
+                assert.equal(workspace(container).RW, !["grade", "evidence"].includes(role));
+              }
+            }
+            const taskSources = tasks.map(item => workspace(item).Source);
+            const gradeSources = grades.map(item => workspace(item).Source);
+            assert.equal(new Set([...taskSources, ...gradeSources]).size, 4, "Reused native workspace source");
+            const taskProjects = new Set(tasks.map(item => item.project));
+            for (const grade of grades) {
+              assert.equal(taskProjects.has(grade.project), false, "Grade service started in task project");
+              const init = containers.filter(item => item.service === "grade-init" && item.project === grade.project);
+              assert.equal(init.length, 1);
+              assert.equal(workspace(init[0]).Source, workspace(grade).Source);
+              const source = init[0].mounts.find(mount => mount.Destination === "/source-workspace");
+              assert.equal(source.Type, "volume");
+              assert.equal(source.RW, false);
+              assert.ok(taskSources.includes(source.Source), "Unknown copied task workspace");
+            }
+            for (const task of tasks) {
+              const init = containers.filter(item => item.service === "task-init" && item.project === task.project);
+              const evidence = containers.filter(item => item.service === "evidence" && item.project === task.project);
+              assert.equal(init.length, 1);
+              assert.equal(evidence.length, 1);
+              assert.equal(workspace(init[0]).Source, workspace(task).Source);
+              assert.equal(workspace(evidence[0]).Source, workspace(task).Source);
+              assert.equal(task.mounts.some(mount => gradeSources.includes(mount.Source)), false,
+                "Grade workspace exposed to task");
             }
             for (const container of containers) {
+              assert.ok(container.service === null || Object.hasOwn(targets, container.service), "Unexpected native service");
               assert.equal(container.image, process.env.IMAGE);
               assert.equal(container.networkMode, "none");
               for (const mount of container.mounts) {
@@ -383,10 +515,158 @@ jobs:
                 }
               }
             }
+            stage = "compose";
+            const root = path.join(process.env.RUNNER_TEMP, "docker-smoke");
+            const scratch = path.join(root, "captured-compose");
+            const hash = value => createHash("sha256").update(value).digest("hex");
+            const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
+            const only = (value, keys) => assert.ok(value && Object.keys(value).every(key => keys.includes(key)), "Unknown Compose field");
+            const commands = {
+              "task-init": ["d519d698faa253bad4f401e6340ef6ab603abb8be5ba4b18bd700bb20dbd177b"],
+              "grade-init": ["0207b427eefa48d407d1418041c9cdb505a3c2d87ec27646216f5776e3186139"],
+              service: ["02519153bcc74578009c7206489ad37de85eea320351db96c848ea1f0e8305b0",
+                "8fed1e1d69cc0a3516f22646b670c099353f3c76d11411d219e5f7fdc9cf23a2"],
+            };
+            const validate = (model, project, base = false) => {
+              only(model, ["name", "services", "volumes", "networks"]);
+              assert.ok(!model.name || model.name === project.project, "Unknown model identity");
+              for (const [name, volume] of Object.entries(model.volumes ?? {})) {
+                only(volume, ["name", "external"]);
+                assert.ok(/^[a-z0-9-]{1,128}$/.test(name) && volume.external === true &&
+                  /^vally-[a-z0-9-]{1,128}$/.test(volume.name), "Unknown external volume");
+              }
+              for (const [name, network] of Object.entries(model.networks ?? {})) {
+                only(network, ["name", "labels"]);
+                assert.ok(name === "default" && (!network.name || network.name === `${project.project}_default`), "Unknown network");
+                for (const [key, value] of Object.entries(network.labels ?? {})) {
+                  assert.ok(/^com\.microsoft\.vally\.(owner|trial|kind|run)$/.test(key) && /^[a-zA-Z0-9:._/-]{1,256}$/.test(value), "Unknown resource label");
+                }
+              }
+              for (const [name, service] of Object.entries(model.services)) {
+                assert.ok(Object.hasOwn(targets, name), "Unknown Compose service");
+                assert.ok(service.image === process.env.IMAGE, "Wrong Compose image");
+                const profile = ["task", "task-init", "evidence"].includes(name) ? "vally-task" : "vally-grade";
+                assert.ok(same(service.profiles, [profile]), "Unknown service profile");
+                if (!base && project.role === "task" && name === "grade") {
+                  only(service, ["image", "profiles", "volumes", "networks"]);
+                  assert.ok(!service.networks || same(service.networks, { default: null }) ||
+                    same(service.networks, { default: {} }), "Unknown inactive network");
+                  assert.ok(same(service.volumes, [{ type: "volume", target: "/workspace", read_only: true }]), "Unexpected inactive grade");
+                  continue;
+                }
+                only(service, ["image", "user", "entrypoint", "command", "stop_signal", "stop_grace_period", "working_dir", "profiles", "volumes",
+                  "tmpfs", "cap_drop", "cap_add", "security_opt", "environment", "network_mode", "depends_on"]);
+                if (base) {
+                  assert.ok(name === "grade" && same(service, { image: process.env.IMAGE, profiles: ["vally-grade"],
+                    volumes: [{ type: "volume", target: "/workspace", read_only: true }] }), "Unexpected readonly base");
+                  continue;
+                }
+                const initializer = name.endsWith("-init");
+                assert.ok(service.user === (initializer || name === "evidence" ? "0:0" : "1000:1000"), "Wrong Compose user");
+                assert.ok(service.entrypoint === "sh" || same(service.entrypoint, ["sh"]), "Unknown entrypoint");
+                const commandHash = hash(JSON.stringify(service.command));
+                assert.ok((commands[name] ?? commands.service).includes(commandHash), "Unknown native command");
+                assert.ok(service.network_mode === "none" && same(service.cap_drop, ["ALL"]) &&
+                  same(service.security_opt, ["no-new-privileges:true"]), "Unsafe Compose service");
+                assert.ok(!service.stop_signal || service.stop_signal === "SIGTERM", "Unknown stop signal");
+                assert.ok(!service.stop_grace_period || service.stop_grace_period === "1s", "Unknown stop period");
+                assert.ok(!service.working_dir || service.working_dir === "/workspace", "Unknown working directory");
+                const capabilities = name === "grade-init" ? ["CHOWN", "DAC_READ_SEARCH"] : initializer ? ["CHOWN"] : name === "evidence" ? ["DAC_READ_SEARCH"] : undefined;
+                assert.ok(same(service.cap_add, capabilities), "Unknown added capability");
+                for (const [key, value] of Object.entries(service.environment ?? {})) {
+                  const home = name === "task" ? "/var/lib/vally/task-home" : "/tmp/vally-home";
+                  const expected = { HOME: home, PATH: `${home}/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin` };
+                  assert.ok(Object.hasOwn(expected, key) ? value === expected[key] :
+                    name === "task" && key === "PROBE_TASK_ONLY" && [null, "synthetic-task-marker"].includes(value), "Unknown environment value");
+                }
+                for (const tmpfs of service.tmpfs ?? []) assert.ok(tmpfs === "/tmp/vally-home:rw,mode=0700,uid=1000,gid=1000", "Unknown tmpfs");
+                for (const [dependency, options] of Object.entries(service.depends_on ?? {})) {
+                  only(options, ["condition", "required"]);
+                  assert.ok(dependency === `${project.role}-init` && options.condition === "service_completed_successfully" &&
+                    options.required !== false, "Unknown dependency");
+                }
+                for (const mount of service.volumes) {
+                  only(mount, ["type", "source", "target", "read_only", "volume", "bind"]);
+                  assert.ok(targets[name].includes(mount.target) && ["volume", "bind"].includes(mount.type), "Unknown Compose mount");
+                  assert.ok(mount.read_only === undefined || typeof mount.read_only === "boolean", "Invalid mount mode");
+                  if (mount.type === "bind") assert.ok(mount.source.startsWith(`${root}/`) &&
+                    path.resolve(mount.source) === mount.source, "External bind source");
+                  else assert.ok(Object.hasOwn(model.volumes ?? {}, mount.source), "Unknown volume key");
+                  if (mount.volume) { only(mount.volume, ["nocopy"]); assert.equal(mount.volume.nocopy, true, "Unknown volume option"); }
+                  if (mount.bind) { only(mount.bind, ["create_host_path"]); assert.equal(typeof mount.bind.create_host_path, "boolean", "Unknown bind option"); }
+                }
+              }
+            };
+            const projects = readFileSync(path.join(scratch, "captures.jsonl"), "utf8").trim().split("\n").map(line => JSON.parse(line));
+            assert.ok(projects.length === 4 && new Set(projects.map(item => item.project)).size === 4, "Incomplete Compose captures");
+            const version = readFileSync(path.join(process.env.EVIDENCE, "compose-version.txt"), "utf8").trim();
+            assert.equal(version, "Docker Compose version v2.38.2", "Unqualified frontend");
+            for (const project of projects) {
+              only(project, ["project", "role", "profile", "projectDirectory", "containerId", "inputs"]);
+              const observed = containers.filter(item => item.project === project.project);
+              assert.ok(observed.some(item => item.id === project.containerId) && project.projectDirectory === root &&
+                project.profile === `vally-${project.role}` && ["task", "grade"].includes(project.role), "Unknown captured project");
+              assert.ok(project.inputs.length === 2 && !existsSync(path.join(root, ".env")), "Unexpected rendering context");
+              const bytes = project.inputs.map((input, index) => {
+                composeStage = "original input validation";
+                only(input, ["sourcePath", "capturedPath", "sha256"]);
+                assert.ok(index === 0 ? input.sourcePath === path.join(root, "readonly-grade.compose.yaml") :
+                  input.sourcePath.startsWith(`${root}/tmp/`) && path.resolve(input.sourcePath) === input.sourcePath &&
+                  path.basename(input.sourcePath) === `docker-compose.${project.role}.generated.yml`, "Unknown original input");
+                assert.equal(input.capturedPath, path.join(scratch, `${project.project}-${index}.yaml`), "Unknown captured path");
+                const value = readFileSync(input.capturedPath);
+                assert.ok(value.length <= 1048576 && hash(value) === input.sha256, "Changed captured bytes");
+                const model = parse(value.toString("utf8"));
+                assert.equal(value.toString("utf8").trimEnd(), stringify(model).trimEnd(), "Noncanonical captured YAML");
+                validate(model, project, index === 0);
+                return value;
+              });
+              summary.compose.projects.push(project);
+              const args = ["compose", "--project-directory", root, "--project-name", project.project,
+                ...project.inputs.flatMap(input => ["-f", input.capturedPath]), "--profile", project.profile, "config", "--format", "json"];
+              const env = { PATH: process.env.PATH, HOME: path.join(root, "home"), TMPDIR: path.join(root, "tmp"),
+                CI: "1", DO_NOT_TRACK: "1", VALLY_TELEMETRY_OPTOUT: "1", PROBE_TASK_ONLY: "synthetic-task-marker" };
+              project.renderer = { version, argv: args, status: "running" };
+              composeStage = "frontend execution";
+              const output = execFileSync("docker", args, { env, cwd: root, timeout: 15000, maxBuffer: 2097152 });
+              composeStage = "rendered model validation";
+              const model = JSON.parse(output.toString("utf8"));
+              validate(model, project);
+              const active = Object.entries(model.services).filter(([, service]) => !service.profiles?.length || service.profiles.includes(project.profile));
+              composeStage = "runtime correlation";
+              assert.deepEqual(active.map(([name]) => name).sort(), observed.map(item => item.service).sort(), "Active service mismatch");
+              for (const [name, service] of active) {
+                const actual = observed.find(item => item.service === name);
+                assert.deepEqual(service.volumes.map(mount => mount.target).sort(), actual.mounts.map(mount => mount.Destination).sort(), "Rendered target mismatch");
+                for (const mount of service.volumes) {
+                  const fact = actual.mounts.find(item => item.Destination === mount.target);
+                  assert.ok(mount.type === fact.Type && (mount.read_only === true) === !fact.RW &&
+                    (mount.type === "volume" ? model.volumes[mount.source].name === fact.Name : mount.source === fact.Source), "Rendered mount mismatch");
+                }
+              }
+              for (const [index, value] of bytes.entries()) {
+                composeStage = "safe retention";
+                const retainedPath = path.join(process.env.EVIDENCE, `${project.project}-${index}.yaml`);
+                writeFileSync(retainedPath, value, { flag: "wx", mode: 0o600 });
+                project.inputs[index].retainedPath = retainedPath;
+              }
+              project.renderedPath = path.join(process.env.EVIDENCE, `${project.project}.json`);
+              writeFileSync(project.renderedPath, output, { flag: "wx", mode: 0o600 });
+              project.renderer = { version, argv: args, exitCode: 0, sha256: hash(output), status: "passed" };
+            }
+            summary.compose.status = "passed";
             summary.status = "passed";
           } catch (error) {
             summary.status = "failed-or-unavailable";
-            summary.error = { name: error.name, message: error.message };
+            if (stage === "compose") {
+              summary.compose.status = "failed-or-unavailable";
+              for (const project of summary.compose.projects.filter(item => item.renderer?.status === "running")) {
+                project.renderer = { ...project.renderer, status: "failed-or-unavailable", exitCode: error.status ?? null, signal: error.signal ?? null };
+              }
+            }
+            summary.error = { name: error.name, message: stage === "compose" ? "Compose capture/render validation failed" : error.message,
+              code: error.code ?? null, exitCode: error.status ?? null, signal: error.signal ?? null,
+              stage: stage === "compose" ? composeStage : "native" };
             process.exitCode = 1;
           } finally {
             writeFileSync(path.join(process.env.EVIDENCE, "native-docker-summary.json"), JSON.stringify(summary, null, 2) + "\n");
