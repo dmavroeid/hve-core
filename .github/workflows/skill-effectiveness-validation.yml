@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
-name: Temporary skill-effectiveness model-free validation
+name: Temporary skill-effectiveness no-prompt native preflight
 
 on:
   push:
@@ -18,7 +18,7 @@ jobs:
   validate:
     if: github.repository == 'dmavroeid/hve-core'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 10
     permissions:
       contents: read
     defaults:
@@ -28,7 +28,7 @@ jobs:
     env:
       DO_NOT_TRACK: '1'
       VALLY_TELEMETRY_OPTOUT: '1'
-      SKILL_EFFECTIVENESS_NATIVE_PREFLIGHT: '0'
+      SKILL_EFFECTIVENESS_NATIVE_PREFLIGHT: '1'
     steps:
       - name: Checkout exact snapshot without persisting credentials
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
@@ -39,13 +39,13 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: '24'
-      - name: Record revision and prepare dependency-free standalone copy
+      - name: Record exact revision and prepare isolated probe paths
         id: prepare
         working-directory: .
         run: |
-          mkdir -p "$RUNNER_TEMP/evidence" "$RUNNER_TEMP/standalone/.github/skills/hve-core"
-          cp -a .github/skills/hve-core/skill-effectiveness "$RUNNER_TEMP/standalone/.github/skills/hve-core/"
-          cp LICENSE "$RUNNER_TEMP/standalone/LICENSE"
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/evidence" "$RUNNER_TEMP/native-probe/home" "$RUNNER_TEMP/native-probe/tmp"
+          git diff --exit-code 118d373b753a607a5c3680680bc5c02b4c8eb454 -- .github/skills/hve-core/skill-effectiveness
           {
             git rev-parse HEAD
             git status --porcelain
@@ -57,40 +57,158 @@ jobs:
           sha256sum package.json package-lock.json assets/package.template.json scripts/*.mjs tests/*.mjs \
             > "$RUNNER_TEMP/evidence/source-sha256.txt"
           test ! -e node_modules
-          test ! -e "$RUNNER_TEMP/standalone/.github/skills/hve-core/skill-effectiveness/node_modules"
-      - name: Restore and validate repository package without native startup
+      - name: Restore frozen dependencies without lifecycle scripts
+        id: restore
         run: |
+          set -euo pipefail
           npm ci --ignore-scripts --registry=https://registry.npmjs.org/ --fetch-retries=0 --fetch-timeout=60000 --no-audit --no-fund \
             2>&1 | tee "$RUNNER_TEMP/evidence/repository-restore.txt"
-          node --input-type=module -e 'import sharp from "sharp"; console.log(JSON.stringify(sharp.versions));' \
-            2>&1 | tee "$RUNNER_TEMP/evidence/repository-codec.txt"
-          npm test 2>&1 | tee "$RUNNER_TEMP/evidence/repository-tests.txt"
-          node --experimental-test-coverage --test --test-reporter=spec --test-reporter=lcov \
-            --test-reporter-destination=stdout --test-reporter-destination="$RUNNER_TEMP/evidence/repository.lcov" \
-            tests/*.test.mjs 2>&1 | tee "$RUNNER_TEMP/evidence/repository-coverage.txt"
-      - name: Independently restore and validate standalone package
-        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
-        working-directory: ${{ runner.temp }}/standalone/.github/skills/hve-core/skill-effectiveness
+      - name: Run existing opt-in native startup case without prompts or credentials
         run: |
-          npm ci --ignore-scripts --registry=https://registry.npmjs.org/ --fetch-retries=0 --fetch-timeout=60000 --no-audit --no-fund \
-            2>&1 | tee "$RUNNER_TEMP/evidence/standalone-restore.txt"
-          node --input-type=module -e 'import sharp from "sharp"; console.log(JSON.stringify(sharp.versions));' \
-            2>&1 | tee "$RUNNER_TEMP/evidence/standalone-codec.txt"
-          npm test 2>&1 | tee "$RUNNER_TEMP/evidence/standalone-tests.txt"
-          node --experimental-test-coverage --test --test-reporter=spec --test-reporter=lcov \
-            --test-reporter-destination=stdout --test-reporter-destination="$RUNNER_TEMP/evidence/standalone.lcov" \
-            tests/*.test.mjs 2>&1 | tee "$RUNNER_TEMP/evidence/standalone-coverage.txt"
-      - name: Verify source bytes stayed unchanged in both copies
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=10s 120s env -i \
+            PATH="$PATH" HOME="$RUNNER_TEMP/native-probe/home" TMPDIR="$RUNNER_TEMP/native-probe/tmp" \
+            CI=1 DO_NOT_TRACK=1 VALLY_TELEMETRY_OPTOUT=1 SKILL_EFFECTIVENESS_NATIVE_PREFLIGHT=1 \
+            node --test --test-name-pattern='^actual native executor captures both actual sessions including ambient skills before any prompt$' \
+            tests/native-inventory.test.mjs 2>&1 | tee "$RUNNER_TEMP/evidence/native-startup-test.txt"
+      - name: Compare live SDK events with saved history without sending a prompt
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=10s 180s env -i \
+            PATH="$PATH" HOME="$RUNNER_TEMP/native-probe/home" TMPDIR="$RUNNER_TEMP/native-probe/tmp" \
+            CI=1 DO_NOT_TRACK=1 VALLY_TELEMETRY_OPTOUT=1 \
+            EVIDENCE_DIR="$RUNNER_TEMP/evidence" node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import { mkdir, writeFile } from "node:fs/promises";
+          import { createRequire } from "node:module";
+          import path from "node:path";
+          import { pathToFileURL } from "node:url";
+
+          const require = createRequire(path.join(process.cwd(), "package.json"));
+          const sdkPackageFile = path.join(process.cwd(), "node_modules", "@github", "copilot-sdk", "package.json");
+          const sdkRoot = path.dirname(sdkPackageFile);
+          const sdkPackage = require(sdkPackageFile);
+          assert.equal(sdkPackage.version, "1.0.15");
+          assert.equal(require(path.join(process.cwd(), "node_modules", "@microsoft", "vally", "package.json")).version, "0.19.0");
+          assert.equal(require(path.join(process.cwd(), "node_modules", "@microsoft", "vally-cli", "package.json")).version, "0.19.0");
+          assert.equal(require("@github/copilot/package.json").version, "1.0.89");
+          const { CopilotClient } = await import(pathToFileURL(path.resolve(sdkRoot, sdkPackage.exports["."].import.default)));
+          const cliPath = createRequire(require.resolve("@github/copilot/package.json"))
+            .resolve(`@github/copilot-${process.platform}-${process.arch}`);
+          const evidence = {
+            scope: "SDK startup/live events/history only; not CLI finalization or protected storage",
+            status: "running", promptMethodsCalled: 0, arms: [],
+          };
+          const persist = () => writeFile(path.join(process.env.EVIDENCE_DIR, "sdk-log-comparison.json"),
+            JSON.stringify(evidence, null, 2) + "\n");
+          const countTypes = events => {
+            const counts = {};
+            for (const event of events) counts[event.type] = (counts[event.type] ?? 0) + 1;
+            return counts;
+          };
+          const skillsFrom = skills => skills.map(skill => ({
+            name: skill.name, enabled: skill.enabled, source: skill.source, hasPath: typeof skill.path === "string",
+          }));
+          const summarize = event => ({
+            type: event.type, timestamp: event.timestamp, ephemeral: event.ephemeral ?? false,
+            ...(event.type === "session.skills_loaded" ? { skills: skillsFrom(event.data.skills) } : {}),
+          });
+          await persist();
+          let client;
+          let session;
+          try {
+            for (const arm of ["baseline", "treatment"]) {
+              const work = path.join(process.env.TMPDIR, arm);
+              const configDirectory = path.join(work, "config");
+              const ambient = path.join(work, ".github", "skills", "ambient-fixture");
+              const assigned = path.join(work, "assigned");
+              await mkdir(configDirectory, { recursive: true });
+              for (const [directory, name] of [[ambient, "ambient-fixture"], [assigned, "assigned"]]) {
+                await mkdir(directory, { recursive: true });
+                await writeFile(path.join(directory, "SKILL.md"),
+                  `---\nname: ${name}\ndescription: Synthetic startup fixture.\n---\nSynthetic fixture.\n`);
+              }
+              const live = [];
+              client = new CopilotClient({
+                cliPath, cwd: work, env: { ...process.env, COPILOT_HOME: configDirectory },
+                useLoggedInUser: false,
+              });
+              const record = { arm, stage: "create", shutdownCompleted: false };
+              evidence.arms.push(record);
+              await persist();
+              session = await client.createSession({
+                workingDirectory: work, configDirectory, enableConfigDiscovery: true,
+                skillDirectories: arm === "treatment" ? [assigned] : [],
+                onPermissionRequest: () => ({ kind: "denied-no-approval-rule-and-could-not-request-from-user" }),
+                onEvent: event => live.push(event),
+              });
+              session.send = session.sendAndWait = async () => {
+                evidence.promptMethodsCalled++;
+                throw new Error("Prompt methods forbidden in no-prompt probe");
+              };
+              record.sessionId = session.sessionId;
+              record.stage = "initialize";
+              await session.rpc.tools.initializeAndValidate();
+              const inventory = await session.rpc.skills.list();
+              record.inventoryAt = new Date().toISOString();
+              record.skills = skillsFrom(inventory.skills);
+              const enabled = inventory.skills.filter(skill => skill.enabled).map(skill => skill.name);
+              assert.ok(enabled.includes("ambient-fixture"), "Ambient fixture missing");
+              assert.equal(enabled.includes("assigned"), arm === "treatment", "Treatment assignment mismatch");
+              const saved = await session.getEvents();
+              record.liveTypes = countTypes(live);
+              record.savedTypes = countTypes(saved);
+              record.liveSkillsEvents = live.filter(event => event.type === "session.skills_loaded").map(summarize);
+              record.savedSkillsEvents = saved.filter(event => event.type === "session.skills_loaded").map(summarize);
+              record.liveEventHeaders = live.map(summarize);
+              record.savedEventHeaders = saved.map(summarize);
+              const forbidden = ["user.message", "assistant.turn_start", "assistant.message", "tool.execution_start", "skill.invoked"];
+              assert.ok([...live, ...saved].every(event => !forbidden.includes(event.type)), "Unexpected prompt/model/tool activity");
+              assert.equal(evidence.promptMethodsCalled, 0);
+              await session.disconnect();
+              session = undefined;
+              const stopErrors = await client.stop();
+              assert.equal(stopErrors?.length ?? 0, 0, "Runtime shutdown failed");
+              client = undefined;
+              record.shutdownCompleted = true;
+              record.stage = "complete";
+              await persist();
+            }
+            assert.equal(new Set(evidence.arms.map(arm => arm.sessionId)).size, 2);
+            evidence.status = "passed";
+          } catch (error) {
+            evidence.status = "blocked-or-failed";
+            evidence.error = { name: error.name, message: error.message };
+            process.exitCode = 1;
+          } finally {
+            const cleanupErrors = [];
+            if (session) {
+              try { await session.disconnect(); } catch (error) { cleanupErrors.push({ stage: "disconnect", message: error.message }); }
+            }
+            if (client) {
+              try {
+                const errors = await client.stop();
+                for (const error of errors ?? []) cleanupErrors.push({ stage: "stop", message: error.message });
+              } catch (error) { cleanupErrors.push({ stage: "stop", message: error.message }); }
+            }
+            if (cleanupErrors.length) {
+              evidence.cleanupErrors = cleanupErrors;
+              evidence.status = "blocked-or-failed";
+              process.exitCode = 1;
+            }
+            await persist();
+            console.log(JSON.stringify({ status: evidence.status, arms: evidence.arms.length, promptMethodsCalled: evidence.promptMethodsCalled }));
+          }
+          NODE
+      - name: Verify package sources stayed unchanged
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         run: |
           sha256sum --check "$RUNNER_TEMP/evidence/source-sha256.txt"
-          cd "$RUNNER_TEMP/standalone/.github/skills/hve-core/skill-effectiveness"
-          sha256sum --check "$RUNNER_TEMP/evidence/source-sha256.txt"
-      - name: Upload only model-free validation evidence
+      - name: Upload only no-prompt structural evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: skill-effectiveness-model-free-validation
+          name: skill-effectiveness-native-preflight
           path: ${{ runner.temp }}/evidence/
           if-no-files-found: error
           retention-days: 14
