@@ -14,10 +14,12 @@ retain their own code and pins; do not upgrade completed experiments in place.
 
 The current development package and generated template use the versions above. The
 [session-policy plugin](../scripts/restricted-copilot-executor.mjs) and templates
-prepare the following contract, but exact-stack packaging and runtime security
-verification remain outstanding. The plugin refuses registration on a different
-stack. Model-free policy tests establish wiring, not permission enforcement
-or containment. Untrusted candidate execution and grading remain blocked.
+prepare the following contract. Package checks and runtime security verification
+are distinct. Model-free Ubuntu restore, repository/copied-package
+tests and image decoding passed; no-prompt SDK startup also passed.
+The plugin refuses registration on a different stack. Policy tests establish
+wiring, not permission enforcement or containment. Untrusted candidate execution
+and grading remain blocked.
 The local command later in this guide documents mechanics, not a contained
 alternative when a required control is missing. There is no automatic fallback
 to the local backend.
@@ -26,9 +28,32 @@ The source-preparation target is published Vally core/CLI 0.19.0, SDK 1.0.15 and
 the separately pinned Copilot CLI 1.0.89, on Node.js 24+. Actual SDK runtime
 selection remains unverified. Published package inspection
 is not installed-stack verification. The default native image tag is
-`vally.azurecr.io/vally-task:0.19.0`; its digest and contents are unverified.
-Dependency migration, image selection and runtime acceptance are separate work.
+`vally.azurecr.io/vally-task:0.19.0`. An authorized model-free Ubuntu attempt
+pulled digest `sha256:cc940117d3aeec8c6949944104f6a1d431ea8d368aa3dfac17a5bfafe958c536`
+and verified Linux/amd64 with declared user `node`. The native compatibility
+guard stopped before trials: the image's grade role reported core 0.18.0
+against host 0.19.0. This is an image compatibility failure, not an observed
+containment failure. Do not retry that digest expecting different contents,
+bypass the guard, downgrade, or build/substitute an image without approval.
+Image selection and runtime acceptance remain separate work.
 No private checkout, fork or unpublished Vally change is required by this design.
+
+### Public Release Basis
+
+Use the pinned public [Vally core](https://www.npmjs.com/package/@microsoft/vally/v/0.19.0),
+[Vally CLI](https://www.npmjs.com/package/@microsoft/vally-cli/v/0.19.0) and
+[Copilot SDK](https://www.npmjs.com/package/@github/copilot-sdk/v/1.0.15)
+distributions for runtime capability claims. Verify archive integrity against
+the canonical lockfile before inspecting the shipped contracts. The adapter
+uses the exported executor client factories; the recorder and image reviewer
+use SDK session/RPC and attachment interfaces. CLI plugin loading, native
+grading and Docker role settings belong to the released runtime.
+
+Do not copy, cite or rely on private runtime-repository material or unreleased
+implementations when preparing this contribution or redistributable package.
+A public version number does not make its development repository public.
+Keep published API support, inspected package behavior and observed execution
+separate; none alone establishes all required runtime boundaries.
 
 ### Ownership And Role Boundaries
 
@@ -299,11 +324,10 @@ grader-local installation resolved from its own location, not candidate
 outside candidate authority before offline grading; do not fetch them during it.
 Verify that the selected native backend actually stages the required closure.
 
-Published Vally 0.19.0's local saved-grade path copies the submission, neutralizes
-worktree Git metadata, and applies authoritative no-follow grader-file replacement
-before grading. Its Docker backend uses separate task, evidence and grading
-phases; do not assume the local disposable-view implementation proves the
-container export, mount or teardown contract.
+Native saved grading can prepare a disposable workspace with grader files.
+That local behavior does not establish Docker artifact transfer, immutable
+executed checker bytes or container teardown. Verify the selected backend's
+actual behavior instead of inferring it from local staging.
 
 Staging is not immutable execution. Record reviewed-original digests and require
 candidate-inaccessible checker/dependency sources, protected executed bytes and
@@ -344,9 +368,9 @@ preselected rubric for both independent reviews, without role labels.
 
 The separate review spec is needed because saved grading selects its graders
 from the spec, not a per-grader CLI flag. Configure review authentication only
-in that online role. Released native prompt review selects `view`, `grep` and
+in that online role. The published 0.19.0 package configures `view`, `grep` and
 its verdict tool for workspace evidence, with permission handling separate from
-the candidate adapter. These are source-observed restrictions, not exact-stack
+the candidate adapter. This is inspected package configuration, not
 runtime verification. Do not add execution tools, executable graders, candidate
 setup hooks or rendering to online review. If required restrictions cannot be
 verified, stop automatic text review and retain explicit human review.

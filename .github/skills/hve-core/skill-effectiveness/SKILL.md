@@ -24,9 +24,12 @@ untrusted execution through the current local path. The
 [restricted execution profile](references/experiment-method.md#restricted-execution-profile-not-yet-runtime-verified)
 includes a released-API session-policy plugin for fresh environment-scoped
 sessions only. Default-mode and resume requests reject. Development/generated
-pins and the canonical lockfile match the target stack; a successful frozen
-restore, exact-stack tests and native security verification remain outstanding.
-This is not a runnable or verified execution profile.
+pins and the canonical lockfile match the target stack. Model-free Ubuntu
+checks passed frozen restore, copied-package tests and image decoding.
+No-prompt SDK startup also passed. A separate Docker attempt stopped
+before trials because the released image's grade role reported core 0.18.0
+against host 0.19.0. These results do not establish permission enforcement,
+containment or Windows compatibility. This is not a verified execution profile.
 
 ## Success Criteria
 
@@ -64,6 +67,11 @@ State the publisher's claimed benefit and how to examine it: executable outcomes
 reasoned assessment of outputs, measured effort, or a combination.
 
 ## Keep The Comparison Fair
+
+Ground runtime capability claims in the pinned, publicly distributed Vally
+and SDK packages. Do not include or rely on private runtime-repository material
+or unreleased implementations in the redistributable evaluation package.
+Public API declarations and package inspection do not prove runtime enforcement.
 
 - Use the same task, original inputs, model, tools, limits and checks in both
   arms. Add only the complete focus skill to treatment; shared skills go to both.

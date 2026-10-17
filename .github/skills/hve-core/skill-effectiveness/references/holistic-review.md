@@ -53,9 +53,9 @@ selection is not a per-grader include/exclude control.
 
 Use saved-result `grade --eval-spec` with the separate review spec and approved
 `--workspace`; feed one trial on stdin. Never run this spec as a candidate eval
-or feed the executable grading view to the online reviewer. Native 0.19.0 selects
-read/search and verdict tools for workspace text review; the candidate adapter
-does not restrict grader sessions. Verify the native review restrictions on the
+or feed the executable grading view to the online reviewer. The published 0.19.0
+package configures read/search and verdict tools for workspace text review;
+the candidate adapter does not restrict grader sessions. Verify the native review restrictions on the
 final stack before use. Do not execute or render submitted code in online review.
 
 Do not assume a prompt grader sees another grader's execution logs: graders need

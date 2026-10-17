@@ -38,7 +38,10 @@ public-factory adapter. Its source validates policy, injects explicit tools and
 managed permissions, denies host approval requests and checks tool metadata
 before returning a session. Only fresh environment-scoped sessions are supported;
 default-mode and resume requests reject. Registration rejects older installed
-package versions. Exact-stack integration and runtime enforcement are unverified.
+package versions. Model-free Ubuntu restore, copied-package checks and actual
+image decoding passed, as did no-prompt SDK startup. Docker trials stopped at
+the released image's core-version mismatch. Permission enforcement, containment
+and Windows compatibility remain unverified.
 Tool-using intake, candidate tools, executable graders and no-tools review have
 different authority; a reviewer restriction does not protect the other roles.
 Untrusted execution remains blocked until required boundaries are implemented
@@ -78,7 +81,8 @@ and observed. Financial approval cannot waive those prerequisites.
 3. `scripts/review-images.mjs` validates approved-root prompt and PNG/JPEG inputs,
    bounds bytes/count/decoded pixels/base64 before SDK contact, then submits one
    no-tools image review with bounded waits and atomic status/failure records.
-   Real codec and exact-stack validation remain pending.
+   Actual codec checks passed on Ubuntu; model vision and Windows compatibility
+   remain unverified.
 4. Native Vally templates stage only `fixtures/<task>/public` for candidates and
    overlay reviewed originals from `grading/<task>` at `evaluator` for executable
    grading. The optional review spec has only a prompt grader and receives an
@@ -96,8 +100,8 @@ and observed. Financial approval cannot waive those prerequisites.
 7. `scripts/restricted-copilot-executor.mjs` delegates native execution/lifecycle
    to Vally through its public environment-aware client factory. Per-run policy
    context and bounded SDK preflight do not supply OS containment or authoritative
-   host evidence. Pins match its registration gate, but a successful frozen
-   restore and exact-stack/runtime verification remain outstanding.
+   host evidence. Pins match its registration gate and model-free Ubuntu
+   package checks passed; actual runtime policy enforcement remains unverified.
 
 ### Data Flow
 

@@ -6,8 +6,10 @@ description: "Rendered-image evidence and explicitly authorized SDK or human rev
 
 Judge visible usability from actual rendered images, not filenames, source text
 or successful rendering. Use human inspection or the bundled one-submission
-[SDK image-review command](../scripts/review-images.mjs). The pinned native Vally
-prompt/panel path supplies text snapshots, not these image attachments.
+[SDK image-review command](../scripts/review-images.mjs). The helper uses the
+published SDK's blob attachment interface. Native `repo` evidence is a text
+snapshot; it must not be treated as proof that a model received image pixels.
+Use an automatic visual-review path only when actual image delivery is verified.
 
 ## Match The Method To The Claim
 
@@ -83,8 +85,9 @@ aggregate raw media and 32 MiB aggregate base64 attachments. Each image is
 limited to 8192 pixels per dimension and 16,777,216 pixels; aggregate pixels
 are limited to 33,554,432. Signature checks precede strict local PNG/JPEG
 decoding with pinned Sharp, with a ten-second decode deadline before SDK
-contact. Actual codec/standalone installation validation remains pending;
-model-free decoder doubles do not establish real codec behavior.
+contact. Model-free Ubuntu checks passed actual Sharp decoding and standalone
+installation on the pinned stack. Decoder doubles alone do not establish real
+codec behavior, and neither result verifies model vision or Windows compatibility.
 
 Pass additional image paths as further arguments. The output directory must not
 exist; its parent must exist. Initially it contains only an atomic status record;

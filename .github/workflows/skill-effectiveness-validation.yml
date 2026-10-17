@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
-name: Temporary skill-effectiveness native Docker smoke test
+name: Temporary skill-effectiveness public appliance smoke test
 
 on:
   push:
@@ -16,9 +16,9 @@ permissions:
 
 jobs:
   validate:
-    if: github.repository == 'dmavroeid/hve-core'
+    if: github.repository == 'dmavroeid/hve-core' && github.ref == 'refs/heads/automation/skill-effectiveness-validation-20261017'
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
+    timeout-minutes: 20
     permissions:
       contents: read
     defaults:
@@ -28,7 +28,7 @@ jobs:
     env:
       DO_NOT_TRACK: '1'
       VALLY_TELEMETRY_OPTOUT: '1'
-      IMAGE: vally.azurecr.io/vally-task@sha256:cc940117d3aeec8c6949944104f6a1d431ea8d368aa3dfac17a5bfafe958c536
+      BASE: node:24.14.0-bookworm-slim@sha256:4bd6219054c8bebcd26a66bfd8ca0bd6e1024b4b97474c59bb7ee3bbcbef4fe8
     steps:
       - name: Checkout exact snapshot without persisting credentials
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
@@ -38,12 +38,13 @@ jobs:
       - name: Set up Node 24
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
-          node-version: '24'
-      - name: Record immutable package identity and environment
+          node-version: '24.14.0'
+      - name: Verify current package snapshot and prepare allowlisted build context
         id: prepare
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/evidence" "$RUNNER_TEMP/docker-smoke/home" "$RUNNER_TEMP/docker-smoke/tmp"
+          mkdir -p "$RUNNER_TEMP/evidence" "$RUNNER_TEMP/build-context" \
+            "$RUNNER_TEMP/docker-smoke/home" "$RUNNER_TEMP/docker-smoke/tmp"
           {
             git rev-parse HEAD
             git rev-parse HEAD:.github/skills/hve-core/skill-effectiveness
@@ -51,29 +52,118 @@ jobs:
             npm --version
             uname -a
           } > "$RUNNER_TEMP/evidence/environment.txt"
-          test "$(git rev-parse HEAD:.github/skills/hve-core/skill-effectiveness)" = 03edec80cd4f6bb377d1a9d32085834c6d7fe09f
-          sha256sum package.json package-lock.json assets/package.template.json scripts/*.mjs tests/*.mjs \
-            > "$RUNNER_TEMP/evidence/source-sha256.txt"
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import { createHash } from "node:crypto";
+          import { execFileSync } from "node:child_process";
+          import { readFileSync, writeFileSync } from "node:fs";
+          import path from "node:path";
+          const files = execFileSync("git", ["ls-tree", "-r", "--name-only", "HEAD", "--", "."],
+            { encoding: "utf8" }).trim().split("\n").sort();
+          assert.equal(files.length, 23);
+          const hash = bytes => createHash("sha256").update(bytes).digest("hex");
+          const inventory = files.map(file => `${file} ${hash(readFileSync(file, "utf8").replace(/\r\n/g, "\n"))}`).join("\n") + "\n";
+          assert.equal(hash(inventory), "c34a92e94238261370729e6f25d37fcbff97a579df106f7927d9830fe3f61da9");
+          assert.equal(hash(readFileSync("package.json")), "58f696269135e8dc8ab5ad1fedc8cad2f917095c4a8b021708c4a4775e618769");
+          assert.equal(hash(readFileSync("package-lock.json")), "b9c750fbb43bcf37350da9f62722d737380f0e271a78210be6ad64cd63862da2");
+          assert.equal(hash(readFileSync(path.join(process.env.GITHUB_WORKSPACE, ".github/validation/skill-effectiveness/vally-0.19.Dockerfile"))),
+            "e3b0007c8d090c0013cfa7b26e3c5d600d585e67309a35433e5bbe26858153e8");
+          writeFileSync(path.join(process.env.RUNNER_TEMP, "evidence", "normalized-source-inventory.txt"), inventory);
+          NODE
+          git ls-files -z -- . | xargs -0 sha256sum > "$RUNNER_TEMP/evidence/source-sha256.txt"
           test ! -e node_modules
-      - name: Restore frozen package without lifecycle scripts
+          recipe="$GITHUB_WORKSPACE/.github/validation/skill-effectiveness/vally-0.19.Dockerfile"
+          cp "$recipe" "$RUNNER_TEMP/build-context/Dockerfile"
+          cp package.json package-lock.json "$RUNNER_TEMP/build-context/"
+          (
+            cd "$RUNNER_TEMP/build-context"
+            test "$(find . -mindepth 1 -maxdepth 1 | wc -l)" -eq 3
+            test "$(find . -mindepth 1 -maxdepth 1 -type f | wc -l)" -eq 3
+            sha256sum Dockerfile package.json package-lock.json
+          ) > "$RUNNER_TEMP/evidence/build-context-sha256.txt"
+          sha256sum "$recipe" "$GITHUB_WORKSPACE/.github/workflows/skill-effectiveness-validation.yml" \
+            > "$RUNNER_TEMP/evidence/validation-source-sha256.txt"
+      - name: Restore frozen host package without lifecycle scripts
         run: |
           set -euo pipefail
-          npm ci --ignore-scripts --registry=https://registry.npmjs.org/ --fetch-retries=0 --fetch-timeout=60000 --no-audit --no-fund \
+          npm ci --ignore-scripts --include=dev --registry=https://registry.npmjs.org/ --fetch-retries=0 --fetch-timeout=60000 --no-audit --no-fund \
             2>&1 | tee "$RUNNER_TEMP/evidence/restore.txt"
-      - name: Inspect Docker host and pull only the approved released image
+      - name: Build one clean public-package appliance without registry publication
         id: image
         run: |
           set -euo pipefail
-          env -i PATH="$PATH" HOME="$RUNNER_TEMP/docker-smoke/home" \
-            docker version --format '{{json .}}' > "$RUNNER_TEMP/evidence/docker-version.json"
-          env -i PATH="$PATH" HOME="$RUNNER_TEMP/docker-smoke/home" \
-            docker compose version > "$RUNNER_TEMP/evidence/compose-version.txt"
-          timeout --signal=TERM --kill-after=15s 240s env -i PATH="$PATH" HOME="$RUNNER_TEMP/docker-smoke/home" \
-            docker pull "$IMAGE" 2>&1 | tee "$RUNNER_TEMP/evidence/image-pull.txt"
-          env -i PATH="$PATH" HOME="$RUNNER_TEMP/docker-smoke/home" \
-            docker image inspect --format '{"id":{{json .Id}},"repoDigests":{{json .RepoDigests}},"os":{{json .Os}},"architecture":{{json .Architecture}},"user":{{json .Config.User}}}' \
-            "$IMAGE" > "$RUNNER_TEMP/evidence/image.json"
-      - name: Generate synthetic native mock task and offline executable grader
+          clean_home="$RUNNER_TEMP/docker-smoke/home"
+          env -i PATH="$PATH" HOME="$clean_home" docker version --format '{{json .}}' \
+            > "$RUNNER_TEMP/evidence/docker-version.json"
+          env -i PATH="$PATH" HOME="$clean_home" docker compose version \
+            > "$RUNNER_TEMP/evidence/compose-version.txt"
+          timeout --signal=TERM --kill-after=15s 600s env -i \
+            PATH="$PATH" HOME="$clean_home" DOCKER_BUILDKIT=1 \
+            docker build --platform linux/amd64 --pull --no-cache --progress plain \
+            --iidfile "$RUNNER_TEMP/evidence/image-id.txt" \
+            --tag "skill-effectiveness-probe:$GITHUB_SHA" "$RUNNER_TEMP/build-context" \
+            2>&1 | tee "$RUNNER_TEMP/evidence/image-build.txt"
+          image="$(cat "$RUNNER_TEMP/evidence/image-id.txt")"
+          [[ "$image" =~ ^sha256:[0-9a-f]{64}$ ]]
+          printf 'IMAGE=%s\n' "$image" >> "$GITHUB_ENV"
+          env -i PATH="$PATH" HOME="$clean_home" docker image inspect \
+            --format '{"id":{{json .Id}},"os":{{json .Os}},"architecture":{{json .Architecture}},"user":{{json .Config.User}}}' \
+            "$image" > "$RUNNER_TEMP/evidence/image.json"
+          printf '%s\n' "$BASE" > "$RUNNER_TEMP/evidence/base-reference.txt"
+      - name: Obtain actual native task and grade check manifests
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/docker-smoke"
+          for role in task grade; do
+            ipc="$root/check-$role"
+            mkdir "$ipc"
+            printf '{"role":"%s","tools":["sh","gnu-coreutils","git","system-ca"]}\n' "$role" > "$ipc/request.json"
+            name="skill-check-$role-$GITHUB_RUN_ID"
+            trap 'env -i PATH="$PATH" HOME="$root/home" docker rm --force "$name" > /dev/null' EXIT
+            env -i PATH="$PATH" HOME="$root/home" docker create --name "$name" \
+              --label "skill-effectiveness.run=$GITHUB_RUN_ID" \
+              --network none --cap-drop ALL --security-opt no-new-privileges \
+              "$IMAGE" vally-docker-runner check /tmp/request.json /tmp/result.json > /dev/null
+            env -i PATH="$PATH" HOME="$root/home" docker cp "$ipc/request.json" "$name:/tmp/request.json"
+            env -i PATH="$PATH" HOME="$root/home" docker inspect \
+              --format '{"mounts":{{json .Mounts}},"networkMode":{{json .HostConfig.NetworkMode}},"capDrop":{{json .HostConfig.CapDrop}},"securityOpt":{{json .HostConfig.SecurityOpt}},"user":{{json .Config.User}}}' \
+              "$name" > "$RUNNER_TEMP/evidence/$role-check-container.json"
+            timeout --signal=TERM --kill-after=15s 60s env -i PATH="$PATH" HOME="$root/home" \
+              docker start --attach "$name" 2>&1 | tee "$RUNNER_TEMP/evidence/$role-check.txt"
+            env -i PATH="$PATH" HOME="$root/home" docker inspect --format '{{.State.ExitCode}}' "$name" \
+              | grep -x '0'
+            env -i PATH="$PATH" HOME="$root/home" docker cp "$name:/tmp/result.json" "$ipc/result.json"
+            cp "$ipc/result.json" "$RUNNER_TEMP/evidence/$role-check.json"
+            env -i PATH="$PATH" HOME="$root/home" docker rm "$name" > /dev/null
+            trap - EXIT
+          done
+          EVIDENCE="$RUNNER_TEMP/evidence" node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import { readFileSync } from "node:fs";
+          import path from "node:path";
+          for (const role of ["task", "grade"]) {
+            const result = JSON.parse(readFileSync(path.join(process.env.EVIDENCE, `${role}-check.json`)));
+            assert.equal(result.ok, true, `${role} native check failed`);
+            const check = result.value;
+            assert.equal(check.protocolRevision, 1);
+            assert.equal(check.coreVersion, "0.19.0");
+            assert.equal(check.nodeVersion, "24.14.0");
+            assert.equal(check.npmVersion, "11.9.0");
+            assert.equal(check.uid, 1000);
+            assert.equal(check.gid, 1000);
+            assert.match(check.runnerPath, /^\/opt\/vally-runtime\/node_modules\/@microsoft\/vally\//);
+            assert.equal(check.corePackageRoot, "/opt/vally-runtime/node_modules/@microsoft/vally");
+            for (const tool of ["sh", "gnu-coreutils", "git", "system-ca"]) assert.equal(check.tools[tool], true);
+            assert.ok(role === "task" ? check.executors.some(item => item.id === "mock")
+              : check.graders.some(item => item.id === "program"));
+            const container = JSON.parse(readFileSync(path.join(process.env.EVIDENCE, `${role}-check-container.json`)));
+            assert.equal(container.networkMode, "none");
+            assert.deepEqual(container.capDrop, ["ALL"]);
+            assert.ok(container.securityOpt.includes("no-new-privileges"));
+            assert.deepEqual(container.mounts, []);
+          }
+          NODE
+      - name: Generate unchanged synthetic native mock task and offline executable grader
         run: |
           set -euo pipefail
           PROBE_ROOT="$RUNNER_TEMP/docker-smoke" node --input-type=module <<'NODE'
@@ -82,7 +172,6 @@ jobs:
           import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
           import path from "node:path";
           import { stringify } from "yaml";
-
           const root = process.env.PROBE_ROOT;
           const write = (file, content) => {
             const target = path.join(root, file);
@@ -92,8 +181,8 @@ jobs:
           const image = JSON.parse(readFileSync(path.join(root, "..", "evidence", "image.json"), "utf8"));
           assert.equal(image.os, "linux");
           assert.equal(image.architecture, "amd64");
-          assert.ok(image.repoDigests.includes("vally.azurecr.io/vally-task@sha256:cc940117d3aeec8c6949944104f6a1d431ea8d368aa3dfac17a5bfafe958c536"));
-          assert.ok(image.user && !["root", "0", "0:0"].includes(image.user), "Image must declare non-root USER");
+          assert.equal(image.id, process.env.IMAGE);
+          assert.equal(image.user, "1000:1000");
           const checker = `// Copyright (c) 2026 Microsoft Corporation. All rights reserved.
           // SPDX-License-Identifier: MIT
           import assert from "node:assert/strict";
@@ -169,6 +258,42 @@ jobs:
           env -i PATH="$PATH" HOME="$root/home" TMPDIR="$root/tmp" CI=1 DO_NOT_TRACK=1 VALLY_TELEMETRY_OPTOUT=1 \
             node "$cli" lint --strict --eval-spec "$root/evals/smoke.eval.yaml" \
             2>&1 | tee "$RUNNER_TEMP/evidence/lint.txt"
+          IMAGE="$IMAGE" node --input-type=module > "$RUNNER_TEMP/evidence/container-observer.txt" 2>&1 <<'NODE' &
+          import { spawn, execFileSync } from "node:child_process";
+          import { appendFileSync } from "node:fs";
+          import path from "node:path";
+          import { createInterface } from "node:readline";
+          const evidence = path.join(process.env.RUNNER_TEMP, "evidence");
+          const env = { PATH: process.env.PATH, HOME: path.join(process.env.RUNNER_TEMP, "docker-smoke/home") };
+          const events = spawn("docker", ["events", "--since", new Date().toISOString(),
+            "--filter", "type=container", "--filter", "event=create", "--filter", `image=${process.env.IMAGE}`,
+            "--format", "{{json .}}"], { env, stdio: ["ignore", "pipe", "inherit"] });
+          let stopping = false;
+          process.on("SIGTERM", () => { stopping = true; events.kill("SIGTERM"); });
+          events.on("error", error => { console.error(error); process.exitCode = 1; });
+          events.on("exit", (code, signal) => {
+            if (!stopping || (code !== 0 && signal !== "SIGTERM")) {
+              console.error(`Unexpected Docker event observer exit: ${code}/${signal}`);
+              process.exitCode = 1;
+            }
+          });
+          try {
+            for await (const line of createInterface({ input: events.stdout })) {
+              const event = JSON.parse(line);
+              if (!/^[a-f0-9]{64}$/.test(event.Actor?.ID)) throw Error("Invalid Docker event container ID");
+              const format = '{"id":{{json .Id}},"image":{{json .Image}},"service":{{json (index .Config.Labels "com.docker.compose.service")}},"project":{{json (index .Config.Labels "com.docker.compose.project")}},"mounts":{{json .Mounts}},"networkMode":{{json .HostConfig.NetworkMode}}}';
+              const fact = JSON.parse(execFileSync("docker", ["inspect", "--format", format, event.Actor.ID],
+                { env, encoding: "utf8", timeout: 5000 }));
+              appendFileSync(path.join(evidence, "native-container-facts.jsonl"), JSON.stringify(fact) + "\n");
+            }
+          } finally {
+            events.kill("SIGTERM");
+          }
+          NODE
+          observer_pid=$!
+          trap 'kill -TERM "$observer_pid"; wait "$observer_pid"' EXIT
+          sleep 1
+          kill -0 "$observer_pid"
           timeout --signal=TERM --kill-after=15s 300s env -i \
             PATH="$PATH" HOME="$root/home" TMPDIR="$root/tmp" CI=1 DO_NOT_TRACK=1 VALLY_TELEMETRY_OPTOUT=1 \
             PROBE_TASK_ONLY=synthetic-task-marker \
@@ -178,6 +303,9 @@ jobs:
             --backend-args task-env=PROBE_TASK_ONLY \
             --output-dir "$RUNNER_TEMP/native-output" --workspace "$RUNNER_TEMP/native-workspaces" \
             --workers 1 --require-pass 2>&1 | tee "$RUNNER_TEMP/evidence/native-run.txt"
+          kill -TERM "$observer_pid"
+          wait "$observer_pid"
+          trap - EXIT
       - name: Verify native outcomes and retain only structural runtime facts
         if: ${{ !cancelled() && steps.native.outcome != 'skipped' }}
         run: |
@@ -186,6 +314,7 @@ jobs:
           import assert from "node:assert/strict";
           import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
           import path from "node:path";
+          import { hasGraderError } from "@microsoft/vally";
           const summary = { scope: "Native Docker mock-task/offline executable-grading integration only",
             status: "unverified", trials: [] };
           const files = dir => existsSync(dir) ? readdirSync(dir, { withFileTypes: true }).flatMap(entry =>
@@ -209,6 +338,7 @@ jobs:
               summary.trials.push(trial);
               assert.equal(trial.passed, true, "Native executable grading failed");
               assert.notEqual(trial.status, "error");
+              assert.equal(hasGraderError(record.gradeResult), false, "Native grader tree contains an error");
               assert.ok(observations.length > 0, "Native grader did not retain runtime facts");
               for (const facts of observations) {
                 assert.notEqual(facts.uid, 0);
@@ -217,6 +347,22 @@ jobs:
                 assert.equal(facts.taskOnlyCanaryPresent, false);
                 assert.equal(facts.checkerHashMatches, true);
                 assert.equal(facts.artifactMatches, true);
+              }
+            }
+            const containers = readFileSync(path.join(process.env.EVIDENCE, "native-container-facts.jsonl"), "utf8")
+              .trim().split("\n").map(line => JSON.parse(line));
+            for (const role of ["vally-task", "vally-grade"]) {
+              assert.ok(containers.some(item => item.service === role), `Missing actual ${role} container evidence`);
+            }
+            for (const container of containers) {
+              assert.equal(container.image, process.env.IMAGE);
+              assert.equal(container.networkMode, "none");
+              for (const mount of container.mounts) {
+                if (mount.Type === "bind") {
+                  assert.ok(mount.Source.startsWith(`${process.env.RUNNER_TEMP}/`), "Unexpected host bind mount");
+                } else {
+                  assert.ok(["volume", "tmpfs"].includes(mount.Type), "Unexpected mount type");
+                }
               }
             }
             summary.status = "passed";
@@ -232,11 +378,29 @@ jobs:
       - name: Verify package source bytes stayed unchanged
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         run: sha256sum --check "$RUNNER_TEMP/evidence/source-sha256.txt"
+      - name: Remove only this job's remaining candidate containers and image
+        if: always()
+        run: |
+          set -euo pipefail
+          clean_home="$RUNNER_TEMP/docker-smoke/home"
+          if [[ -n "${IMAGE:-}" ]]; then
+            remaining="$(env -i PATH="$PATH" HOME="$clean_home" docker ps --all --quiet --filter "ancestor=$IMAGE")"
+            if [[ -n "$remaining" ]]; then
+              mapfile -t ids <<< "$remaining"
+              for id in "${ids[@]}"; do
+                env -i PATH="$PATH" HOME="$clean_home" docker inspect \
+                  --format '{"id":{{json .Id}},"mounts":{{json .Mounts}},"networkMode":{{json .HostConfig.NetworkMode}}}' \
+                  "$id" >> "$RUNNER_TEMP/evidence/cleanup-container-facts.jsonl"
+                env -i PATH="$PATH" HOME="$clean_home" docker rm --force --volumes "$id"
+              done
+            fi
+            env -i PATH="$PATH" HOME="$clean_home" docker image rm "skill-effectiveness-probe:$GITHUB_SHA"
+          fi
       - name: Upload synthetic native Docker evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: skill-effectiveness-native-docker-smoke
+          name: skill-effectiveness-public-appliance-smoke
           path: ${{ runner.temp }}/evidence/
           if-no-files-found: error
           retention-days: 14
