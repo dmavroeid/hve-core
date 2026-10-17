@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
-name: Temporary skill-effectiveness no-prompt native preflight
+name: Temporary skill-effectiveness native Docker smoke test
 
 on:
   push:
@@ -18,7 +18,7 @@ jobs:
   validate:
     if: github.repository == 'dmavroeid/hve-core'
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 12
     permissions:
       contents: read
     defaults:
@@ -28,7 +28,7 @@ jobs:
     env:
       DO_NOT_TRACK: '1'
       VALLY_TELEMETRY_OPTOUT: '1'
-      SKILL_EFFECTIVENESS_NATIVE_PREFLIGHT: '1'
+      IMAGE: vally.azurecr.io/vally-task@sha256:cc940117d3aeec8c6949944104f6a1d431ea8d368aa3dfac17a5bfafe958c536
     steps:
       - name: Checkout exact snapshot without persisting credentials
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
@@ -39,177 +39,204 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: '24'
-      - name: Record exact revision and prepare isolated probe paths
+      - name: Record immutable package identity and environment
         id: prepare
-        working-directory: .
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/evidence" "$RUNNER_TEMP/native-probe/home" "$RUNNER_TEMP/native-probe/tmp"
+          mkdir -p "$RUNNER_TEMP/evidence" "$RUNNER_TEMP/docker-smoke/home" "$RUNNER_TEMP/docker-smoke/tmp"
           {
             git rev-parse HEAD
             git rev-parse HEAD:.github/skills/hve-core/skill-effectiveness
-            git status --porcelain
             node --version
             npm --version
             uname -a
           } > "$RUNNER_TEMP/evidence/environment.txt"
           test "$(git rev-parse HEAD:.github/skills/hve-core/skill-effectiveness)" = 03edec80cd4f6bb377d1a9d32085834c6d7fe09f
-          cd .github/skills/hve-core/skill-effectiveness
           sha256sum package.json package-lock.json assets/package.template.json scripts/*.mjs tests/*.mjs \
             > "$RUNNER_TEMP/evidence/source-sha256.txt"
           test ! -e node_modules
-      - name: Restore frozen dependencies without lifecycle scripts
-        id: restore
+      - name: Restore frozen package without lifecycle scripts
         run: |
           set -euo pipefail
           npm ci --ignore-scripts --registry=https://registry.npmjs.org/ --fetch-retries=0 --fetch-timeout=60000 --no-audit --no-fund \
-            2>&1 | tee "$RUNNER_TEMP/evidence/repository-restore.txt"
-      - name: Run existing opt-in native startup case without prompts or credentials
+            2>&1 | tee "$RUNNER_TEMP/evidence/restore.txt"
+      - name: Inspect Docker host and pull only the approved released image
+        id: image
         run: |
           set -euo pipefail
-          timeout --signal=TERM --kill-after=10s 120s env -i \
-            PATH="$PATH" HOME="$RUNNER_TEMP/native-probe/home" TMPDIR="$RUNNER_TEMP/native-probe/tmp" \
-            CI=1 DO_NOT_TRACK=1 VALLY_TELEMETRY_OPTOUT=1 SKILL_EFFECTIVENESS_NATIVE_PREFLIGHT=1 \
-            node --test --test-name-pattern='^actual native executor captures both actual sessions including ambient skills before any prompt$' \
-            tests/native-inventory.test.mjs 2>&1 | tee "$RUNNER_TEMP/evidence/native-startup-test.txt"
-      - name: Compare live SDK events with saved history without sending a prompt
+          env -i PATH="$PATH" HOME="$RUNNER_TEMP/docker-smoke/home" \
+            docker version --format '{{json .}}' > "$RUNNER_TEMP/evidence/docker-version.json"
+          env -i PATH="$PATH" HOME="$RUNNER_TEMP/docker-smoke/home" \
+            docker compose version > "$RUNNER_TEMP/evidence/compose-version.txt"
+          timeout --signal=TERM --kill-after=15s 240s env -i PATH="$PATH" HOME="$RUNNER_TEMP/docker-smoke/home" \
+            docker pull "$IMAGE" 2>&1 | tee "$RUNNER_TEMP/evidence/image-pull.txt"
+          env -i PATH="$PATH" HOME="$RUNNER_TEMP/docker-smoke/home" \
+            docker image inspect --format '{"id":{{json .Id}},"repoDigests":{{json .RepoDigests}},"os":{{json .Os}},"architecture":{{json .Architecture}},"user":{{json .Config.User}}}' \
+            "$IMAGE" > "$RUNNER_TEMP/evidence/image.json"
+      - name: Generate synthetic native mock task and offline executable grader
         run: |
           set -euo pipefail
-          timeout --signal=TERM --kill-after=10s 180s env -i \
-            PATH="$PATH" HOME="$RUNNER_TEMP/native-probe/home" TMPDIR="$RUNNER_TEMP/native-probe/tmp" \
-            CI=1 DO_NOT_TRACK=1 VALLY_TELEMETRY_OPTOUT=1 \
-            EVIDENCE_DIR="$RUNNER_TEMP/evidence" node --input-type=module <<'NODE'
+          PROBE_ROOT="$RUNNER_TEMP/docker-smoke" node --input-type=module <<'NODE'
           import assert from "node:assert/strict";
-          import { mkdir, writeFile } from "node:fs/promises";
-          import { createRequire } from "node:module";
+          import { createHash } from "node:crypto";
+          import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
           import path from "node:path";
-          import { pathToFileURL } from "node:url";
+          import { stringify } from "yaml";
 
-          const require = createRequire(path.join(process.cwd(), "package.json"));
-          const sdkPackageFile = path.join(process.cwd(), "node_modules", "@github", "copilot-sdk", "package.json");
-          const sdkRoot = path.dirname(sdkPackageFile);
-          const sdkPackage = require(sdkPackageFile);
-          assert.equal(sdkPackage.version, "1.0.15");
-          assert.equal(require(path.join(process.cwd(), "node_modules", "@microsoft", "vally", "package.json")).version, "0.19.0");
-          assert.equal(require(path.join(process.cwd(), "node_modules", "@microsoft", "vally-cli", "package.json")).version, "0.19.0");
-          assert.equal(require("@github/copilot/package.json").version, "1.0.89");
-          const { CopilotClient } = await import(pathToFileURL(path.resolve(sdkRoot, sdkPackage.exports["."].import.default)));
-          const cliPath = createRequire(require.resolve("@github/copilot/package.json"))
-            .resolve(`@github/copilot-${process.platform}-${process.arch}`);
-          const evidence = {
-            scope: "SDK startup/live events/history only; not CLI finalization or protected storage",
-            status: "running", promptMethodsCalled: 0, arms: [],
+          const root = process.env.PROBE_ROOT;
+          const write = (file, content) => {
+            const target = path.join(root, file);
+            mkdirSync(path.dirname(target), { recursive: true });
+            writeFileSync(target, content);
           };
-          const persist = () => writeFile(path.join(process.env.EVIDENCE_DIR, "sdk-log-comparison.json"),
-            JSON.stringify(evidence, null, 2) + "\n");
-          const countTypes = events => {
-            const counts = {};
-            for (const event of events) counts[event.type] = (counts[event.type] ?? 0) + 1;
-            return counts;
+          const image = JSON.parse(readFileSync(path.join(root, "..", "evidence", "image.json"), "utf8"));
+          assert.equal(image.os, "linux");
+          assert.equal(image.architecture, "amd64");
+          assert.ok(image.repoDigests.includes("vally.azurecr.io/vally-task@sha256:cc940117d3aeec8c6949944104f6a1d431ea8d368aa3dfac17a5bfafe958c536"));
+          assert.ok(image.user && !["root", "0", "0:0"].includes(image.user), "Image must declare non-root USER");
+          const checker = `// Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+          // SPDX-License-Identifier: MIT
+          import assert from "node:assert/strict";
+          import { createHash } from "node:crypto";
+          import { accessSync, constants, readFileSync } from "node:fs";
+          import { networkInterfaces } from "node:os";
+          const authKeys = ["GITHUB_TOKEN", "GH_TOKEN", "COPILOT_GITHUB_TOKEN", "OPENAI_API_KEY", "AZURE_OPENAI_API_KEY"];
+          const writable = file => {
+            try { accessSync(file, constants.W_OK); return true; }
+            catch (error) { if (["EACCES", "EROFS"].includes(error.code)) return false; throw error; }
           };
-          const skillsFrom = skills => skills.map(skill => ({
-            name: skill.name, enabled: skill.enabled, source: skill.source, hasPath: typeof skill.path === "string",
+          const externalInterfaces = Object.entries(networkInterfaces())
+            .filter(([, addresses]) => addresses.some(address => !address.internal)).map(([name]) => name);
+          const checkerHash = createHash("sha256").update(readFileSync(import.meta.filename)).digest("hex");
+          const facts = {
+            probe: "native-docker-smoke", uid: process.getuid(),
+            externalInterfaces, authKeysPresent: authKeys.filter(key => Boolean(process.env[key])),
+            taskOnlyCanaryPresent: Object.hasOwn(process.env, "PROBE_TASK_ONLY"),
+            checkerHashMatches: checkerHash === process.argv[2],
+            artifactMatches: readFileSync("deliverable/result.txt", "utf8") === "Synthetic native Docker artifact.\\n",
+            checkerWritable: writable(import.meta.filename),
+            artifactWritable: writable("deliverable/result.txt"),
+          };
+          assert.notEqual(facts.uid, 0);
+          assert.deepEqual(facts.externalInterfaces, []);
+          assert.deepEqual(facts.authKeysPresent, []);
+          assert.equal(facts.taskOnlyCanaryPresent, false);
+          assert.equal(facts.checkerHashMatches, true);
+          assert.equal(facts.artifactMatches, true);
+          console.log(JSON.stringify({ name: "native-runtime-facts", kind: "code", passed: true,
+            score: 1, evidence: JSON.stringify(facts) }));
+          `;
+          const checkerHash = createHash("sha256").update(checker).digest("hex");
+          write("grading/check.mjs", checker);
+          write("fixtures/public/deliverable/result.txt", "Synthetic native Docker artifact.\n");
+          write("fixtures/public/.mock-executor/smoke.json", JSON.stringify({ output: "Synthetic mock output; no model call." }));
+          write("skills/demo/SKILL.md", "---\nname: demo\ndescription: Synthetic native Docker fixture.\n---\nSynthetic fixture only.\n");
+          const spec = {
+            name: "native-docker-smoke", description: "Synthetic model-free native Docker integration check",
+            version: "1.0.0", type: "capability",
+            defaults: { runs: 1, timeout: "2m", executor: "mock", model: "mock" },
+            agent_environment: { env: { DO_NOT_TRACK: "1" }, skills: [],
+              files: [{ src: "../fixtures/public", dest: "." }] },
+            grading_environment: { files: [{ src: "../grading", dest: "evaluator" }] },
+            scoring: {},
+            stimuli: [{
+              name: "smoke", prompt: "Synthetic fixture consumed by native mock executor; never send to a model.",
+              artifacts: { include: ["deliverable/**"] },
+              graders: [
+                { type: "completed" },
+                { type: "file-exists", name: "delivery", config: { path: "deliverable/result.txt" } },
+                { type: "program", name: "native-runtime-facts",
+                  config: { program: "node", args: ["evaluator/check.mjs", checkerHash], timeout: "30s" } },
+              ],
+            }],
+          };
+          write("evals/smoke.eval.yaml", stringify(spec));
+          write("experiments/smoke.experiment.yaml", stringify({
+            name: "native-docker-smoke", evals: ["../evals/smoke.eval.yaml"],
+            vary: ["/environment/skills"], baseline: "a-baseline",
+            variants: { "a-baseline": { environment: { skills: [] } },
+              "b-treatment": { environment: { skills: ["../skills/demo"] } } },
+            execution: { workers: 1 }, overrides: { runs: 1 },
           }));
-          const summarize = event => ({
-            type: event.type, timestamp: event.timestamp, ephemeral: event.ephemeral ?? false,
-            ...(event.type === "session.skills_loaded" ? { skills: skillsFrom(event.data.skills) } : {}),
-          });
-          await persist();
-          let client;
-          let session;
+          NODE
+      - name: Lint then execute native Docker experiment with both role networks disabled
+        id: native
+        run: |
+          set -euo pipefail
+          cli="$PWD/node_modules/@microsoft/vally-cli/dist/index.js"
+          root="$RUNNER_TEMP/docker-smoke"
+          cd "$root"
+          env -i PATH="$PATH" HOME="$root/home" TMPDIR="$root/tmp" CI=1 DO_NOT_TRACK=1 VALLY_TELEMETRY_OPTOUT=1 \
+            node "$cli" lint --strict --eval-spec "$root/evals/smoke.eval.yaml" \
+            2>&1 | tee "$RUNNER_TEMP/evidence/lint.txt"
+          timeout --signal=TERM --kill-after=15s 300s env -i \
+            PATH="$PATH" HOME="$root/home" TMPDIR="$root/tmp" CI=1 DO_NOT_TRACK=1 VALLY_TELEMETRY_OPTOUT=1 \
+            PROBE_TASK_ONLY=synthetic-task-marker \
+            node "$cli" experiment run "$root/experiments/smoke.experiment.yaml" \
+            --backend docker --backend-args "task-image=$IMAGE" --backend-args "grade-image=$IMAGE" \
+            --backend-args task-network=none --backend-args grade-network=none \
+            --backend-args task-env=PROBE_TASK_ONLY \
+            --output-dir "$RUNNER_TEMP/native-output" --workspace "$RUNNER_TEMP/native-workspaces" \
+            --workers 1 --require-pass 2>&1 | tee "$RUNNER_TEMP/evidence/native-run.txt"
+      - name: Verify native outcomes and retain only structural runtime facts
+        if: ${{ !cancelled() && steps.native.outcome != 'skipped' }}
+        run: |
+          set -euo pipefail
+          OUTPUT="$RUNNER_TEMP/native-output" EVIDENCE="$RUNNER_TEMP/evidence" node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+          import path from "node:path";
+          const summary = { scope: "Native Docker mock-task/offline executable-grading integration only",
+            status: "unverified", trials: [] };
+          const files = dir => existsSync(dir) ? readdirSync(dir, { withFileTypes: true }).flatMap(entry =>
+            entry.isDirectory() ? files(path.join(dir, entry.name)) : [path.join(dir, entry.name)]) : [];
           try {
-            for (const arm of ["baseline", "treatment"]) {
-              const work = path.join(process.env.TMPDIR, arm);
-              const configDirectory = path.join(work, "config");
-              const ambient = path.join(work, ".github", "skills", "ambient-fixture");
-              const assigned = path.join(work, "assigned");
-              await mkdir(configDirectory, { recursive: true });
-              for (const [directory, name] of [[ambient, "ambient-fixture"], [assigned, "assigned"]]) {
-                await mkdir(directory, { recursive: true });
-                await writeFile(path.join(directory, "SKILL.md"),
-                  `---\nname: ${name}\ndescription: Synthetic startup fixture.\n---\nSynthetic fixture.\n`);
-              }
-              const live = [];
-              client = new CopilotClient({
-                cliPath, cwd: work, env: { ...process.env, COPILOT_HOME: configDirectory },
-                useLoggedInUser: false,
-              });
-              const record = { arm, stage: "create", shutdownCompleted: false };
-              evidence.arms.push(record);
-              await persist();
-              session = await client.createSession({
-                workingDirectory: work, configDirectory, enableConfigDiscovery: true,
-                skillDirectories: arm === "treatment" ? [assigned] : [],
-                onPermissionRequest: () => ({ kind: "denied-no-approval-rule-and-could-not-request-from-user" }),
-                onEvent: event => live.push(event),
-              });
-              session.send = session.sendAndWait = async () => {
-                evidence.promptMethodsCalled++;
-                throw new Error("Prompt methods forbidden in no-prompt probe");
+            const records = files(process.env.OUTPUT).filter(file => path.basename(file) === "results.jsonl")
+              .flatMap(file => readFileSync(file, "utf8").split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line)))
+              .filter(record => record.type === "trial-result");
+            assert.equal(records.length, 2, "Expected exactly two native trial results");
+            assert.deepEqual(records.map(record => record.variant).sort(), ["a-baseline", "b-treatment"]);
+            for (const record of records) {
+              const observations = [];
+              const visit = value => {
+                if (typeof value === "string" && value.startsWith('{"probe":"native-docker-smoke"')) observations.push(JSON.parse(value));
+                else if (Array.isArray(value)) value.forEach(visit);
+                else if (value && typeof value === "object") Object.values(value).forEach(visit);
               };
-              record.sessionId = session.sessionId;
-              record.stage = "initialize";
-              await session.rpc.tools.initializeAndValidate();
-              const inventory = await session.rpc.skills.list();
-              record.inventoryAt = new Date().toISOString();
-              record.skills = skillsFrom(inventory.skills);
-              const enabled = inventory.skills.filter(skill => skill.enabled).map(skill => skill.name);
-              assert.ok(enabled.includes("ambient-fixture"), "Ambient fixture missing");
-              assert.equal(enabled.includes("assigned"), arm === "treatment", "Treatment assignment mismatch");
-              const saved = await session.getEvents();
-              record.liveTypes = countTypes(live);
-              record.savedTypes = countTypes(saved);
-              record.liveSkillsEvents = live.filter(event => event.type === "session.skills_loaded").map(summarize);
-              record.savedSkillsEvents = saved.filter(event => event.type === "session.skills_loaded").map(summarize);
-              record.liveEventHeaders = live.map(summarize);
-              record.savedEventHeaders = saved.map(summarize);
-              const forbidden = ["user.message", "assistant.turn_start", "assistant.message", "tool.execution_start", "skill.invoked"];
-              assert.ok([...live, ...saved].every(event => !forbidden.includes(event.type)), "Unexpected prompt/model/tool activity");
-              assert.equal(evidence.promptMethodsCalled, 0);
-              await session.disconnect();
-              session = undefined;
-              const stopErrors = await client.stop();
-              assert.equal(stopErrors?.length ?? 0, 0, "Runtime shutdown failed");
-              client = undefined;
-              record.shutdownCompleted = true;
-              record.stage = "complete";
-              await persist();
+              visit(record.gradeResult);
+              const trial = { variant: record.variant, passed: record.gradeResult?.passed,
+                status: record.gradeResult?.status, observations };
+              summary.trials.push(trial);
+              assert.equal(trial.passed, true, "Native executable grading failed");
+              assert.notEqual(trial.status, "error");
+              assert.ok(observations.length > 0, "Native grader did not retain runtime facts");
+              for (const facts of observations) {
+                assert.notEqual(facts.uid, 0);
+                assert.deepEqual(facts.externalInterfaces, []);
+                assert.deepEqual(facts.authKeysPresent, []);
+                assert.equal(facts.taskOnlyCanaryPresent, false);
+                assert.equal(facts.checkerHashMatches, true);
+                assert.equal(facts.artifactMatches, true);
+              }
             }
-            assert.equal(new Set(evidence.arms.map(arm => arm.sessionId)).size, 2);
-            evidence.status = "passed";
+            summary.status = "passed";
           } catch (error) {
-            evidence.status = "blocked-or-failed";
-            evidence.error = { name: error.name, message: error.message };
+            summary.status = "failed-or-unavailable";
+            summary.error = { name: error.name, message: error.message };
             process.exitCode = 1;
           } finally {
-            const cleanupErrors = [];
-            if (session) {
-              try { await session.disconnect(); } catch (error) { cleanupErrors.push({ stage: "disconnect", message: error.message }); }
-            }
-            if (client) {
-              try {
-                const errors = await client.stop();
-                for (const error of errors ?? []) cleanupErrors.push({ stage: "stop", message: error.message });
-              } catch (error) { cleanupErrors.push({ stage: "stop", message: error.message }); }
-            }
-            if (cleanupErrors.length) {
-              evidence.cleanupErrors = cleanupErrors;
-              evidence.status = "blocked-or-failed";
-              process.exitCode = 1;
-            }
-            await persist();
-            console.log(JSON.stringify({ status: evidence.status, arms: evidence.arms.length, promptMethodsCalled: evidence.promptMethodsCalled }));
+            writeFileSync(path.join(process.env.EVIDENCE, "native-docker-summary.json"), JSON.stringify(summary, null, 2) + "\n");
+            console.log(JSON.stringify(summary));
           }
           NODE
-      - name: Verify package sources stayed unchanged
+      - name: Verify package source bytes stayed unchanged
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
-        run: |
-          sha256sum --check "$RUNNER_TEMP/evidence/source-sha256.txt"
-      - name: Upload only no-prompt structural evidence
+        run: sha256sum --check "$RUNNER_TEMP/evidence/source-sha256.txt"
+      - name: Upload synthetic native Docker evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: skill-effectiveness-native-preflight
+          name: skill-effectiveness-native-docker-smoke
           path: ${{ runner.temp }}/evidence/
           if-no-files-found: error
           retention-days: 14
