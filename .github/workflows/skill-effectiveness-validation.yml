@@ -163,7 +163,7 @@ jobs:
             assert.deepEqual(container.mounts, []);
           }
           NODE
-      - name: Generate unchanged synthetic native mock task and offline executable grader
+      - name: Generate synthetic native mock turn and offline executable grader
         run: |
           set -euo pipefail
           PROBE_ROOT="$RUNNER_TEMP/docker-smoke" node --input-type=module <<'NODE'
@@ -218,7 +218,15 @@ jobs:
           const checkerHash = createHash("sha256").update(checker).digest("hex");
           write("grading/check.mjs", checker);
           write("fixtures/public/deliverable/result.txt", "Synthetic native Docker artifact.\n");
-          write("fixtures/public/.mock-executor/smoke.json", JSON.stringify({ output: "Synthetic mock output; no model call." }));
+          const mockOutput = "Synthetic mock output; no model call.";
+          write("fixtures/public/.mock-executor/smoke.json", JSON.stringify({
+            output: mockOutput,
+            events: [
+              { type: "turn_start", data: { turnId: "smoke-turn" } },
+              { type: "assistant_message", data: { content: mockOutput } },
+              { type: "turn_end", data: { turnId: "smoke-turn" } },
+            ],
+          }));
           write("skills/demo/SKILL.md", "---\nname: demo\ndescription: Synthetic native Docker fixture.\n---\nSynthetic fixture only.\n");
           const spec = {
             name: "native-docker-smoke", description: "Synthetic model-free native Docker integration check",
@@ -272,7 +280,8 @@ jobs:
           process.on("SIGTERM", () => { stopping = true; events.kill("SIGTERM"); });
           events.on("error", error => { console.error(error); process.exitCode = 1; });
           events.on("exit", (code, signal) => {
-            if (!stopping || (code !== 0 && signal !== "SIGTERM")) {
+            const expectedStop = stopping && (code === 0 || code === 143 || signal === "SIGTERM");
+            if (!expectedStop) {
               console.error(`Unexpected Docker event observer exit: ${code}/${signal}`);
               process.exitCode = 1;
             }
@@ -323,9 +332,8 @@ jobs:
             const records = files(process.env.OUTPUT).filter(file => path.basename(file) === "results.jsonl")
               .flatMap(file => readFileSync(file, "utf8").split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line)))
               .filter(record => record.type === "trial-result");
-            assert.equal(records.length, 2, "Expected exactly two native trial results");
-            assert.deepEqual(records.map(record => record.variant).sort(), ["a-baseline", "b-treatment"]);
-            for (const record of records) {
+            summary.recordCount = records.length;
+            summary.trials = records.slice(0, 2).map(record => {
               const observations = [];
               const visit = value => {
                 if (typeof value === "string" && value.startsWith('{"probe":"native-docker-smoke"')) observations.push(JSON.parse(value));
@@ -333,14 +341,24 @@ jobs:
                 else if (value && typeof value === "object") Object.values(value).forEach(visit);
               };
               visit(record.gradeResult);
-              const trial = { variant: record.variant, passed: record.gradeResult?.passed,
-                status: record.gradeResult?.status, observations };
-              summary.trials.push(trial);
-              assert.equal(trial.passed, true, "Native executable grading failed");
+              return { runId: record.runId, itemId: record.itemId,
+                trajectoryId: record.trajectory?.id ?? null,
+                variant: record.variant, trialStatus: record.status,
+                passed: record.gradeResult?.passed, status: record.gradeResult?.status,
+                observations };
+            });
+            assert.equal(records.length, 2, "Expected exactly two native trial results");
+            assert.deepEqual(records.map(record => record.variant).sort(), ["a-baseline", "b-treatment"]);
+            for (const [index, trial] of summary.trials.entries()) {
+              for (const key of ["runId", "itemId", "trajectoryId"]) {
+                assert.ok(typeof trial[key] === "string" && trial[key].length > 0, `Missing native ${key}`);
+              }
+              assert.notEqual(trial.trialStatus, "error");
+              assert.equal(trial.passed, true, `Native grading failed for ${trial.variant}`);
               assert.notEqual(trial.status, "error");
-              assert.equal(hasGraderError(record.gradeResult), false, "Native grader tree contains an error");
-              assert.ok(observations.length > 0, "Native grader did not retain runtime facts");
-              for (const facts of observations) {
+              assert.equal(hasGraderError(records[index].gradeResult), false, "Native grader tree contains an error");
+              assert.ok(trial.observations.length > 0, "Native grader did not retain runtime facts");
+              for (const facts of trial.observations) {
                 assert.notEqual(facts.uid, 0);
                 assert.deepEqual(facts.externalInterfaces, []);
                 assert.deepEqual(facts.authKeysPresent, []);
@@ -351,7 +369,7 @@ jobs:
             }
             const containers = readFileSync(path.join(process.env.EVIDENCE, "native-container-facts.jsonl"), "utf8")
               .trim().split("\n").map(line => JSON.parse(line));
-            for (const role of ["vally-task", "vally-grade"]) {
+            for (const role of ["task", "grade"]) {
               assert.ok(containers.some(item => item.service === role), `Missing actual ${role} container evidence`);
             }
             for (const container of containers) {
