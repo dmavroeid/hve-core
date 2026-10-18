@@ -86,10 +86,11 @@ jobs:
           const exact = (obj, keys) => ensure(obj && !Array.isArray(obj) && Object.keys(obj).sort().join() === keys.sort().join(), "unsafe-summary");
           const phases = ["not-started", "observer", "native", "finish", "validated", "unavailable"];
           const gates = ["observer-start", "readiness", "attempt-record", "native-command", "native-exit-record", "observer-stop", "observer-wait", "case-input",
-            "native-output", "observation", "topology", "native-result", "program-result", "verdict", "native-cleanup", "validated-proof",
+            "native-output", "native-stdout-parse", "native-stderr-read", "observation", "topology", "native-result", "program-result", "verdict", "native-cleanup", "validated-proof",
             "safe-projection", "docker-events", "container-facts", "request-capture", "unavailable"];
           const reasons = ["check-failed", "command-nonzero", "output-limit", "io-failed", "missing-proof", "invalid-proof", "interrupted-or-unavailable", "unavailable"];
-          const cleanupReasons = ["not-started", "verified-absent", "inspection-failed", "ownership-unavailable", "forced-removal", "residual-resource", "cleanup-operation-failed", "unavailable"];
+          const cleanupReasons = ["not-started", "verified-absent", "inspection-failed", "ownership-unavailable", "forced-removal", "residual-resource", "cleanup-operation-failed", "unavailable",
+            "activity-proof-unavailable", "observation-unavailable", "container-proof-unavailable", "volume-proof-unavailable", "correlation-unavailable"];
           let gate = "unavailable";
           const at = value => { ensure(gates.includes(value), "invalid-gate"); gate = value; };
           const freshDiagnostic = name => ({ name, phase: "not-started", nativeCliExit: null, failure: null, observerFailure: null, cleanup: { status: "not-started", reason: "not-started" } });
@@ -421,8 +422,9 @@ jobs:
               ensure(lines.length === 1, "invalid-native-result");
               at("observation"); const observed = read(path.join(dir, "observation.json"));
               at("native-exit-record"); const exit = bounded(path.join(dir, "exit")).toString(); ensure(/^[01]\n$/.test(exit), "invalid-exit");
-              const facts = project(JSON.parse(lines[0]), config, Number(exit),
-                bounded(path.join(dir, "stderr")).toString("utf8"), observed);
+              at("native-stdout-parse"); const record = JSON.parse(lines[0]);
+              at("native-stderr-read"); const stderr = bounded(path.join(dir, "stderr")).toString("utf8");
+              const facts = project(record, config, Number(exit), stderr, observed);
               at("native-cleanup"); cleanupComplete(observed, facts);
               facts.nativeCleanupComplete = true;
               const { owner, volumes, ...safe } = facts;
@@ -510,18 +512,22 @@ jobs:
               diagnostics.cases.push(item); item.cleanup = { status: "failed-or-unavailable", reason: "ownership-unavailable" };
               attempt("case-cleanup", () => {
                 if (item.phase === "not-started") { item.phase = "unavailable";
+                  item.cleanup.reason = "activity-proof-unavailable";
                   ensure(item.nativeCliExit === null && !item.failure && !item.observerFailure &&
                     !["attempted", "exit", "observation.json", "stdout", "stderr", "validated.json", "observer.out", "observer.err"].some(f => existsSync(path.join(dir, f))), "contradictory-activity");
                   item.phase = "not-started"; item.cleanup = { status: "not-started", reason: "not-started" }; return;
                 }
-                const observed = read(path.join(dir, "observation.json"));
+                item.cleanup.reason = "observation-unavailable"; const observed = read(path.join(dir, "observation.json"));
                 item.observerFailure = cleanFailure(observed.observerFailure); let forced = false;
+                item.cleanup.reason = "container-proof-unavailable";
                 for (const fact of observed.facts) {
                   knownIds.add(fact.id);
                   if (live.has(fact.id)) { validateFact(fact, dir); ensure(inspect(fact.id).image === process.env.IMAGE, "foreign-container"); item.cleanup.reason = "cleanup-operation-failed"; docker(["rm", "--force", fact.id]); failures.add("case-cleanup"); forced = true; item.cleanup.reason = "forced-removal"; }
                 }
+                if (!forced) item.cleanup.reason = "ownership-unavailable";
                 const owner = observed.facts.find(f => validateFact(f, dir) === "check")?.labels["com.microsoft.vally.owner"];
                 ensure(owner, "missing-owner");
+                if (!forced) item.cleanup.reason = "volume-proof-unavailable";
                 const known = new Set(observed.facts.flatMap(f => f.mounts.filter(m => m.Type === "volume").map(m => m.Name)));
                 for (const name of docker(["volume", "ls", "-q", "--filter", `label=com.microsoft.vally.owner=${owner}`]).split("\n").filter(Boolean)) {
                   ensure(known.has(name), "unobserved-volume");
@@ -529,6 +535,7 @@ jobs:
                   ensure(volume["com.microsoft.vally.owner"] === owner && volume["com.microsoft.vally.trial"] === `grade-${read(path.join(dir, "case.json")).id}`, "foreign-volume");
                   item.cleanup.reason = "cleanup-operation-failed"; docker(["volume", "rm", name]); failures.add("case-cleanup"); forced = true; item.cleanup.reason = "forced-removal";
                 }
+                if (!forced) item.cleanup.reason = "correlation-unavailable";
                 const topology = correlate(observed.facts, observed.request, read(path.join(dir, "case.json")), dir);
                 if (!forced) item.cleanup.reason = "inspection-failed";
                 try { cleanupComplete(observed, topology); } catch (error) { if (!forced && error.message === "cleanup-failed") item.cleanup.reason = "residual-resource"; throw error; }
