@@ -40,70 +40,19 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
-          ulimit -f 1024
           root="$RUNNER_TEMP/protected-input"
-          mkdir "$root" "$root/raw" "$root/safe" "$root/context" "$root/home"
-          exec 2> "$root/raw/setup.err"
-          node --input-type=module > "$root/raw/guard.out" 2> "$root/raw/guard.err" <<'NODE'
-          import assert from "node:assert/strict";
-          import { createHash } from "node:crypto";
-          import { execFileSync } from "node:child_process";
-          import { readFileSync, writeFileSync, copyFileSync, readdirSync } from "node:fs";
-          import path from "node:path";
-          const root = path.join(process.env.RUNNER_TEMP, "protected-input");
-          const hash = bytes => createHash("sha256").update(bytes).digest("hex");
-          const files = execFileSync("git", ["ls-tree", "-r", "--name-only", "HEAD", "--", "."], { encoding: "utf8" }).trim().split("\n").sort();
-          assert.equal(files.length, 23);
-          const inventory = files.map(file => `${file} ${hash(readFileSync(file, "utf8").replace(/\r\n/g, "\n"))}`).join("\n") + "\n";
-          assert.equal(hash(inventory), "c34a92e94238261370729e6f25d37fcbff97a579df106f7927d9830fe3f61da9");
-          const expected = {
-            "package.json": "58f696269135e8dc8ab5ad1fedc8cad2f917095c4a8b021708c4a4775e618769",
-            "package-lock.json": "b9c750fbb43bcf37350da9f62722d737380f0e271a78210be6ad64cd63862da2",
-            "vally-0.19.Dockerfile": "e3b0007c8d090c0013cfa7b26e3c5d600d585e67309a35433e5bbe26858153e8",
-            "protected-input-check.mjs": "34658b61a46287ef1d01f4fdf00e1db371b0bb63fb61af96465c7577925ccc79",
-            "protected-input-probe.eval.yaml": "8a9bd08040be97f466db545be7d418a5f03b06c7b69b2b9068c337911b51999f",
-          };
-          for (const [name, digest] of Object.entries(expected)) {
-            const source = name.startsWith("package") ? name : path.join(process.env.GITHUB_WORKSPACE, ".github/validation/skill-effectiveness", name);
-            assert.equal(hash(readFileSync(source)), digest);
-            const target = name.startsWith("protected-input-") ? path.join(root, name)
-              : path.join(root, "context", name === "vally-0.19.Dockerfile" ? "Dockerfile" : name);
-            copyFileSync(source, target);
+          mkdir "$root" "$root/raw" "$root/safe" "$root/context" "$root/home" 2>/dev/null || {
+            printf '%s\n' '::error::Protected-input initialization failed'; exit 1;
           }
-          assert.deepEqual(readdirSync(path.join(root, "context")).sort(), ["Dockerfile", "package-lock.json", "package.json"]);
-          const context = ["Dockerfile", "package.json", "package-lock.json"].map(name =>
-            `${hash(readFileSync(path.join(root, "context", name)))}  ${name}\n`).join("");
-          assert.equal(hash(context), "ebb1bcbf0e99ed60f4aaf93a2ffaaa49461a92142ea02aa16f86339ae54d941b");
-          const workflow = path.join(process.env.GITHUB_WORKSPACE, ".github/workflows/skill-effectiveness-validation.yml");
-          writeFileSync(path.join(root, "safe", "identities.json"), JSON.stringify({
-            snapshot: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
-            workflow: hash(readFileSync(workflow)), inventory: hash(inventory), context: hash(context), inputs: expected,
-            pinnedVersions: { core: "0.19.0", cli: "0.19.0", sdk: "1.0.15", runtime: "1.0.89", sharp: "0.35.5", yaml: "2.9.1" },
-          }));
-          NODE
-          test "$(find "$root/context" -mindepth 1 -maxdepth 1 -type f | wc -l)" -eq 3
-          test ! -e node_modules
-          timeout --signal=TERM --kill-after=5s 45s npm ci --ignore-scripts --include=dev \
-            --registry=https://registry.npmjs.org/ --fetch-retries=0 --fetch-timeout=30000 --no-audit --no-fund \
-            > "$root/raw/restore.out" 2> "$root/raw/restore.err"
-      - name: Prepare and execute exactly three native grading cases
-        timeout-minutes: 20
-        run: |
-          set -euo pipefail
-          umask 077
-          ulimit -f 1024
-          root="$RUNNER_TEMP/protected-input"
-          exec 2> "$root/raw/stage.err"
           export SKILL="$PWD" PROBE_ROOT="$root"
-          cli="$PWD/node_modules/.bin/vally"
-          cat > "$root/probe.mjs" <<'NODE'
+          cat > "$root/probe.mjs" 2>/dev/null <<'NODE'
+          import assert from "node:assert/strict";
           import { createHash, randomUUID } from "node:crypto";
-          import { execFileSync } from "node:child_process";
-          import { readFileSync, writeFileSync, mkdirSync, readdirSync, lstatSync, realpathSync, existsSync, rmSync } from "node:fs";
+          import { execFile, execFileSync } from "node:child_process";
+          import { readFileSync, writeFileSync, copyFileSync, mkdirSync, readdirSync, lstatSync, realpathSync, existsSync, rmSync } from "node:fs";
           import http from "node:http";
           import path from "node:path";
           import { createRequire } from "node:module";
-          const { parse } = createRequire(path.join(process.env.SKILL, "package.json"))("yaml");
           const root = process.env.PROBE_ROOT;
           const names = ["positive", "wrong-digest", "modified-checker"];
           const scope = "Three synthetic native grading mechanics cases; not task/arm or full readonly acceptance";
@@ -123,6 +72,53 @@ jobs:
             const text = JSON.stringify(value); ensure(Buffer.byteLength(text) <= limit, "projection-limit");
             writeFileSync(file, text, { mode: 0o600 });
           };
+          const expected = {
+            "package.json": "58f696269135e8dc8ab5ad1fedc8cad2f917095c4a8b021708c4a4775e618769",
+            "package-lock.json": "b9c750fbb43bcf37350da9f62722d737380f0e271a78210be6ad64cd63862da2",
+            "vally-0.19.Dockerfile": "e3b0007c8d090c0013cfa7b26e3c5d600d585e67309a35433e5bbe26858153e8",
+            "protected-input-check.mjs": "34658b61a46287ef1d01f4fdf00e1db371b0bb63fb61af96465c7577925ccc79",
+            "protected-input-probe.eval.yaml": "8a9bd08040be97f466db545be7d418a5f03b06c7b69b2b9068c337911b51999f",
+          };
+          const pins = { core: "0.19.0", cli: "0.19.0", sdk: "1.0.15", runtime: "1.0.89", sharp: "0.35.5", yaml: "2.9.1" };
+          export function guard() {
+            const files = execFileSync("git", ["ls-tree", "-r", "--name-only", "HEAD", "--", "."], { encoding: "utf8", timeout: 2000, maxBuffer: 65536 }).trim().split("\n").sort();
+            assert.equal(files.length, 23);
+            const inventory = files.map(file => `${file} ${hash(readFileSync(file, "utf8").replace(/\r\n/g, "\n"))}`).join("\n") + "\n";
+            assert.equal(hash(inventory), "c34a92e94238261370729e6f25d37fcbff97a579df106f7927d9830fe3f61da9");
+            ensure(!existsSync("node_modules"), "unexpected-package-tree");
+            for (const [name, digest] of Object.entries(expected)) {
+              const source = name.startsWith("package") ? name : path.join(process.env.GITHUB_WORKSPACE, ".github/validation/skill-effectiveness", name);
+              assert.equal(hash(readFileSync(source)), digest);
+              copyFileSync(source, name.startsWith("protected-input-") ? path.join(root, name)
+                : path.join(root, "context", name === "vally-0.19.Dockerfile" ? "Dockerfile" : name));
+            }
+            assert.deepEqual(readdirSync(path.join(root, "context")).sort(), ["Dockerfile", "package-lock.json", "package.json"]);
+            const context = ["Dockerfile", "package.json", "package-lock.json"].map(name =>
+              `${hash(readFileSync(path.join(root, "context", name)))}  ${name}\n`).join("");
+            assert.equal(hash(context), "ebb1bcbf0e99ed60f4aaf93a2ffaaa49461a92142ea02aa16f86339ae54d941b");
+            save(path.join(root, "safe/identities.json"), {
+              snapshot: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8", timeout: 2000, maxBuffer: 65536 }).trim(),
+              workflow: hash(readFileSync(path.join(process.env.GITHUB_WORKSPACE, ".github/workflows/skill-effectiveness-validation.yml"))),
+              inventory: hash(inventory), context: hash(context), inputs: expected, pinnedVersions: pins,
+            });
+          }
+          export async function setup() {
+            const file = path.join(root, "safe/summary.json"), summary = emptySummary();
+            save(file, summary, 16384);
+            for (const stage of ["guard", "restore"]) {
+              summary.setup = { stage, exit: null, reason: "unavailable" }; save(file, summary, 16384);
+              const command = stage === "guard" ? [process.execPath, process.argv[1], "guard"] : ["npm", "ci", "--ignore-scripts", "--include=dev",
+                "--registry=https://registry.npmjs.org/", "--fetch-retries=0", "--fetch-timeout=30000", "--no-audit", "--no-fund"];
+              const { error, stdout, stderr } = await new Promise(resolve => execFile("timeout",
+                ["--signal=TERM", "--kill-after=5s", stage === "guard" ? "3s" : "45s", ...command],
+                { encoding: "buffer", maxBuffer: 1048576 }, (error, stdout, stderr) => resolve({ error, stdout, stderr })));
+              for (const [name, bytes] of [["out", stdout], ["err", stderr]]) writeFileSync(path.join(root, "raw", `${stage}.${name}`), bytes.subarray(0, 1048576));
+              const exit = error ? Number.isInteger(error.code) && error.code >= 0 && error.code <= 255 ? error.code : null : 0;
+              const reason = !error ? "passed" : error.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" ? "output-limit" : exit === 124 ? "timeout" : "command-failed";
+              summary.setup = { stage, exit, reason }; summary.status = error ? "failed-or-unavailable" : "incomplete";
+              save(file, summary, 16384); ensure(!error, "setup-failed");
+            }
+          }
           const docker = args => execFileSync("docker", args, {
             env: { PATH: process.env.PATH, HOME: path.join(root, "home") }, encoding: "utf8", timeout: 5000, maxBuffer: 65536,
           }).trim();
@@ -142,6 +138,9 @@ jobs:
               checker: name === "modified-checker" ? Buffer.concat([checker, Buffer.from("\n// Synthetic integrity-negative mutation.\n")]) : checker };
           }
           export function prepare() {
+            const summary = safeSummary(read(path.join(root, "safe/summary.json")));
+            ensure(summary.setup.reason === "passed" && summary.setup.stage === "restore", "setup-incomplete");
+            const { parse } = createRequire(path.join(process.env.SKILL, "package.json"))("yaml");
             ensure(bounded(path.join(root, "raw/roles-ok")).toString() === "passed\n", "missing-role-checks");
             const image = JSON.parse(docker(["image", "inspect", "--format", '{"id":{{json .Id}},"os":{{json .Os}},"architecture":{{json .Architecture}},"user":{{json .Config.User}}}', process.env.IMAGE]));
             ensure(image.id === process.env.IMAGE && image.os === "linux" && image.architecture === "amd64" && image.user === "1000:1000", "invalid-image");
@@ -161,7 +160,7 @@ jobs:
               save(path.join(dir, "case.json"), { name, id, args, inputHash: hash(bounded(path.join(dir, "input.json"))),
                 evalHash: hash(bytes.yaml), checkerHash: hash(bytes.checker) });
             }
-            save(path.join(root, "safe/summary.json"), { ...emptySummary(), compatibilityChecks: true }, 16384);
+            save(path.join(root, "safe/summary.json"), { ...summary, image: process.env.IMAGE, compatibilityChecks: true }, 16384);
           }
           const inspect = id => {
             ensure(/^[a-f0-9]{64}$/.test(id), "invalid-container");
@@ -390,11 +389,21 @@ jobs:
             save(summaryFile, summary, 16384);
           }
           const emptySummary = () => ({ scope, image: process.env.IMAGE ?? null, status: "incomplete", compatibilityChecks: false,
+            setup: { stage: "initialization", exit: null, reason: "unavailable" },
             cases: names.map(name => ({ name, status: "not-run" })), cleanup: "pending", sourceUnchanged: null, failures: [] });
           export function safeSummary(value) {
             const exact = (obj, keys) => ensure(obj && !Array.isArray(obj) && Object.keys(obj).sort().join() === keys.sort().join(), "unsafe-summary");
-            exact(value, ["scope", "image", "status", "cases", "cleanup", "sourceUnchanged", "failures", "compatibilityChecks"]);
-            ensure(value.scope === scope && value.image === (process.env.IMAGE ?? null) &&
+            exact(value, ["scope", "image", "status", "cases", "cleanup", "sourceUnchanged", "failures", "compatibilityChecks", "setup"]);
+            exact(value.setup, ["stage", "exit", "reason"]);
+            ensure(["initialization", "guard", "restore"].includes(value.setup.stage) &&
+              ["passed", "unavailable", "output-limit", "timeout", "command-failed"].includes(value.setup.reason) &&
+              (value.setup.exit === null || Number.isInteger(value.setup.exit) && value.setup.exit >= 0 && value.setup.exit <= 255) &&
+              (value.setup.reason === "passed" ? value.setup.exit === 0 : value.setup.reason === "timeout" ? value.setup.exit === 124 :
+                value.setup.reason === "command-failed" ? value.setup.exit !== 0 : value.setup.exit === null), "unsafe-setup");
+            ensure(value.setup.stage === "restore" && value.setup.reason === "passed" ||
+              value.status !== "passed" && !value.compatibilityChecks && value.cases.every(c => c.status === "not-run"), "unsafe-setup");
+            ensure(value.scope === scope && (value.image === (process.env.IMAGE ?? null) ||
+              value.image === null && !value.compatibilityChecks && value.cases.every(c => c.status === "not-run")) &&
               ["incomplete", "passed", "failed-or-unavailable"].includes(value.status) &&
               ["pending", "passed", "failed-or-unavailable"].includes(value.cleanup) &&
               typeof value.compatibilityChecks === "boolean" &&
@@ -423,7 +432,7 @@ jobs:
               ensure(Buffer.byteLength(JSON.stringify(item)) <= 4096, "projection-limit");
               return Object.fromEntries(Object.keys(item).map(key => [key, item[key]]));
             });
-            return { scope, image: value.image, status: value.status, cases, cleanup: value.cleanup, compatibilityChecks: value.compatibilityChecks,
+            return { scope, image: value.image, status: value.status, cases, cleanup: value.cleanup, compatibilityChecks: value.compatibilityChecks, setup: { ...value.setup },
               sourceUnchanged: value.sourceUnchanged, failures: [...value.failures] };
           }
           export function cleanup() {
@@ -465,6 +474,12 @@ jobs:
             }
             const preserved = attempt("source-preservation", () => {
               const identity = read(path.join(root, "safe/identities.json"));
+              ensure(Object.keys(identity).sort().join() === "context,inputs,inventory,pinnedVersions,snapshot,workflow" &&
+                JSON.stringify(identity.inputs) === JSON.stringify(expected) && JSON.stringify(identity.pinnedVersions) === JSON.stringify(pins) &&
+                /^[a-f0-9]{40}$/.test(identity.snapshot) && identity.workflow ===
+                  hash(bounded(path.join(process.env.GITHUB_WORKSPACE, ".github/workflows/skill-effectiveness-validation.yml"))) &&
+                identity.inventory === "c34a92e94238261370729e6f25d37fcbff97a579df106f7927d9830fe3f61da9" &&
+                identity.context === "ebb1bcbf0e99ed60f4aaf93a2ffaaa49461a92142ea02aa16f86339ae54d941b", "unsafe-identity");
               const git = args => execFileSync("git", args, { cwd: process.env.SKILL, encoding: "utf8", timeout: 5000, maxBuffer: 65536 }).trim();
               ensure(git(["rev-parse", "HEAD"]) === identity.snapshot, "source-changed");
               const files = git(["ls-tree", "-r", "--name-only", "HEAD", "--", "."]).split("\n").sort();
@@ -478,6 +493,11 @@ jobs:
             if (process.env.IMAGE) attempt("image-cleanup", () => docker(["image", "rm", process.env.IMAGE]));
             const summaryFile = path.join(root, "safe/summary.json");
             const summary = attempt("projection", () => safeSummary(read(summaryFile))) ?? emptySummary();
+            if (failures.has("projection")) throw new Error("unsafe-summary");
+            if (!preserved && existsSync(path.join(root, "safe/identities.json"))) attempt("projection", () => {
+              const file = path.join(root, "safe/identities.json"); ensure(realpathSync(file) === file, "unsafe-identity"); rmSync(file);
+            });
+            ensure(!failures.has("projection"), "unsafe-identity");
             for (const [i, name] of names.entries()) {
               if (summary.cases[i].status === "not-run" && existsSync(path.join(root, "cases", name, "attempted"))) {
                 summary.cases[i] = { name, status: "failed-or-unavailable", reason: "case-contract-failed" };
@@ -491,7 +511,8 @@ jobs:
             }
             summary.failures = [...failures]; summary.sourceUnchanged = preserved === true;
             summary.cleanup = failures.size ? "failed-or-unavailable" : "passed";
-            summary.status = !failures.size && summary.compatibilityChecks && summary.cases.every(c => c.status === "passed") ? "passed" : "failed-or-unavailable";
+            summary.status = !failures.size && summary.setup.stage === "restore" && summary.setup.reason === "passed" &&
+              summary.compatibilityChecks && summary.cases.every(c => c.status === "passed") ? "passed" : "failed-or-unavailable";
             save(summaryFile, summary, 16384);
             ensure(readdirSync(path.join(root, "safe")).every(n => ["summary.json", "identities.json"].includes(n)) &&
               readdirSync(path.join(root, "safe")).reduce((n, file) => n + bounded(path.join(root, "safe", file)).length, 0) <= 16384, "projection-limit");
@@ -500,13 +521,26 @@ jobs:
           }
           const [mode, name] = process.argv.slice(2);
           try {
-            if (mode === "prepare") prepare();
+            if (mode === "guard") guard();
+            else if (mode === "setup") await setup();
+            else if (mode === "prepare") prepare();
             else if (mode === "observe") { ensure(names.includes(name), "invalid-case"); await observe(path.join(root, "cases", name)); }
             else if (mode === "finish") { ensure(names.includes(name), "invalid-case"); finish(name); }
             else if (mode === "cleanup") cleanup();
             else throw new Error("invalid-mode");
           } catch { console.error("protected-input-stage-failed"); process.exitCode = 1; }
           NODE
+          node "$root/probe.mjs" setup > /dev/null 2>&1
+      - name: Prepare and execute exactly three native grading cases
+        timeout-minutes: 20
+        run: |
+          set -euo pipefail
+          umask 077
+          ulimit -f 1024
+          root="$RUNNER_TEMP/protected-input"
+          exec 2> "$root/raw/stage.err"
+          export SKILL="$PWD" PROBE_ROOT="$root"
+          cli="$PWD/node_modules/.bin/vally"
           env -i PATH="$PATH" HOME="$root/home" docker context inspect --format '{{json .Endpoints.docker.Host}}' \
             > "$root/raw/context"
           grep -x '"unix:///var/run/docker.sock"' "$root/raw/context" > /dev/null
