@@ -1,0 +1,72 @@
+# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# SPDX-License-Identifier: MIT
+name: protected-input-probe
+description: Synthetic standalone grading mechanics only; no experiment or containment acceptance.
+version: "1.0.0"
+type: capability
+scoring: {}
+stimuli:
+  - name: protected-input
+    prompt: Synthetic grading input only; never send to a model.
+    graders:
+      - type: program
+        name: protected-input-probe
+        config:
+          program: node
+          timeout: 30s
+          args:
+            - --input-type=module
+            - -e
+            - |
+              import { createHash } from "node:crypto";
+              import { lstatSync, readFileSync, realpathSync } from "node:fs";
+              import { posix as path } from "node:path";
+              import { pathToFileURL } from "node:url";
+              const failures = new Set([
+                "invalid-trusted-digest", "invalid-input-root", "overlapping-input-roots",
+                "invalid-input-file", "trusted-integrity-mismatch",
+              ]);
+              try {
+                const expected = process.argv[1];
+                if (process.argv.length !== 2 || !/^[a-f0-9]{64}$/.test(expected ?? "")) {
+                  throw new Error("invalid-trusted-digest");
+                }
+                const roots = ["EVALUATE_ASSETS", "EVALUATE_ARTIFACT_DIR", "EVALUATE_WORKSPACE"]
+                  .map(key => process.env[key]);
+                for (const root of roots) {
+                  if (typeof root !== "string" || !path.isAbsolute(root) ||
+                      path.normalize(root) !== root || realpathSync(root) !== root ||
+                      !lstatSync(root).isDirectory()) {
+                    throw new Error("invalid-input-root");
+                  }
+                }
+                const within = (root, file) => {
+                  const relative = path.relative(root, file);
+                  return relative === "" || (!relative.startsWith("../") &&
+                    relative !== ".." && !path.isAbsolute(relative));
+                };
+                for (let i = 0; i < roots.length; i++) {
+                  for (let j = i + 1; j < roots.length; j++) {
+                    if (within(roots[i], roots[j]) || within(roots[j], roots[i])) {
+                      throw new Error("overlapping-input-roots");
+                    }
+                  }
+                }
+                const checker = path.join(roots[0], "protected-input-check.mjs");
+                const submission = path.join(roots[1], "result.txt");
+                for (const file of [checker, submission]) {
+                  const stat = lstatSync(file);
+                  if (!stat.isFile() || stat.isSymbolicLink() ||
+                      stat.size > 65536 || realpathSync(file) !== file) {
+                    throw new Error("invalid-input-file");
+                  }
+                }
+                const actual = createHash("sha256").update(readFileSync(checker)).digest("hex");
+                if (actual !== expected) throw new Error("trusted-integrity-mismatch");
+                await import(pathToFileURL(checker).href);
+              } catch (error) {
+                const reason = failures.has(error.message) ? error.message : "prelude-operation-failed";
+                console.error(`protected-input-failure:${reason}`);
+                process.exitCode = 1;
+              }
+            - "34658b61a46287ef1d01f4fdf00e1db371b0bb63fb61af96465c7577925ccc79"

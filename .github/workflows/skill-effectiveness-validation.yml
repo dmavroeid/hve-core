@@ -1,24 +1,19 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
-name: Temporary skill-effectiveness public appliance smoke test
-
+name: Temporary protected-input native grading probe
 on:
   push:
-    branches:
-      - automation/skill-effectiveness-validation-20261017
-
+    branches: [automation/skill-effectiveness-validation-20261017]
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
-
 permissions:
   contents: read
-
 jobs:
   validate:
     if: github.repository == 'dmavroeid/hve-core' && github.ref == 'refs/heads/automation/skill-effectiveness-validation-20261017'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     permissions:
       contents: read
     defaults:
@@ -28,677 +23,594 @@ jobs:
     env:
       DO_NOT_TRACK: '1'
       VALLY_TELEMETRY_OPTOUT: '1'
-      BASE: node:24.14.0-bookworm-slim@sha256:4bd6219054c8bebcd26a66bfd8ca0bd6e1024b4b97474c59bb7ee3bbcbef4fe8
     steps:
-      - name: Checkout exact snapshot without persisting credentials
+      - name: Checkout exact snapshot
+        timeout-minutes: 1
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
-          persist-credentials: false
           ref: ${{ github.sha }}
-      - name: Set up Node 24
+          persist-credentials: false
+      - name: Set up exact Node
+        timeout-minutes: 1
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: '24.14.0'
-      - name: Verify current package snapshot and prepare allowlisted build context
-        id: prepare
+      - name: Guard source and restore frozen host package
+        timeout-minutes: 1
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/evidence" "$RUNNER_TEMP/build-context" \
-            "$RUNNER_TEMP/docker-smoke/home" "$RUNNER_TEMP/docker-smoke/tmp"
-          {
-            git rev-parse HEAD
-            git rev-parse HEAD:.github/skills/hve-core/skill-effectiveness
-            node --version
-            npm --version
-            uname -a
-          } > "$RUNNER_TEMP/evidence/environment.txt"
-          node --input-type=module <<'NODE'
+          umask 077
+          ulimit -f 1024
+          root="$RUNNER_TEMP/protected-input"
+          mkdir "$root" "$root/raw" "$root/safe" "$root/context" "$root/home"
+          exec 2> "$root/raw/setup.err"
+          node --input-type=module > "$root/raw/guard.out" 2> "$root/raw/guard.err" <<'NODE'
           import assert from "node:assert/strict";
           import { createHash } from "node:crypto";
           import { execFileSync } from "node:child_process";
-          import { readFileSync, writeFileSync } from "node:fs";
+          import { readFileSync, writeFileSync, copyFileSync, readdirSync } from "node:fs";
           import path from "node:path";
-          const files = execFileSync("git", ["ls-tree", "-r", "--name-only", "HEAD", "--", "."],
-            { encoding: "utf8" }).trim().split("\n").sort();
-          assert.equal(files.length, 23);
+          const root = path.join(process.env.RUNNER_TEMP, "protected-input");
           const hash = bytes => createHash("sha256").update(bytes).digest("hex");
+          const files = execFileSync("git", ["ls-tree", "-r", "--name-only", "HEAD", "--", "."], { encoding: "utf8" }).trim().split("\n").sort();
+          assert.equal(files.length, 23);
           const inventory = files.map(file => `${file} ${hash(readFileSync(file, "utf8").replace(/\r\n/g, "\n"))}`).join("\n") + "\n";
           assert.equal(hash(inventory), "c34a92e94238261370729e6f25d37fcbff97a579df106f7927d9830fe3f61da9");
-          assert.equal(hash(readFileSync("package.json")), "58f696269135e8dc8ab5ad1fedc8cad2f917095c4a8b021708c4a4775e618769");
-          assert.equal(hash(readFileSync("package-lock.json")), "b9c750fbb43bcf37350da9f62722d737380f0e271a78210be6ad64cd63862da2");
-          assert.equal(hash(readFileSync(path.join(process.env.GITHUB_WORKSPACE, ".github/validation/skill-effectiveness/vally-0.19.Dockerfile"))),
-            "e3b0007c8d090c0013cfa7b26e3c5d600d585e67309a35433e5bbe26858153e8");
-          writeFileSync(path.join(process.env.RUNNER_TEMP, "evidence", "normalized-source-inventory.txt"), inventory);
+          const expected = {
+            "package.json": "58f696269135e8dc8ab5ad1fedc8cad2f917095c4a8b021708c4a4775e618769",
+            "package-lock.json": "b9c750fbb43bcf37350da9f62722d737380f0e271a78210be6ad64cd63862da2",
+            "vally-0.19.Dockerfile": "e3b0007c8d090c0013cfa7b26e3c5d600d585e67309a35433e5bbe26858153e8",
+            "protected-input-check.mjs": "34658b61a46287ef1d01f4fdf00e1db371b0bb63fb61af96465c7577925ccc79",
+            "protected-input-probe.eval.yaml": "8a9bd08040be97f466db545be7d418a5f03b06c7b69b2b9068c337911b51999f",
+          };
+          for (const [name, digest] of Object.entries(expected)) {
+            const source = name.startsWith("package") ? name : path.join(process.env.GITHUB_WORKSPACE, ".github/validation/skill-effectiveness", name);
+            assert.equal(hash(readFileSync(source)), digest);
+            const target = name.startsWith("protected-input-") ? path.join(root, name)
+              : path.join(root, "context", name === "vally-0.19.Dockerfile" ? "Dockerfile" : name);
+            copyFileSync(source, target);
+          }
+          assert.deepEqual(readdirSync(path.join(root, "context")).sort(), ["Dockerfile", "package-lock.json", "package.json"]);
+          const context = ["Dockerfile", "package.json", "package-lock.json"].map(name =>
+            `${hash(readFileSync(path.join(root, "context", name)))}  ${name}\n`).join("");
+          assert.equal(hash(context), "ebb1bcbf0e99ed60f4aaf93a2ffaaa49461a92142ea02aa16f86339ae54d941b");
+          const workflow = path.join(process.env.GITHUB_WORKSPACE, ".github/workflows/skill-effectiveness-validation.yml");
+          writeFileSync(path.join(root, "safe", "identities.json"), JSON.stringify({
+            snapshot: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
+            workflow: hash(readFileSync(workflow)), inventory: hash(inventory), context: hash(context), inputs: expected,
+            pinnedVersions: { core: "0.19.0", cli: "0.19.0", sdk: "1.0.15", runtime: "1.0.89", sharp: "0.35.5", yaml: "2.9.1" },
+          }));
           NODE
-          git ls-files -z -- . | xargs -0 sha256sum > "$RUNNER_TEMP/evidence/source-sha256.txt"
+          test "$(find "$root/context" -mindepth 1 -maxdepth 1 -type f | wc -l)" -eq 3
           test ! -e node_modules
-          recipe="$GITHUB_WORKSPACE/.github/validation/skill-effectiveness/vally-0.19.Dockerfile"
-          cp "$recipe" "$RUNNER_TEMP/build-context/Dockerfile"
-          cp package.json package-lock.json "$RUNNER_TEMP/build-context/"
-          (
-            cd "$RUNNER_TEMP/build-context"
-            test "$(find . -mindepth 1 -maxdepth 1 | wc -l)" -eq 3
-            test "$(find . -mindepth 1 -maxdepth 1 -type f | wc -l)" -eq 3
-            sha256sum Dockerfile package.json package-lock.json
-          ) > "$RUNNER_TEMP/evidence/build-context-sha256.txt"
-          sha256sum "$recipe" "$GITHUB_WORKSPACE/.github/workflows/skill-effectiveness-validation.yml" \
-            > "$RUNNER_TEMP/evidence/validation-source-sha256.txt"
-      - name: Restore frozen host package without lifecycle scripts
+          timeout --signal=TERM --kill-after=5s 45s npm ci --ignore-scripts --include=dev \
+            --registry=https://registry.npmjs.org/ --fetch-retries=0 --fetch-timeout=30000 --no-audit --no-fund \
+            > "$root/raw/restore.out" 2> "$root/raw/restore.err"
+      - name: Prepare and execute exactly three native grading cases
+        timeout-minutes: 20
         run: |
           set -euo pipefail
-          npm ci --ignore-scripts --include=dev --registry=https://registry.npmjs.org/ --fetch-retries=0 --fetch-timeout=60000 --no-audit --no-fund \
-            2>&1 | tee "$RUNNER_TEMP/evidence/restore.txt"
-      - name: Build one clean public-package appliance without registry publication
-        id: image
-        run: |
-          set -euo pipefail
-          clean_home="$RUNNER_TEMP/docker-smoke/home"
-          env -i PATH="$PATH" HOME="$clean_home" docker version --format '{{json .}}' \
-            > "$RUNNER_TEMP/evidence/docker-version.json"
-          env -i PATH="$PATH" HOME="$clean_home" docker compose version \
-            > "$RUNNER_TEMP/evidence/compose-version.txt"
-          timeout --signal=TERM --kill-after=15s 600s env -i \
-            PATH="$PATH" HOME="$clean_home" DOCKER_BUILDKIT=1 \
-            docker build --platform linux/amd64 --pull --no-cache --progress plain \
-            --iidfile "$RUNNER_TEMP/evidence/image-id.txt" \
-            --tag "skill-effectiveness-probe:$GITHUB_SHA" "$RUNNER_TEMP/build-context" \
-            2>&1 | tee "$RUNNER_TEMP/evidence/image-build.txt"
-          image="$(cat "$RUNNER_TEMP/evidence/image-id.txt")"
+          umask 077
+          ulimit -f 1024
+          root="$RUNNER_TEMP/protected-input"
+          exec 2> "$root/raw/stage.err"
+          export SKILL="$PWD" PROBE_ROOT="$root"
+          cli="$PWD/node_modules/.bin/vally"
+          cat > "$root/probe.mjs" <<'NODE'
+          import { createHash, randomUUID } from "node:crypto";
+          import { execFileSync } from "node:child_process";
+          import { readFileSync, writeFileSync, mkdirSync, readdirSync, lstatSync, realpathSync, existsSync, rmSync } from "node:fs";
+          import http from "node:http";
+          import path from "node:path";
+          import { createRequire } from "node:module";
+          const { parse } = createRequire(path.join(process.env.SKILL, "package.json"))("yaml");
+          const root = process.env.PROBE_ROOT;
+          const names = ["positive", "wrong-digest", "modified-checker"];
+          const scope = "Three synthetic native grading mechanics cases; not task/arm or full readonly acceptance";
+          const uuid = value => typeof value === "string" && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(value);
+          const hex = value => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
+          const failureKinds = ["resource-inspection", "role-cleanup", "case-cleanup", "source-preservation", "image-cleanup", "projection", "scratch-cleanup"];
+          const keys = ["checkerAuthenticated", "checkerBodyEntered", "checkerWriteDenied", "submissionWriteDenied", "submissionMatches", "workspaceWritable"];
+          const digest = "34658b61a46287ef1d01f4fdf00e1db371b0bb63fb61af96465c7577925ccc79";
+          const hash = bytes => createHash("sha256").update(bytes).digest("hex");
+          const ensure = (ok, reason) => { if (!ok) throw new Error(reason); };
+          const bounded = (file, limit = 1048576) => {
+            ensure(realpathSync(file) === file && lstatSync(file).isFile() && lstatSync(file).size <= limit, "unsafe-file");
+            const bytes = readFileSync(file); ensure(bytes.length <= limit, "unsafe-file"); return bytes;
+          };
+          const read = file => JSON.parse(bounded(file).toString("utf8"));
+          const save = (file, value, limit = 1048576) => {
+            const text = JSON.stringify(value); ensure(Buffer.byteLength(text) <= limit, "projection-limit");
+            writeFileSync(file, text, { mode: 0o600 });
+          };
+          const docker = args => execFileSync("docker", args, {
+            env: { PATH: process.env.PATH, HOME: path.join(root, "home") }, encoding: "utf8", timeout: 5000, maxBuffer: 65536,
+          }).trim();
+          export function makeInput(id, workspace) {
+            const tokenUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, callCount: 0, byModel: {} };
+            return { status: "success", gradeResult: null, trajectory: {
+              id, stimulus: { name: "protected-input", prompt: "Synthetic grading input only; never send to a model." }, events: [], output: "", workDir: workspace,
+              metrics: { tokenUsage, toolCallCount: 0, toolCallBreakdown: {}, simulatedToolCallCount: 0, skillActivationCount: 0,
+                skillActivationBreakdown: {}, turnCount: 0, wallTimeMs: 0, errorCount: 0 },
+              metadata: { model: "synthetic-none", executor: "synthetic-none", sessionID: `synthetic-${id}`, skillsLoaded: [] },
+            } };
+          }
+          export function caseBytes(name, source, checker) {
+            ensure(names.includes(name) && hash(checker) === digest, "invalid-case");
+            ensure(source.split(digest).length === 2, "invalid-eval");
+            return { yaml: name === "wrong-digest" ? source.replace(digest, "0".repeat(64)) : source,
+              checker: name === "modified-checker" ? Buffer.concat([checker, Buffer.from("\n// Synthetic integrity-negative mutation.\n")]) : checker };
+          }
+          export function prepare() {
+            ensure(bounded(path.join(root, "raw/roles-ok")).toString() === "passed\n", "missing-role-checks");
+            const image = JSON.parse(docker(["image", "inspect", "--format", '{"id":{{json .Id}},"os":{{json .Os}},"architecture":{{json .Architecture}},"user":{{json .Config.User}}}', process.env.IMAGE]));
+            ensure(image.id === process.env.IMAGE && image.os === "linux" && image.architecture === "amd64" && image.user === "1000:1000", "invalid-image");
+            const source = bounded(path.join(root, "protected-input-probe.eval.yaml")).toString("utf8");
+            ensure(hash(source) === "8a9bd08040be97f466db545be7d418a5f03b06c7b69b2b9068c337911b51999f", "invalid-eval-source");
+            const checker = bounded(path.join(root, "protected-input-check.mjs"));
+            mkdirSync(path.join(root, "cases"));
+            for (const name of names) {
+              const dir = path.join(root, "cases", name); mkdirSync(dir);
+              for (const child of ["workspace", "assets", "artifact", "tmp", "home"]) mkdirSync(path.join(dir, child));
+              const bytes = caseBytes(name, source, checker), id = randomUUID();
+              writeFileSync(path.join(dir, "eval.yaml"), bytes.yaml); writeFileSync(path.join(dir, "assets/protected-input-check.mjs"), bytes.checker);
+              writeFileSync(path.join(dir, "artifact/result.txt"), "Synthetic protected-input artifact.\n");
+              save(path.join(dir, "input.json"), makeInput(id, path.join(dir, "workspace")));
+              const spec = parse(bytes.yaml), args = spec.stimuli[0].graders[0].config.args;
+              ensure(args.at(-1) === (name === "wrong-digest" ? "0".repeat(64) : digest), "invalid-eval");
+              save(path.join(dir, "case.json"), { name, id, args, inputHash: hash(bounded(path.join(dir, "input.json"))),
+                evalHash: hash(bytes.yaml), checkerHash: hash(bytes.checker) });
+            }
+            save(path.join(root, "safe/summary.json"), { ...emptySummary(), compatibilityChecks: true }, 16384);
+          }
+          const inspect = id => {
+            ensure(/^[a-f0-9]{64}$/.test(id), "invalid-container");
+            const format = '{"id":{{json .Id}},"image":{{json .Image}},"user":{{json .Config.User}},"mounts":{{json .Mounts}},"tmpfs":{{json .HostConfig.Tmpfs}},"network":{{json .HostConfig.NetworkMode}},"privileged":{{json .HostConfig.Privileged}},"labels":{{json .Config.Labels}}}';
+            const fact = JSON.parse(docker(["inspect", "--format", format, id]));
+            ensure(fact.id === id, "invalid-container"); return fact;
+          };
+          export function validateFact(fact, dir) {
+            ensure(hex(fact.id) && fact.image === process.env.IMAGE && fact.network === "none" && fact.privileged === false, "invalid-container");
+            const labels = fact.labels, service = labels["com.docker.compose.service"] ?? null;
+            ensure(Array.isArray(fact.mounts) && fact.mounts.length <= 8 &&
+              new Set(fact.mounts.map(m => m.Destination)).size === fact.mounts.length, "invalid-mounts");
+            for (const mount of fact.mounts) {
+              ensure(typeof mount.RW === "boolean" && ["bind", "volume"].includes(mount.Type), "invalid-mounts");
+              if (mount.Type === "bind") ensure(fact.canonical === true && typeof mount.Source === "string" &&
+                mount.Source.startsWith(`${dir}/`) && path.resolve(mount.Source) === mount.Source, "foreign-source");
+              if (mount.Type === "volume") ensure(/^vally-[a-z-]+-[a-f0-9]{32}$/.test(mount.Name), "invalid-volume");
+            }
+            if (service === null) {
+              ensure(labels["com.microsoft.vally.kind"] === "check" && labels["com.microsoft.vally.trial"] === "check-grade" &&
+                labels["com.microsoft.vally.role"] === "grade" &&
+                /^[a-f0-9]{32}$/.test(labels["com.microsoft.vally.owner"]) && fact.user === "1000:1000", "invalid-check");
+              ensure(fact.mounts.length === 2 && fact.mounts.every(m => m.Type === "bind" &&
+                m.Source.startsWith(`${dir}/tmp/vally-docker-check-`) &&
+                ((m.Destination === "/run/vally/control" && !m.RW) || (m.Destination === "/ipc-grade" && m.RW))), "invalid-check");
+            } else {
+              ensure(["grade-init", "grade"].includes(service) && /^vally-[a-f0-9]{8}$/.test(labels["com.docker.compose.project"]) &&
+                labels["com.docker.compose.project.working_dir"] === dir, "invalid-project");
+              const file = labels["com.docker.compose.project.config_files"];
+              ensure(typeof file === "string" && file.startsWith(`${dir}/tmp/`) && !file.includes(",") &&
+                path.basename(file) === "docker-compose.grade.generated.yml" && path.resolve(file) === file, "invalid-project");
+              ensure(fact.user === (service === "grade" ? "1000:1000" : "0:0"), "invalid-user");
+            }
+            const tmpfs = fact.tmpfs ?? {};
+            ensure(!Array.isArray(tmpfs) && typeof tmpfs === "object", "invalid-tmpfs");
+            ensure(service === "grade" ? Object.keys(tmpfs).length === 1 && typeof tmpfs["/tmp/vally-home"] === "string" &&
+              tmpfs["/tmp/vally-home"].split(",").sort().join() === ["rw", "mode=0700", "uid=1000", "gid=1000"].sort().join()
+              : Object.keys(tmpfs).length === 0, "invalid-tmpfs");
+            return service ?? "check";
+          }
+          export function correlate(facts, request, config, dir) {
+            ensure(facts.length === 3 && new Set(facts.map(f => f.id)).size === 3, "invalid-topology");
+            const byRole = new Map(facts.map(f => [validateFact(f, dir), f]));
+            ensure(byRole.size === 3 && byRole.has("check"), "invalid-topology");
+            const grade = byRole.get("grade"), init = byRole.get("grade-init");
+            ensure(grade && init && grade.labels["com.docker.compose.project"] === init.labels["com.docker.compose.project"], "invalid-topology");
+            ensure(request?.id === config.id && request.workDir === "/workspace", "invalid-request");
+            const refs = grade.mounts.filter(m => m.Type === "volume" && m.Destination.startsWith("/var/lib/vally-host/"));
+            ensure(refs.length === 2 && refs.every(m => !m.RW), "writable-reference");
+            ensure(grade.mounts.length === 5 && init.mounts.length === 6, "invalid-topology");
+            const workspace = grade.mounts.find(m => m.Destination === "/workspace");
+            ensure(workspace?.Type === "volume" && workspace.RW, "invalid-workspace");
+            for (const [target, rw] of [["/run/vally/control", false], ["/ipc-grade", true]]) {
+              ensure(grade.mounts.some(m => m.Type === "bind" && m.Destination === target && m.RW === rw &&
+                m.Source.startsWith(`${dir}/tmp/vally-docker-grade-`)), "invalid-channel");
+            }
+            const binds = init.mounts.filter(m => m.Type === "bind");
+            ensure(binds.length === 3 && binds.every(m => !m.RW) &&
+              binds.some(m => m.Source === `${dir}/workspace` && m.Destination === "/source-workspace"), "invalid-sources");
+            for (const [field, source] of [["assetsDir", "assets"], ["artifactDir", "artifact"]]) {
+              const ref = refs.find(m => m.Destination === request[field]);
+              ensure(ref && /^\/var\/lib\/vally-host\/\d+$/.test(ref.Destination), "invalid-request");
+              ensure(binds.some(m => m.Source === `${dir}/${source}` &&
+                /^\/var\/lib\/vally-grade-sources\/[01]$/.test(m.Destination)), "invalid-sources");
+            }
+            ensure(new Set([request.assetsDir, request.artifactDir, request.workDir]).size === 3, "invalid-request");
+            const volumes = grade.mounts.filter(m => m.Type === "volume");
+            ensure(volumes.length === 3 && new Set(volumes.map(m => m.Name)).size === 3 && init.mounts.filter(m => m.Type === "volume").every(m => m.RW &&
+              volumes.some(v => v.Name === m.Name && v.Destination === m.Destination)), "invalid-volumes");
+            const owner = byRole.get("check").labels["com.microsoft.vally.owner"];
+            for (const fact of [init, grade]) {
+              ensure(Array.isArray(fact.volumes) && fact.volumes.length === 3 && new Set(fact.volumes.map(v => v.name)).size === 3, "invalid-volumes");
+              for (const mount of volumes) ensure(fact.volumes.some(v => v.name === mount.Name &&
+                v.labels["com.microsoft.vally.owner"] === owner && v.labels["com.microsoft.vally.trial"] === `grade-${config.id}` &&
+                v.labels["com.microsoft.vally.kind"] === (mount.Destination === "/workspace" ? "grade-workspace" : "grade-reference")), "foreign-volume");
+            }
+            return { owner, volumes: volumes.map(m => m.Name),
+              containers: ["check", "grade-init", "grade"].map(role => ({ role, id: byRole.get(role).id })) };
+          }
+          export function project(record, config, exitCode, stderr, observed) {
+            ensure(observed.ready === true && observed.failed === false && observed.request, "observer-failed");
+            ensure(names.includes(config.name) && uuid(config.id) &&
+              ["inputHash", "evalHash", "checkerHash"].every(k => hex(config[k])), "invalid-case");
+            const dir = path.join(root, "cases", config.name);
+            const topology = correlate(observed.facts, observed.request, config, dir);
+            ensure(record.status === "success" && record.trajectory?.id === config.id && record.gradeResult &&
+              uuid(record.runId), "invalid-native-result");
+            ensure(Buffer.byteLength(stderr) <= 65536 && !/cleanup|teardown|timed out|interrupted/i.test(stderr), "native-error");
+            let visited = 0, programs = [];
+            const visit = (value, depth = 0) => {
+              ensure(++visited <= 128 && depth <= 8, "traversal-limit");
+              if (value && typeof value === "object") {
+                if (value.metadata?.program !== undefined) {
+                  ensure(value.metadata.program === "node", "unexpected-program"); programs.push(value);
+                }
+                for (const item of Object.values(value)) visit(item, depth + 1);
+              }
+            };
+            visit(record.gradeResult); ensure(programs.length === 1, "invalid-program");
+            const result = programs[0], meta = result.metadata;
+            ensure(JSON.stringify(meta.args) === JSON.stringify(config.args) && meta.timeout === "30s" && result.kind === "code" &&
+              [meta.stdout, meta.stderr].every(v => typeof v === "string" && Buffer.byteLength(v) <= 65536), "invalid-program");
+            const positive = config.name === "positive";
+            if (positive) {
+              ensure(exitCode === 0 && (!Object.hasOwn(meta, "exit_code") || meta.exit_code === 0) &&
+                result.passed === true && result.score === 1 && result.name === "protected-input-probe" &&
+                result.status !== "error" && meta.stderr === "protected-input-checker-entered\n", "positive-failed");
+              const verdict = JSON.parse(meta.stdout), evidence = JSON.parse(verdict.evidence);
+              ensure(Object.keys(verdict).sort().join() === ["name", "kind", "passed", "score", "evidence"].sort().join() &&
+                verdict.name === result.name && verdict.kind === "code" && verdict.passed === true && verdict.score === 1 &&
+                result.evidence === verdict.evidence &&
+                Object.keys(evidence).length === keys.length && keys.every(k => evidence[k] === true), "invalid-verdict");
+            } else {
+              ensure(exitCode === 1 && meta.exit_code === 1 && result.passed === false && result.score === 0 && result.name === "program" &&
+                meta.stdout === "" && meta.stderr === "protected-input-failure:trusted-integrity-mismatch\n", "negative-failed");
+            }
+            return { name: config.name, status: "passed", nativePassed: positive, expectedRejection: !positive,
+              nativeCliExit: exitCode, nativeProgramExit: Object.hasOwn(meta, "exit_code") ? meta.exit_code : null,
+              proof: positive ? Object.fromEntries(keys.map(k => [k, true])) : { trustedIntegrityMismatch: true, checkerBodyEntered: false },
+              nativeRunId: record.runId, inputId: config.id, inputHash: config.inputHash, evalHash: config.evalHash,
+              checkerHash: config.checkerHash, mountsCorrelated: true, nativeCleanupComplete: false, ...topology };
+          }
+          export async function observe(dir) {
+            const state = { ready: false, failed: false, facts: [], request: null };
+            const file = path.join(dir, "observation.json");
+            const volumeCache = new Map();
+            const anchor = bounded(path.join(root, "raw/grade-id")).toString().trim();
+            ensure(/^[a-f0-9]{64}$/.test(anchor), "invalid-anchor");
+            const previous = new Set(names.slice(0, names.indexOf(path.basename(dir))).flatMap(name => {
+              const prior = read(path.join(root, "cases", name, "observation.json"));
+              ensure(prior.facts.length === 3 && prior.facts.every(f => hex(f.id)), "invalid-history"); return prior.facts.map(f => f.id);
+            }));
+            let response, stopping = false, count = 0, buffer = "";
+            const persist = () => save(file, state);
+            const fail = () => { clearTimeout(timer); state.failed = true; persist(); process.exitCode = 1; request.destroy(); response?.destroy(); };
+            const filters = JSON.stringify({ type: ["container"], image: [process.env.IMAGE] });
+            const since = bounded(path.join(root, "raw/events-since")).toString().trim();
+            ensure(/^\d{10}$/.test(since), "invalid-anchor");
+            const request = http.get({ socketPath: "/var/run/docker.sock", path: `/events?since=${since}&filters=${encodeURIComponent(filters)}` });
+            const timer = setTimeout(fail, 10000);
+            request.on("error", () => { if (!stopping) fail(); });
+            request.on("response", stream => {
+              response = stream;
+              if (stream.statusCode !== 200) { fail(); return; }
+              stream.setEncoding("utf8");
+              stream.on("data", chunk => {
+                try {
+                  buffer += chunk; ensure(Buffer.byteLength(buffer) <= 65536, "event-limit");
+                  let end;
+                  while ((end = buffer.indexOf("\n")) >= 0) {
+                    const event = JSON.parse(buffer.slice(0, end)); buffer = buffer.slice(end + 1);
+                    ensure(++count <= 128 && event.Type === "container" && typeof event.Action === "string" && hex(event.Actor?.ID), "event-limit");
+                    if (!state.ready) {
+                      if (event.Actor.ID === anchor && event.Action === "destroy") { clearTimeout(timer); state.ready = true; persist(); }
+                      continue;
+                    }
+                    if (previous.has(event.Actor.ID)) continue;
+                    if (event.Action === "create") {
+                      const fact = inspect(event.Actor.ID);
+                      for (const mount of fact.mounts) if (mount.Type === "bind") ensure(realpathSync(mount.Source) === mount.Source, "foreign-source");
+                      fact.canonical = true; validateFact(fact, dir);
+                      ensure(state.facts.length < 3 && !state.facts.some(f => f.id === fact.id), "invalid-topology");
+                      const volumes = fact.mounts.filter(m => m.Type === "volume").map(m => m.Name);
+                      const missing = volumes.filter(name => !volumeCache.has(name));
+                      ensure(volumeCache.size + missing.length <= 3, "invalid-volumes");
+                      if (missing.length) {
+                        const rows = docker(["volume", "inspect", "--format", '{"name":{{json .Name}},"labels":{{json .Labels}}}', ...missing]).split("\n").map(JSON.parse);
+                        ensure(rows.length === missing.length && new Set(rows.map(v => v.name)).size === missing.length &&
+                          rows.every(v => missing.includes(v.name)), "invalid-volumes");
+                        for (const volume of rows) volumeCache.set(volume.name, volume);
+                      }
+                      fact.volumes = volumes.map(name => volumeCache.get(name));
+                      state.facts.push(fact);
+                    } else {
+                      const fact = state.facts.find(f => f.id === event.Actor.ID);
+                      ensure(fact, "unobserved-container");
+                      if (event.Action?.startsWith("exec_create") && fact.labels["com.docker.compose.service"] === "grade") {
+                        ensure(state.request === null, "duplicate-request");
+                        const control = fact.mounts.find(m => m.Destination === "/run/vally/control").Source;
+                        const files = readdirSync(control); ensure(files.length <= 16, "request-limit");
+                        const matches = files.filter(n => /^grade-request-[a-f0-9-]{36}\.json$/.test(n));
+                        ensure(matches.length === 1, "invalid-request");
+                        const actual = JSON.parse(bounded(path.join(control, matches[0]), 65536));
+                        state.request = { id: actual.trajectory.id, workDir: actual.trajectory.workDir,
+                          assetsDir: actual.trajectory.assetsDir, artifactDir: actual.trajectory.artifactDir };
+                      }
+                    }
+                    persist();
+                  }
+                } catch { fail(); }
+              });
+              stream.on("error", () => { if (!stopping) fail(); });
+              stream.on("end", () => { if (!stopping) fail(); });
+            });
+            process.on("SIGTERM", () => { stopping = true; clearTimeout(timer); request.destroy(); response?.destroy(); persist(); });
+          }
+          const cleanupComplete = (observed, topology) => {
+            ensure(observed.facts.length === 3 && /^[a-f0-9]{32}$/.test(topology.owner) &&
+              topology.volumes.length === 3, "invalid-topology");
+            const ids = docker(["ps", "-aq", "--no-trunc", "--filter", `ancestor=${process.env.IMAGE}`]).split("\n").filter(Boolean);
+            ensure(observed.facts.every(f => !ids.includes(f.id)), "cleanup-failed");
+            const volumes = docker(["volume", "ls", "-q", "--filter", `label=com.microsoft.vally.owner=${topology.owner}`]);
+            ensure(volumes === "", "cleanup-failed");
+          };
+          export function finish(name) {
+            const dir = path.join(root, "cases", name), config = read(path.join(dir, "case.json"));
+            const summaryFile = path.join(root, "safe/summary.json"), summary = safeSummary(read(summaryFile));
+            try {
+              const lines = bounded(path.join(dir, "stdout")).toString("utf8").trim().split("\n");
+              ensure(lines.length === 1, "invalid-native-result");
+              const observed = read(path.join(dir, "observation.json"));
+              const exit = bounded(path.join(dir, "exit")).toString(); ensure(/^[01]\n$/.test(exit), "invalid-exit");
+              const facts = project(JSON.parse(lines[0]), config, Number(exit),
+                bounded(path.join(dir, "stderr")).toString("utf8"), observed);
+              cleanupComplete(observed, facts);
+              facts.nativeCleanupComplete = true;
+              const { owner, volumes, ...safe } = facts;
+              ensure(owner && volumes.length === 3, "invalid-topology");
+              save(path.join(dir, "validated.json"), { owner, volumes });
+              ensure(Buffer.byteLength(JSON.stringify(safe)) <= 4096, "projection-limit");
+              summary.cases[names.indexOf(name)] = safe;
+            } catch {
+              summary.cases[names.indexOf(name)] = { name, status: "failed-or-unavailable", reason: "case-contract-failed" };
+              save(summaryFile, summary, 16384); throw new Error("case-contract-failed");
+            }
+            save(summaryFile, summary, 16384);
+          }
+          const emptySummary = () => ({ scope, image: process.env.IMAGE ?? null, status: "incomplete", compatibilityChecks: false,
+            cases: names.map(name => ({ name, status: "not-run" })), cleanup: "pending", sourceUnchanged: null, failures: [] });
+          export function safeSummary(value) {
+            const exact = (obj, keys) => ensure(obj && !Array.isArray(obj) && Object.keys(obj).sort().join() === keys.sort().join(), "unsafe-summary");
+            exact(value, ["scope", "image", "status", "cases", "cleanup", "sourceUnchanged", "failures", "compatibilityChecks"]);
+            ensure(value.scope === scope && value.image === (process.env.IMAGE ?? null) &&
+              ["incomplete", "passed", "failed-or-unavailable"].includes(value.status) &&
+              ["pending", "passed", "failed-or-unavailable"].includes(value.cleanup) &&
+              typeof value.compatibilityChecks === "boolean" &&
+              [null, true, false].includes(value.sourceUnchanged) && Array.isArray(value.failures) &&
+              value.failures.length <= failureKinds.length && value.failures.every(f => failureKinds.includes(f)) &&
+              Array.isArray(value.cases) && value.cases.length === 3, "unsafe-summary");
+            const cases = value.cases.map((item, i) => {
+              ensure(item?.name === names[i], "unsafe-summary");
+              if (item.status === "passed") {
+                exact(item, ["name", "status", "nativePassed", "expectedRejection", "nativeCliExit", "nativeProgramExit", "proof", "containers", "nativeRunId", "inputId", "inputHash", "evalHash", "checkerHash", "mountsCorrelated", "nativeCleanupComplete"]);
+                ensure(item.nativePassed === (i === 0) && item.expectedRejection === (i !== 0) && uuid(item.nativeRunId) &&
+                  item.nativeCliExit === (i === 0 ? 0 : 1) && (i === 0 ? [null, 0].includes(item.nativeProgramExit) : item.nativeProgramExit === 1) &&
+                  uuid(item.inputId) && ["inputHash", "evalHash", "checkerHash"].every(k => hex(item[k])) &&
+                  item.mountsCorrelated === true && item.nativeCleanupComplete === true, "unsafe-summary");
+                exact(item.proof, i === 0 ? [...keys] : ["trustedIntegrityMismatch", "checkerBodyEntered"]);
+                ensure(i === 0 ? keys.every(k => item.proof[k] === true) :
+                  item.proof.trustedIntegrityMismatch === true && item.proof.checkerBodyEntered === false, "unsafe-summary");
+                ensure(Array.isArray(item.containers) && item.containers.length === 3 && new Set(item.containers.map(c => c.id)).size === 3, "unsafe-summary");
+                for (const [n, container] of item.containers.entries()) {
+                  exact(container, ["role", "id"]); ensure(container.role === ["check", "grade-init", "grade"][n] && hex(container.id), "unsafe-summary");
+                }
+              } else {
+                exact(item, item.status === "not-run" ? ["name", "status"] : ["name", "status", "reason"]);
+                ensure(item.status === "not-run" || item.status === "failed-or-unavailable" && item.reason === "case-contract-failed", "unsafe-summary");
+              }
+              ensure(Buffer.byteLength(JSON.stringify(item)) <= 4096, "projection-limit");
+              return Object.fromEntries(Object.keys(item).map(key => [key, item[key]]));
+            });
+            return { scope, image: value.image, status: value.status, cases, cleanup: value.cleanup, compatibilityChecks: value.compatibilityChecks,
+              sourceUnchanged: value.sourceUnchanged, failures: [...value.failures] };
+          }
+          export function cleanup() {
+            const failures = new Set();
+            const attempt = (stage, action) => { try { return action(); } catch { failures.add(stage); return undefined; } };
+            const live = attempt("resource-inspection", () => process.env.IMAGE ? new Set(docker(["ps", "-aq", "--no-trunc",
+              "--filter", `ancestor=${process.env.IMAGE}`]).split("\n").filter(Boolean)) : new Set()) ?? new Set();
+            for (const role of ["task", "grade"]) {
+              const file = path.join(root, "raw", `${role}-id`);
+              if (!existsSync(file)) continue;
+              attempt("role-cleanup", () => {
+                const id = bounded(file).toString().trim(); ensure(hex(id), "invalid-container");
+                if (live.has(id)) {
+                  const fact = inspect(id); ensure(fact.labels["protected-input.run"] === process.env.GITHUB_RUN_ID, "foreign-container");
+                  docker(["rm", "--force", id]); failures.add("role-cleanup");
+                }
+              });
+            }
+            for (const name of names) {
+              const dir = path.join(root, "cases", name);
+              if (!existsSync(dir)) continue;
+              attempt("case-cleanup", () => {
+                const observed = read(path.join(dir, "observation.json"));
+                for (const fact of observed.facts) {
+                  if (live.has(fact.id)) { validateFact(fact, dir); ensure(inspect(fact.id).image === process.env.IMAGE, "foreign-container"); docker(["rm", "--force", fact.id]); failures.add("case-cleanup"); }
+                }
+                const owner = observed.facts.find(f => validateFact(f, dir) === "check")?.labels["com.microsoft.vally.owner"];
+                ensure(owner, "missing-owner");
+                const known = new Set(observed.facts.flatMap(f => f.mounts.filter(m => m.Type === "volume").map(m => m.Name)));
+                for (const name of docker(["volume", "ls", "-q", "--filter", `label=com.microsoft.vally.owner=${owner}`]).split("\n").filter(Boolean)) {
+                  ensure(known.has(name), "unobserved-volume");
+                  const volume = JSON.parse(docker(["volume", "inspect", "--format", "{{json .Labels}}", name]));
+                  ensure(volume["com.microsoft.vally.owner"] === owner && volume["com.microsoft.vally.trial"] === `grade-${read(path.join(dir, "case.json")).id}`, "foreign-volume");
+                  docker(["volume", "rm", name]); failures.add("case-cleanup");
+                }
+                if (existsSync(path.join(dir, "validated.json"))) cleanupComplete(observed, read(path.join(dir, "validated.json")));
+                else failures.add("case-cleanup");
+              });
+            }
+            const preserved = attempt("source-preservation", () => {
+              const identity = read(path.join(root, "safe/identities.json"));
+              const git = args => execFileSync("git", args, { cwd: process.env.SKILL, encoding: "utf8", timeout: 5000, maxBuffer: 65536 }).trim();
+              ensure(git(["rev-parse", "HEAD"]) === identity.snapshot, "source-changed");
+              const files = git(["ls-tree", "-r", "--name-only", "HEAD", "--", "."]).split("\n").sort();
+              ensure(hash(files.map(f => `${f} ${hash(bounded(path.join(process.env.SKILL, f)).toString("utf8").replace(/\r\n/g, "\n"))}`).join("\n") + "\n") === identity.inventory, "source-changed");
+              for (const [name, digest] of Object.entries(identity.inputs)) {
+                const source = name.startsWith("package") ? path.join(process.env.SKILL, name) : path.join(process.env.GITHUB_WORKSPACE, ".github/validation/skill-effectiveness", name);
+                ensure(hash(bounded(source)) === digest, "source-changed");
+              }
+              return true;
+            });
+            if (process.env.IMAGE) attempt("image-cleanup", () => docker(["image", "rm", process.env.IMAGE]));
+            const summaryFile = path.join(root, "safe/summary.json");
+            const summary = attempt("projection", () => safeSummary(read(summaryFile))) ?? emptySummary();
+            for (const [i, name] of names.entries()) {
+              if (summary.cases[i].status === "not-run" && existsSync(path.join(root, "cases", name, "attempted"))) {
+                summary.cases[i] = { name, status: "failed-or-unavailable", reason: "case-contract-failed" };
+              }
+            }
+            for (const target of ["raw", "cases", "context", "home", "probe.mjs", "protected-input-check.mjs", "protected-input-probe.eval.yaml"]) {
+              const file = path.join(root, target);
+              if (existsSync(file)) attempt("scratch-cleanup", () => {
+                ensure(realpathSync(file) === file, "unsafe-cleanup"); rmSync(file, { recursive: true });
+              });
+            }
+            summary.failures = [...failures]; summary.sourceUnchanged = preserved === true;
+            summary.cleanup = failures.size ? "failed-or-unavailable" : "passed";
+            summary.status = !failures.size && summary.compatibilityChecks && summary.cases.every(c => c.status === "passed") ? "passed" : "failed-or-unavailable";
+            save(summaryFile, summary, 16384);
+            ensure(readdirSync(path.join(root, "safe")).every(n => ["summary.json", "identities.json"].includes(n)) &&
+              readdirSync(path.join(root, "safe")).reduce((n, file) => n + bounded(path.join(root, "safe", file)).length, 0) <= 16384, "projection-limit");
+            writeFileSync(path.join(root, "upload-ready"), "safe\n", { mode: 0o600 });
+            ensure(!failures.size, "cleanup-failed");
+          }
+          const [mode, name] = process.argv.slice(2);
+          try {
+            if (mode === "prepare") prepare();
+            else if (mode === "observe") { ensure(names.includes(name), "invalid-case"); await observe(path.join(root, "cases", name)); }
+            else if (mode === "finish") { ensure(names.includes(name), "invalid-case"); finish(name); }
+            else if (mode === "cleanup") cleanup();
+            else throw new Error("invalid-mode");
+          } catch { console.error("protected-input-stage-failed"); process.exitCode = 1; }
+          NODE
+          env -i PATH="$PATH" HOME="$root/home" docker context inspect --format '{{json .Endpoints.docker.Host}}' \
+            > "$root/raw/context"
+          grep -x '"unix:///var/run/docker.sock"' "$root/raw/context" > /dev/null
+          timeout --signal=TERM --kill-after=15s 600s env -i PATH="$PATH" HOME="$root/home" DOCKER_BUILDKIT=1 \
+            docker build --platform linux/amd64 --pull --no-cache --iidfile "$root/raw/image-id" \
+            --tag "protected-input:$GITHUB_SHA" "$root/context" > "$root/raw/build.out" 2> "$root/raw/build.err"
+          image="$(cat "$root/raw/image-id")"
           [[ "$image" =~ ^sha256:[0-9a-f]{64}$ ]]
+          export IMAGE="$image"
           printf 'IMAGE=%s\n' "$image" >> "$GITHUB_ENV"
-          env -i PATH="$PATH" HOME="$clean_home" docker image inspect \
-            --format '{"id":{{json .Id}},"os":{{json .Os}},"architecture":{{json .Architecture}},"user":{{json .Config.User}}}' \
-            "$image" > "$RUNNER_TEMP/evidence/image.json"
-          printf '%s\n' "$BASE" > "$RUNNER_TEMP/evidence/base-reference.txt"
-      - name: Obtain actual native task and grade check manifests
-        run: |
-          set -euo pipefail
-          root="$RUNNER_TEMP/docker-smoke"
+          date -u +%s > "$root/raw/events-since"
           for role in task grade; do
-            ipc="$root/check-$role"
-            mkdir "$ipc"
-            printf '{"role":"%s","tools":["sh","gnu-coreutils","git","system-ca"]}\n' "$role" > "$ipc/request.json"
-            name="skill-check-$role-$GITHUB_RUN_ID"
-            trap 'env -i PATH="$PATH" HOME="$root/home" docker rm --force "$name" > /dev/null' EXIT
-            env -i PATH="$PATH" HOME="$root/home" docker create --name "$name" \
-              --label "skill-effectiveness.run=$GITHUB_RUN_ID" \
-              --network none --cap-drop ALL --security-opt no-new-privileges \
-              "$IMAGE" vally-docker-runner check /tmp/request.json /tmp/result.json > /dev/null
-            env -i PATH="$PATH" HOME="$root/home" docker cp "$ipc/request.json" "$name:/tmp/request.json"
-            env -i PATH="$PATH" HOME="$root/home" docker inspect \
-              --format '{"mounts":{{json .Mounts}},"networkMode":{{json .HostConfig.NetworkMode}},"capDrop":{{json .HostConfig.CapDrop}},"securityOpt":{{json .HostConfig.SecurityOpt}},"user":{{json .Config.User}}}' \
-              "$name" > "$RUNNER_TEMP/evidence/$role-check-container.json"
+            name="protected-input-$role-$GITHUB_RUN_ID"
+            printf '{"role":"%s","tools":["sh","gnu-coreutils","git","system-ca"]}\n' "$role" > "$root/raw/check-request"
+            chmod 0644 "$root/raw/check-request"
+            env -i PATH="$PATH" HOME="$root/home" docker create --name "$name" --label "protected-input.run=$GITHUB_RUN_ID" \
+              --network none --cap-drop ALL --security-opt no-new-privileges "$image" \
+              vally-docker-runner check /tmp/request.json /tmp/result.json > "$root/raw/$role-id"
+            env -i PATH="$PATH" HOME="$root/home" docker cp "$root/raw/check-request" "$name:/tmp/request.json" > "$root/raw/copy.out" 2>&1
             timeout --signal=TERM --kill-after=15s 60s env -i PATH="$PATH" HOME="$root/home" \
-              docker start --attach "$name" 2>&1 | tee "$RUNNER_TEMP/evidence/$role-check.txt"
-            env -i PATH="$PATH" HOME="$root/home" docker inspect --format '{{.State.ExitCode}}' "$name" \
-              | grep -x '0'
-            env -i PATH="$PATH" HOME="$root/home" docker cp "$name:/tmp/result.json" "$ipc/result.json"
-            cp "$ipc/result.json" "$RUNNER_TEMP/evidence/$role-check.json"
-            env -i PATH="$PATH" HOME="$root/home" docker rm "$name" > /dev/null
-            trap - EXIT
-          done
-          EVIDENCE="$RUNNER_TEMP/evidence" node --input-type=module <<'NODE'
+              docker start --attach "$name" > "$root/raw/$role.out" 2> "$root/raw/$role.err"
+            env -i PATH="$PATH" HOME="$root/home" docker cp "$name:/tmp/result.json" "$root/raw/$role.json" > "$root/raw/copy.out" 2>&1
+            env -i PATH="$PATH" HOME="$root/home" docker inspect "$name" > "$root/raw/$role-inspect.json"
+            ROLE="$role" node --input-type=module > "$root/raw/check.out" 2> "$root/raw/check.err" <<'NODE'
           import assert from "node:assert/strict";
           import { readFileSync } from "node:fs";
-          import path from "node:path";
-          for (const role of ["task", "grade"]) {
-            const result = JSON.parse(readFileSync(path.join(process.env.EVIDENCE, `${role}-check.json`)));
-            assert.equal(result.ok, true, `${role} native check failed`);
-            const check = result.value;
-            assert.equal(check.protocolRevision, 1);
-            assert.equal(check.coreVersion, "0.19.0");
-            assert.equal(check.nodeVersion, "24.14.0");
-            assert.equal(check.npmVersion, "11.9.0");
-            assert.equal(check.uid, 1000);
-            assert.equal(check.gid, 1000);
-            assert.match(check.runnerPath, /^\/opt\/vally-runtime\/node_modules\/@microsoft\/vally\//);
-            assert.equal(check.corePackageRoot, "/opt/vally-runtime/node_modules/@microsoft/vally");
-            for (const tool of ["sh", "gnu-coreutils", "git", "system-ca"]) assert.equal(check.tools[tool], true);
-            assert.ok(role === "task" ? check.executors.some(item => item.id === "mock")
-              : check.graders.some(item => item.id === "program"));
-            const container = JSON.parse(readFileSync(path.join(process.env.EVIDENCE, `${role}-check-container.json`)));
-            assert.equal(container.networkMode, "none");
-            assert.deepEqual(container.capDrop, ["ALL"]);
-            assert.ok(container.securityOpt.includes("no-new-privileges"));
-            assert.deepEqual(container.mounts, []);
-          }
+          const root = process.env.PROBE_ROOT, role = process.env.ROLE;
+          const result = JSON.parse(readFileSync(`${root}/raw/${role}.json`));
+          assert.equal(result.ok, true);
+          for (const [key, value] of Object.entries({ protocolRevision: 1, coreVersion: "0.19.0", nodeVersion: "24.14.0", npmVersion: "11.9.0", uid: 1000, gid: 1000 })) assert.equal(result.value[key], value);
+          assert.equal(result.value.corePackageRoot, "/opt/vally-runtime/node_modules/@microsoft/vally");
+          assert.ok(role === "task" ? result.value.executors.some(e => e.id === "mock") : result.value.graders.some(g => g.id === "program"));
+          for (const tool of ["sh", "gnu-coreutils", "git", "system-ca"]) assert.equal(result.value.tools[tool], true);
+          const [container] = JSON.parse(readFileSync(`${root}/raw/${role}-inspect.json`));
+          assert.equal(container.State.ExitCode, 0); assert.equal(container.Image, process.env.IMAGE);
+          assert.equal(container.HostConfig.NetworkMode, "none"); assert.deepEqual(container.Mounts, []);
           NODE
-      - name: Generate synthetic native mock turn and offline executable grader
-        run: |
-          set -euo pipefail
-          PROBE_ROOT="$RUNNER_TEMP/docker-smoke" node --input-type=module <<'NODE'
-          import assert from "node:assert/strict";
-          import { createHash } from "node:crypto";
-          import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
-          import path from "node:path";
-          import { stringify } from "yaml";
-          const root = process.env.PROBE_ROOT;
-          const write = (file, content) => {
-            const target = path.join(root, file);
-            mkdirSync(path.dirname(target), { recursive: true });
-            writeFileSync(target, content);
-          };
-          const image = JSON.parse(readFileSync(path.join(root, "..", "evidence", "image.json"), "utf8"));
-          assert.equal(image.os, "linux");
-          assert.equal(image.architecture, "amd64");
-          assert.equal(image.id, process.env.IMAGE);
-          assert.equal(image.user, "1000:1000");
-          write("readonly-grade.compose.yaml", stringify({
-            services: { grade: { image: image.id, profiles: ["vally-grade"],
-              volumes: [{ type: "volume", target: "/workspace", read_only: true }] } },
-          }));
-          const checker = `// Copyright (c) 2026 Microsoft Corporation. All rights reserved.
-          // SPDX-License-Identifier: MIT
-          import assert from "node:assert/strict";
-          import { createHash } from "node:crypto";
-          import { accessSync, constants, readFileSync } from "node:fs";
-          import { networkInterfaces } from "node:os";
-          const authKeys = ["GITHUB_TOKEN", "GH_TOKEN", "COPILOT_GITHUB_TOKEN", "OPENAI_API_KEY", "AZURE_OPENAI_API_KEY"];
-          const writable = file => {
-            try { accessSync(file, constants.W_OK); return true; }
-            catch (error) { if (["EACCES", "EROFS"].includes(error.code)) return false; throw error; }
-          };
-          const externalInterfaces = Object.entries(networkInterfaces())
-            .filter(([, addresses]) => addresses.some(address => !address.internal)).map(([name]) => name);
-          const checkerHash = createHash("sha256").update(readFileSync(import.meta.filename)).digest("hex");
-          const facts = {
-            probe: "native-docker-smoke", uid: process.getuid(),
-            externalInterfaces, authKeysPresent: authKeys.filter(key => Boolean(process.env[key])),
-            taskOnlyCanaryPresent: Object.hasOwn(process.env, "PROBE_TASK_ONLY"),
-            checkerHashMatches: checkerHash === process.argv[2],
-            artifactMatches: readFileSync("deliverable/result.txt", "utf8") === "Synthetic native Docker artifact.\\n",
-            checkerWritable: writable(import.meta.filename),
-            artifactWritable: writable("deliverable/result.txt"),
-          };
-          assert.ok(Number.isInteger(facts.uid) && facts.uid > 0);
-          assert.deepEqual(facts.externalInterfaces, []);
-          assert.deepEqual(facts.authKeysPresent, []);
-          assert.equal(facts.taskOnlyCanaryPresent, false);
-          assert.equal(facts.checkerHashMatches, true);
-          assert.equal(facts.artifactMatches, true);
-          assert.equal(facts.checkerWritable, false);
-          assert.equal(facts.artifactWritable, false);
-          console.log(JSON.stringify({ name: "native-runtime-facts", kind: "code", passed: true,
-            score: 1, evidence: JSON.stringify(facts) }));
-          `;
-          const checkerHash = createHash("sha256").update(checker).digest("hex");
-          const integrityCommand = [
-            'import assert from "node:assert/strict";',
-            'import { createHash } from "node:crypto";',
-            'import { readFileSync } from "node:fs";',
-            'import { pathToFileURL } from "node:url";',
-            'const checkerPath = "/workspace/evaluator/check.mjs";',
-            'assert.equal(process.argv[1], checkerPath);',
-            'const expectedHash = process.argv[2];',
-            'assert.match(expectedHash, /^[a-f0-9]{64}$/, "Invalid trusted checker digest");',
-            'const actualHash = createHash("sha256").update(readFileSync(checkerPath)).digest("hex");',
-            'assert.equal(actualHash, expectedHash, "Trusted checker integrity mismatch");',
-            'await import(pathToFileURL(checkerPath).href);',
-          ].join("\n");
-          write("grading/check.mjs", checker);
-          write("fixtures/public/deliverable/result.txt", "Synthetic native Docker artifact.\n");
-          const mockOutput = "Synthetic mock output; no model call.";
-          write("fixtures/public/.mock-executor/smoke.json", JSON.stringify({
-            output: mockOutput,
-            events: [
-              { type: "turn_start", data: { turnId: "smoke-turn" } },
-              { type: "assistant_message", data: { content: mockOutput } },
-              { type: "turn_end", data: { turnId: "smoke-turn" } },
-            ],
-          }));
-          write("skills/demo/SKILL.md", "---\nname: demo\ndescription: Synthetic native Docker fixture.\n---\nSynthetic fixture only.\n");
-          const spec = {
-            name: "native-docker-smoke", description: "Synthetic model-free native Docker integration check",
-            version: "1.0.0", type: "capability",
-            defaults: { runs: 1, timeout: "2m", executor: "mock", model: "mock" },
-            agent_environment: { env: { DO_NOT_TRACK: "1" }, skills: [],
-              files: [{ src: "../fixtures/public", dest: "." }] },
-            grading_environment: { files: [{ src: "../grading", dest: "evaluator" }] },
-            scoring: {},
-            stimuli: [{
-              name: "smoke", prompt: "Synthetic fixture consumed by native mock executor; never send to a model.",
-              artifacts: { include: ["deliverable/**"] },
-              graders: [
-                { type: "completed" },
-                { type: "file-exists", name: "delivery", config: { path: "deliverable/result.txt" } },
-                { type: "program", name: "native-runtime-facts",
-                  config: { program: "node", args: ["--input-type=module", "-e", integrityCommand,
-                    "/workspace/evaluator/check.mjs", checkerHash], timeout: "30s" } },
-              ],
-            }],
-          };
-          write("evals/smoke.eval.yaml", stringify(spec));
-          write("experiments/smoke.experiment.yaml", stringify({
-            name: "native-docker-smoke", evals: ["../evals/smoke.eval.yaml"],
-            vary: ["/environment/skills"], baseline: "a-baseline",
-            variants: { "a-baseline": { environment: { skills: [] } },
-              "b-treatment": { environment: { skills: ["../skills/demo"] } } },
-            execution: { workers: 1 }, overrides: { runs: 1 },
-          }));
-          NODE
-      - name: Lint then execute native Docker experiment with both role networks disabled
-        id: native
-        run: |
-          set -euo pipefail
-          cli="$PWD/node_modules/@microsoft/vally-cli/dist/index.js"
-          root="$RUNNER_TEMP/docker-smoke"
-          cd "$root"
-          grep -Fx 'Docker Compose version v2.38.2' "$RUNNER_TEMP/evidence/compose-version.txt"
-          env -i PATH="$PATH" HOME="$root/home" TMPDIR="$root/tmp" CI=1 DO_NOT_TRACK=1 VALLY_TELEMETRY_OPTOUT=1 \
-            node "$cli" lint --strict --eval-spec "$root/evals/smoke.eval.yaml" \
-            2>&1 | tee "$RUNNER_TEMP/evidence/lint.txt"
-          IMAGE="$IMAGE" node --input-type=module > "$RUNNER_TEMP/evidence/container-observer.txt" 2>&1 <<'NODE' &
-          import { spawn, execFileSync } from "node:child_process";
-          import assert from "node:assert/strict";
-          import { appendFileSync, constants, openSync, closeSync, fstatSync, readSync, realpathSync, mkdirSync, writeFileSync } from "node:fs";
-          import { createHash } from "node:crypto";
-          import path from "node:path";
-          import { createInterface } from "node:readline";
-          const evidence = path.join(process.env.RUNNER_TEMP, "evidence");
-          const env = { PATH: process.env.PATH, HOME: path.join(process.env.RUNNER_TEMP, "docker-smoke/home") };
-          const root = realpathSync(path.join(process.env.RUNNER_TEMP, "docker-smoke"));
-          const scratch = path.join(root, "captured-compose");
-          mkdirSync(scratch, { mode: 0o700 });
-          const captured = new Map();
-          const stableBytes = file => {
-            assert.equal(realpathSync(file), file, "Noncanonical Compose input");
-            const fd = openSync(file, constants.O_RDONLY | constants.O_NOFOLLOW);
-            try {
-              const before = fstatSync(fd);
-              assert.ok(before.isFile() && before.size > 0 && before.size <= 1048576, "Invalid Compose input size/type");
-              const bytes = Buffer.alloc(before.size + 1);
-              assert.equal(readSync(fd, bytes, 0, bytes.length, 0), before.size, "Incomplete Compose input read");
-              const after = fstatSync(fd);
-              assert.ok(["dev", "ino", "size", "mtimeMs", "ctimeMs"].every(key => before[key] === after[key]), "Changed Compose input");
-              return bytes.subarray(0, before.size);
-            } finally { closeSync(fd); }
-          };
-          const capture = (fact, configFiles, projectDirectory, envFile) => {
-            if (fact.service === null) {
-              assert.ok(fact.project === null && !configFiles && !projectDirectory && !envFile, "Unknown compatibility container");
-              return;
-            }
-            const role = ["task", "task-init", "evidence"].includes(fact.service) ? "task" : "grade";
-            assert.ok(["task", "task-init", "evidence", "grade", "grade-init"].includes(fact.service), "Unknown native role");
-            assert.match(fact.project, /^vally-[a-f0-9]{8}$/, "Unknown native project");
-            assert.ok(projectDirectory === root && !envFile, "Unexpected Compose context");
-            const files = configFiles.split(",");
-            assert.ok(files.length === 2 && files[0] === path.join(root, "readonly-grade.compose.yaml"), "Unexpected Compose input order");
-            assert.ok(files[1].startsWith(`${root}/tmp/`) && path.resolve(files[1]) === files[1] &&
-              path.basename(files[1]) === `docker-compose.${role}.generated.yml`, "Unknown native overlay");
-            const inputs = files.map(sourcePath => ({ sourcePath, bytes: stableBytes(sourcePath) }));
-            const hashes = inputs.map(input => createHash("sha256").update(input.bytes).digest("hex"));
-            const identity = JSON.stringify({ role, files, hashes });
-            if (captured.has(fact.project)) {
-              assert.equal(captured.get(fact.project), identity, "Changed project inputs");
-              return;
-            }
-            assert.ok(captured.size < 4, "Too many native projects");
-            const record = { project: fact.project, role, profile: `vally-${role}`, projectDirectory, containerId: fact.id,
-              inputs: inputs.map((input, index) => {
-                const capturedPath = path.join(scratch, `${fact.project}-${index}.yaml`);
-                writeFileSync(capturedPath, input.bytes, { flag: "wx", mode: 0o600 });
-                return { sourcePath: input.sourcePath, capturedPath, sha256: hashes[index] };
-              }) };
-            appendFileSync(path.join(scratch, "captures.jsonl"), JSON.stringify(record) + "\n");
-            captured.set(fact.project, identity);
-          };
-          const events = spawn("docker", ["events", "--since", new Date().toISOString(),
-            "--filter", "type=container", "--filter", "event=create", "--filter", `image=${process.env.IMAGE}`,
-            "--format", "{{json .}}"], { env, stdio: ["ignore", "pipe", "inherit"] });
-          let stopping = false;
-          process.on("SIGTERM", () => { stopping = true; events.kill("SIGTERM"); });
-          events.on("error", error => { console.error(error); process.exitCode = 1; });
-          events.on("exit", (code, signal) => {
-            const expectedStop = stopping && (code === 0 || code === 143 || signal === "SIGTERM");
-            if (!expectedStop) {
-              console.error(`Unexpected Docker event observer exit: ${code}/${signal}`);
-              process.exitCode = 1;
-            }
-          });
-          try {
-            for await (const line of createInterface({ input: events.stdout })) {
-              const event = JSON.parse(line);
-              if (!/^[a-f0-9]{64}$/.test(event.Actor?.ID)) throw Error("Invalid Docker event container ID");
-              const format = '{"id":{{json .Id}},"image":{{json .Image}},"service":{{json (index .Config.Labels "com.docker.compose.service")}},"project":{{json (index .Config.Labels "com.docker.compose.project")}},"mounts":{{json .Mounts}},"networkMode":{{json .HostConfig.NetworkMode}},"configFiles":{{json (index .Config.Labels "com.docker.compose.project.config_files")}},"projectDirectory":{{json (index .Config.Labels "com.docker.compose.project.working_dir")}},"envFile":{{json (index .Config.Labels "com.docker.compose.project.environment_file")}}}';
-              const { configFiles, projectDirectory, envFile, ...fact } = JSON.parse(execFileSync("docker", ["inspect", "--format", format, event.Actor.ID],
-                { env, encoding: "utf8", timeout: 5000 }));
-              capture(fact, configFiles, projectDirectory, envFile);
-              appendFileSync(path.join(evidence, "native-container-facts.jsonl"), JSON.stringify(fact) + "\n");
-            }
-          } catch (error) {
-            console.error("Native container/Compose observation failed:", error.code ?? error.name);
-            process.exitCode = 1;
-          } finally {
-            events.kill("SIGTERM");
-          }
-          NODE
-          observer_pid=$!
-          trap 'kill -TERM "$observer_pid"; wait "$observer_pid"' EXIT
-          sleep 1
-          kill -0 "$observer_pid"
-          timeout --signal=TERM --kill-after=15s 300s env -i \
-            PATH="$PATH" HOME="$root/home" TMPDIR="$root/tmp" CI=1 DO_NOT_TRACK=1 VALLY_TELEMETRY_OPTOUT=1 \
-            PROBE_TASK_ONLY=synthetic-task-marker \
-            node "$cli" experiment run "$root/experiments/smoke.experiment.yaml" \
-            --backend docker --backend-args "task-image=$IMAGE" --backend-args "grade-image=$IMAGE" \
-            --backend-args task-network=none --backend-args grade-network=none \
-            --backend-args "compose-file=$root/readonly-grade.compose.yaml" \
-            --backend-args task-env=PROBE_TASK_ONLY \
-            --output-dir "$RUNNER_TEMP/native-output" --workspace "$RUNNER_TEMP/native-workspaces" \
-            --workers 1 --require-pass 2>&1 | tee "$RUNNER_TEMP/evidence/native-run.txt"
-          kill -TERM "$observer_pid"
-          wait "$observer_pid"
-          trap - EXIT
-      - name: Verify native outcomes and retain only structural runtime facts
-        if: ${{ !cancelled() && steps.native.outcome != 'skipped' }}
-        run: |
-          set -euo pipefail
-          OUTPUT="$RUNNER_TEMP/native-output" EVIDENCE="$RUNNER_TEMP/evidence" node --input-type=module <<'NODE'
-          import assert from "node:assert/strict";
-          import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-          import { execFileSync } from "node:child_process";
-          import { createHash } from "node:crypto";
-          import { parse, stringify } from "yaml";
-          import path from "node:path";
-          import { hasGraderError } from "@microsoft/vally";
-          const summary = { scope: "Native Docker mock-task/offline executable-grading integration only",
-            status: "unverified", trials: [], compose: { status: "unverified", projects: [] } };
-          let stage = "native";
-          let composeStage = "capture manifest";
-          const files = dir => existsSync(dir) ? readdirSync(dir, { withFileTypes: true }).flatMap(entry =>
-            entry.isDirectory() ? files(path.join(dir, entry.name)) : [path.join(dir, entry.name)]) : [];
-          try {
-            const records = files(process.env.OUTPUT).filter(file => path.basename(file) === "results.jsonl")
-              .flatMap(file => readFileSync(file, "utf8").split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line)))
-              .filter(record => record.type === "trial-result");
-            summary.recordCount = records.length;
-            summary.trials = records.slice(0, 2).map(record => {
-              const observations = [];
-              const visit = value => {
-                if (typeof value === "string" && value.startsWith('{"probe":"native-docker-smoke"')) observations.push(JSON.parse(value));
-                else if (Array.isArray(value)) value.forEach(visit);
-                else if (value && typeof value === "object") Object.values(value).forEach(visit);
-              };
-              visit(record.gradeResult);
-              return { runId: record.runId, itemId: record.itemId,
-                trajectoryId: record.trajectory?.id ?? null,
-                variant: record.variant, trialStatus: record.status,
-                passed: record.gradeResult?.passed, status: record.gradeResult?.status,
-                observations };
-            });
-            assert.equal(records.length, 2, "Expected exactly two native trial results");
-            assert.deepEqual(records.map(record => record.variant).sort(), ["a-baseline", "b-treatment"]);
-            for (const [index, trial] of summary.trials.entries()) {
-              for (const key of ["runId", "itemId", "trajectoryId"]) {
-                assert.ok(typeof trial[key] === "string" && trial[key].length > 0, `Missing native ${key}`);
-              }
-              assert.notEqual(trial.trialStatus, "error");
-              assert.equal(trial.passed, true, `Native grading failed for ${trial.variant}`);
-              assert.notEqual(trial.status, "error");
-              assert.equal(hasGraderError(records[index].gradeResult), false, "Native grader tree contains an error");
-              assert.ok(trial.observations.length > 0, "Native grader did not retain runtime facts");
-              for (const facts of trial.observations) {
-                assert.ok(Number.isInteger(facts.uid) && facts.uid > 0);
-                assert.deepEqual(facts.externalInterfaces, []);
-                assert.deepEqual(facts.authKeysPresent, []);
-                assert.equal(facts.taskOnlyCanaryPresent, false);
-                assert.equal(facts.checkerHashMatches, true);
-                assert.equal(facts.artifactMatches, true);
-                assert.equal(facts.checkerWritable, false);
-                assert.equal(facts.artifactWritable, false);
-              }
-            }
-            const containers = readFileSync(path.join(process.env.EVIDENCE, "native-container-facts.jsonl"), "utf8")
-              .trim().split("\n").map(line => JSON.parse(line));
-            assert.equal(containers.length, 14, "Unexpected native container count");
-            const targets = {
-              task: ["/workspace", "/var/lib/vally/task-home", "/var/lib/vally/artifacts",
-                "/run/vally/control", "/ipc-task", "/run/vally/turn-acks", "/var/lib/vally/task-inputs"],
-              grade: ["/workspace", "/run/vally/control", "/ipc-grade"],
-              "task-init": ["/workspace", "/var/lib/vally/task-home"],
-              "grade-init": ["/workspace", "/source-workspace", "/hidden-grader-files"],
-              evidence: ["/workspace", "/var/lib/vally", "/run/vally/control", "/ipc-grade"],
-            };
-            const workspace = container => {
-              const mounts = container.mounts.filter(mount => mount.Destination === "/workspace");
-              assert.equal(mounts.length, 1, "Expected one native workspace mount");
-              assert.equal(mounts[0].Type, "volume");
-              assert.ok(typeof mounts[0].Source === "string" && mounts[0].Source.length > 0);
-              return mounts[0];
-            };
-            const tasks = containers.filter(item => item.service === "task");
-            const grades = containers.filter(item => item.service === "grade");
-            for (const role of Object.keys(targets)) {
-              const actual = containers.filter(item => item.service === role);
-              assert.equal(actual.length, 2, `Expected two actual ${role} containers`);
-              assert.equal(new Set(actual.map(item => item.project)).size, 2, `Reused ${role} project`);
-              for (const container of actual) {
-                assert.ok(typeof container.project === "string" && container.project.length > 0);
-                assert.deepEqual(container.mounts.map(mount => mount.Destination).sort(), [...targets[role]].sort());
-                assert.equal(workspace(container).RW, !["grade", "evidence"].includes(role));
-              }
-            }
-            const taskSources = tasks.map(item => workspace(item).Source);
-            const gradeSources = grades.map(item => workspace(item).Source);
-            assert.equal(new Set([...taskSources, ...gradeSources]).size, 4, "Reused native workspace source");
-            const taskProjects = new Set(tasks.map(item => item.project));
-            for (const grade of grades) {
-              assert.equal(taskProjects.has(grade.project), false, "Grade service started in task project");
-              const init = containers.filter(item => item.service === "grade-init" && item.project === grade.project);
-              assert.equal(init.length, 1);
-              assert.equal(workspace(init[0]).Source, workspace(grade).Source);
-              const source = init[0].mounts.find(mount => mount.Destination === "/source-workspace");
-              assert.equal(source.Type, "volume");
-              assert.equal(source.RW, false);
-              assert.ok(taskSources.includes(source.Source), "Unknown copied task workspace");
-            }
-            for (const task of tasks) {
-              const init = containers.filter(item => item.service === "task-init" && item.project === task.project);
-              const evidence = containers.filter(item => item.service === "evidence" && item.project === task.project);
-              assert.equal(init.length, 1);
-              assert.equal(evidence.length, 1);
-              assert.equal(workspace(init[0]).Source, workspace(task).Source);
-              assert.equal(workspace(evidence[0]).Source, workspace(task).Source);
-              assert.equal(task.mounts.some(mount => gradeSources.includes(mount.Source)), false,
-                "Grade workspace exposed to task");
-            }
-            for (const container of containers) {
-              assert.ok(container.service === null || Object.hasOwn(targets, container.service), "Unexpected native service");
-              assert.equal(container.image, process.env.IMAGE);
-              assert.equal(container.networkMode, "none");
-              for (const mount of container.mounts) {
-                if (mount.Type === "bind") {
-                  assert.ok(mount.Source.startsWith(`${process.env.RUNNER_TEMP}/`), "Unexpected host bind mount");
-                } else {
-                  assert.ok(["volume", "tmpfs"].includes(mount.Type), "Unexpected mount type");
-                }
-              }
-            }
-            stage = "compose";
-            const root = path.join(process.env.RUNNER_TEMP, "docker-smoke");
-            const scratch = path.join(root, "captured-compose");
-            const hash = value => createHash("sha256").update(value).digest("hex");
-            const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
-            const only = (value, keys) => assert.ok(value && Object.keys(value).every(key => keys.includes(key)), "Unknown Compose field");
-            const commands = {
-              "task-init": ["d519d698faa253bad4f401e6340ef6ab603abb8be5ba4b18bd700bb20dbd177b"],
-              "grade-init": ["0207b427eefa48d407d1418041c9cdb505a3c2d87ec27646216f5776e3186139"],
-              service: ["02519153bcc74578009c7206489ad37de85eea320351db96c848ea1f0e8305b0",
-                "8fed1e1d69cc0a3516f22646b670c099353f3c76d11411d219e5f7fdc9cf23a2"],
-            };
-            const validate = (model, project, base = false) => {
-              only(model, ["name", "services", "volumes", "networks"]);
-              assert.ok(!model.name || model.name === project.project, "Unknown model identity");
-              for (const [name, volume] of Object.entries(model.volumes ?? {})) {
-                only(volume, ["name", "external"]);
-                assert.ok(/^[a-z0-9-]{1,128}$/.test(name) && volume.external === true &&
-                  /^vally-[a-z0-9-]{1,128}$/.test(volume.name), "Unknown external volume");
-              }
-              for (const [name, network] of Object.entries(model.networks ?? {})) {
-                only(network, ["name", "labels"]);
-                assert.ok(name === "default" && (!network.name || network.name === `${project.project}_default`), "Unknown network");
-                for (const [key, value] of Object.entries(network.labels ?? {})) {
-                  assert.ok(/^com\.microsoft\.vally\.(owner|trial|kind|run)$/.test(key) && /^[a-zA-Z0-9:._/-]{1,256}$/.test(value), "Unknown resource label");
-                }
-              }
-              for (const [name, service] of Object.entries(model.services)) {
-                assert.ok(Object.hasOwn(targets, name), "Unknown Compose service");
-                assert.ok(service.image === process.env.IMAGE, "Wrong Compose image");
-                const profile = ["task", "task-init", "evidence"].includes(name) ? "vally-task" : "vally-grade";
-                assert.ok(same(service.profiles, [profile]), "Unknown service profile");
-                if (!base && project.role === "task" && name === "grade") {
-                  only(service, ["image", "profiles", "volumes", "networks"]);
-                  assert.ok(!service.networks || same(service.networks, { default: null }) ||
-                    same(service.networks, { default: {} }), "Unknown inactive network");
-                  assert.ok(same(service.volumes, [{ type: "volume", target: "/workspace", read_only: true }]), "Unexpected inactive grade");
-                  continue;
-                }
-                only(service, ["image", "user", "entrypoint", "command", "stop_signal", "stop_grace_period", "working_dir", "profiles", "volumes",
-                  "tmpfs", "cap_drop", "cap_add", "security_opt", "environment", "network_mode", "depends_on"]);
-                if (base) {
-                  assert.ok(name === "grade" && same(service, { image: process.env.IMAGE, profiles: ["vally-grade"],
-                    volumes: [{ type: "volume", target: "/workspace", read_only: true }] }), "Unexpected readonly base");
-                  continue;
-                }
-                const initializer = name.endsWith("-init");
-                assert.ok(service.user === (initializer || name === "evidence" ? "0:0" : "1000:1000"), "Wrong Compose user");
-                assert.ok(service.entrypoint === "sh" || same(service.entrypoint, ["sh"]), "Unknown entrypoint");
-                const commandHash = hash(JSON.stringify(service.command));
-                assert.ok((commands[name] ?? commands.service).includes(commandHash), "Unknown native command");
-                assert.ok(service.network_mode === "none" && same(service.cap_drop, ["ALL"]) &&
-                  same(service.security_opt, ["no-new-privileges:true"]), "Unsafe Compose service");
-                assert.ok(!service.stop_signal || service.stop_signal === "SIGTERM", "Unknown stop signal");
-                assert.ok(!service.stop_grace_period || service.stop_grace_period === "1s", "Unknown stop period");
-                assert.ok(!service.working_dir || service.working_dir === "/workspace", "Unknown working directory");
-                const capabilities = name === "grade-init" ? ["CHOWN", "DAC_READ_SEARCH"] : initializer ? ["CHOWN"] : name === "evidence" ? ["DAC_READ_SEARCH"] : undefined;
-                assert.ok(same(service.cap_add, capabilities), "Unknown added capability");
-                for (const [key, value] of Object.entries(service.environment ?? {})) {
-                  const home = name === "task" ? "/var/lib/vally/task-home" : "/tmp/vally-home";
-                  const expected = { HOME: home, PATH: `${home}/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin` };
-                  assert.ok(Object.hasOwn(expected, key) ? value === expected[key] :
-                    name === "task" && key === "PROBE_TASK_ONLY" && [null, "synthetic-task-marker"].includes(value), "Unknown environment value");
-                }
-                for (const tmpfs of service.tmpfs ?? []) assert.ok(tmpfs === "/tmp/vally-home:rw,mode=0700,uid=1000,gid=1000", "Unknown tmpfs");
-                for (const [dependency, options] of Object.entries(service.depends_on ?? {})) {
-                  only(options, ["condition", "required"]);
-                  assert.ok(dependency === `${project.role}-init` && options.condition === "service_completed_successfully" &&
-                    options.required !== false, "Unknown dependency");
-                }
-                for (const mount of service.volumes) {
-                  only(mount, ["type", "source", "target", "read_only", "volume", "bind"]);
-                  assert.ok(targets[name].includes(mount.target) && ["volume", "bind"].includes(mount.type), "Unknown Compose mount");
-                  assert.ok(mount.read_only === undefined || typeof mount.read_only === "boolean", "Invalid mount mode");
-                  if (mount.type === "bind") assert.ok(mount.source.startsWith(`${root}/`) &&
-                    path.resolve(mount.source) === mount.source, "External bind source");
-                  else assert.ok(Object.hasOwn(model.volumes ?? {}, mount.source), "Unknown volume key");
-                  if (mount.volume) { only(mount.volume, ["nocopy"]); assert.equal(mount.volume.nocopy, true, "Unknown volume option"); }
-                  if (mount.bind) { only(mount.bind, ["create_host_path"]); assert.equal(typeof mount.bind.create_host_path, "boolean", "Unknown bind option"); }
-                }
-              }
-            };
-            const projects = readFileSync(path.join(scratch, "captures.jsonl"), "utf8").trim().split("\n").map(line => JSON.parse(line));
-            assert.ok(projects.length === 4 && new Set(projects.map(item => item.project)).size === 4, "Incomplete Compose captures");
-            const version = readFileSync(path.join(process.env.EVIDENCE, "compose-version.txt"), "utf8").trim();
-            assert.equal(version, "Docker Compose version v2.38.2", "Unqualified frontend");
-            for (const project of projects) {
-              only(project, ["project", "role", "profile", "projectDirectory", "containerId", "inputs"]);
-              const observed = containers.filter(item => item.project === project.project);
-              assert.ok(observed.some(item => item.id === project.containerId) && project.projectDirectory === root &&
-                project.profile === `vally-${project.role}` && ["task", "grade"].includes(project.role), "Unknown captured project");
-              assert.ok(project.inputs.length === 2 && !existsSync(path.join(root, ".env")), "Unexpected rendering context");
-              const bytes = project.inputs.map((input, index) => {
-                composeStage = "original input validation";
-                only(input, ["sourcePath", "capturedPath", "sha256"]);
-                assert.ok(index === 0 ? input.sourcePath === path.join(root, "readonly-grade.compose.yaml") :
-                  input.sourcePath.startsWith(`${root}/tmp/`) && path.resolve(input.sourcePath) === input.sourcePath &&
-                  path.basename(input.sourcePath) === `docker-compose.${project.role}.generated.yml`, "Unknown original input");
-                assert.equal(input.capturedPath, path.join(scratch, `${project.project}-${index}.yaml`), "Unknown captured path");
-                const value = readFileSync(input.capturedPath);
-                assert.ok(value.length <= 1048576 && hash(value) === input.sha256, "Changed captured bytes");
-                const model = parse(value.toString("utf8"));
-                assert.equal(value.toString("utf8").trimEnd(), stringify(model).trimEnd(), "Noncanonical captured YAML");
-                validate(model, project, index === 0);
-                return value;
-              });
-              summary.compose.projects.push(project);
-              const args = ["compose", "--project-directory", root, "--project-name", project.project,
-                ...project.inputs.flatMap(input => ["-f", input.capturedPath]), "--profile", project.profile, "config", "--format", "json"];
-              const env = { PATH: process.env.PATH, HOME: path.join(root, "home"), TMPDIR: path.join(root, "tmp"),
-                CI: "1", DO_NOT_TRACK: "1", VALLY_TELEMETRY_OPTOUT: "1", PROBE_TASK_ONLY: "synthetic-task-marker" };
-              project.renderer = { version, argv: args, status: "running" };
-              composeStage = "frontend execution";
-              const output = execFileSync("docker", args, { env, cwd: root, timeout: 15000, maxBuffer: 2097152 });
-              composeStage = "rendered model validation";
-              const model = JSON.parse(output.toString("utf8"));
-              validate(model, project);
-              const active = Object.entries(model.services).filter(([, service]) => !service.profiles?.length || service.profiles.includes(project.profile));
-              composeStage = "runtime correlation";
-              assert.deepEqual(active.map(([name]) => name).sort(), observed.map(item => item.service).sort(), "Active service mismatch");
-              for (const [name, service] of active) {
-                const actual = observed.find(item => item.service === name);
-                assert.deepEqual(service.volumes.map(mount => mount.target).sort(), actual.mounts.map(mount => mount.Destination).sort(), "Rendered target mismatch");
-                for (const mount of service.volumes) {
-                  const fact = actual.mounts.find(item => item.Destination === mount.target);
-                  assert.ok(mount.type === fact.Type && (mount.read_only === true) === !fact.RW &&
-                    (mount.type === "volume" ? model.volumes[mount.source].name === fact.Name : mount.source === fact.Source), "Rendered mount mismatch");
-                }
-              }
-              for (const [index, value] of bytes.entries()) {
-                composeStage = "safe retention";
-                const retainedPath = path.join(process.env.EVIDENCE, `${project.project}-${index}.yaml`);
-                writeFileSync(retainedPath, value, { flag: "wx", mode: 0o600 });
-                project.inputs[index].retainedPath = retainedPath;
-              }
-              project.renderedPath = path.join(process.env.EVIDENCE, `${project.project}.json`);
-              writeFileSync(project.renderedPath, output, { flag: "wx", mode: 0o600 });
-              project.renderer = { version, argv: args, exitCode: 0, sha256: hash(output), status: "passed" };
-            }
-            summary.compose.status = "passed";
-            summary.status = "passed";
-          } catch (error) {
-            summary.status = "failed-or-unavailable";
-            if (stage === "compose") {
-              summary.compose.status = "failed-or-unavailable";
-              for (const project of summary.compose.projects.filter(item => item.renderer?.status === "running")) {
-                project.renderer = { ...project.renderer, status: "failed-or-unavailable", exitCode: error.status ?? null, signal: error.signal ?? null };
-              }
-            }
-            summary.error = { name: error.name, message: stage === "compose" ? "Compose capture/render validation failed" : error.message,
-              code: error.code ?? null, exitCode: error.status ?? null, signal: error.signal ?? null,
-              stage: stage === "compose" ? composeStage : "native" };
-            process.exitCode = 1;
-          } finally {
-            writeFileSync(path.join(process.env.EVIDENCE, "native-docker-summary.json"), JSON.stringify(summary, null, 2) + "\n");
-            console.log(JSON.stringify(summary));
-          }
-          NODE
-      - name: Verify package source bytes stayed unchanged
-        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
-        run: sha256sum --check "$RUNNER_TEMP/evidence/source-sha256.txt"
-      - name: Remove only this job's remaining candidate containers and image
+            env -i PATH="$PATH" HOME="$root/home" docker rm "$name" > "$root/raw/remove.out"
+          done
+          printf 'passed\n' > "$root/raw/roles-ok"
+          node "$root/probe.mjs" prepare > "$root/raw/prepare.out" 2> "$root/raw/prepare.err"
+          for case_name in positive wrong-digest modified-checker; do
+            case="$root/cases/$case_name"
+            node "$root/probe.mjs" observe "$case_name" > "$case/observer.out" 2> "$case/observer.err" &
+            observer_pid=$!
+            trap 'kill -TERM "$observer_pid"; wait "$observer_pid"' EXIT
+            ready=false
+            for attempt in {1..100}; do
+              kill -0 "$observer_pid"
+              if grep -q '"ready":true,"failed":false' "$case/observation.json" 2>/dev/null; then ready=true; break; fi
+              sleep 0.1
+            done
+            "$ready"
+            kill -0 "$observer_pid"
+            printf 'attempted\n' > "$case/attempted"
+            code=0
+            (
+              cd "$case"
+              timeout --signal=TERM --kill-after=15s 120s env -i PATH="$PATH" HOME="$case/home" TMPDIR="$case/tmp" \
+                CI=1 DO_NOT_TRACK=1 VALLY_TELEMETRY_OPTOUT=1 \
+                "$cli" grade --eval-spec "$case/eval.yaml" --output jsonl --require-pass \
+                --backend docker --backend-args "task-image=$image" --backend-args "grade-image=$image" \
+                --backend-args task-network=none --backend-args grade-network=none \
+                --workspace "$case/workspace" --assets-dir "$case/assets" --artifact-dir "$case/artifact" \
+                < "$case/input.json" > "$case/stdout" 2> "$case/stderr"
+            ) || code=$?
+            printf '%s\n' "$code" > "$case/exit"
+            kill -TERM "$observer_pid"
+            wait "$observer_pid"
+            trap - EXIT
+            node "$root/probe.mjs" finish "$case_name" > "$case/finish.out" 2> "$case/finish.err"
+          done
+      - name: Project final state and remove private scratch and owned resources
+        id: cleanup
         if: always()
+        timeout-minutes: 3
         run: |
           set -euo pipefail
-          clean_home="$RUNNER_TEMP/docker-smoke/home"
-          if [[ -n "${IMAGE:-}" ]]; then
-            remaining="$(env -i PATH="$PATH" HOME="$clean_home" docker ps --all --quiet --filter "ancestor=$IMAGE")"
-            if [[ -n "$remaining" ]]; then
-              mapfile -t ids <<< "$remaining"
-              for id in "${ids[@]}"; do
-                env -i PATH="$PATH" HOME="$clean_home" docker inspect \
-                  --format '{"id":{{json .Id}},"mounts":{{json .Mounts}},"networkMode":{{json .HostConfig.NetworkMode}}}' \
-                  "$id" >> "$RUNNER_TEMP/evidence/cleanup-container-facts.jsonl"
-                env -i PATH="$PATH" HOME="$clean_home" docker rm --force --volumes "$id"
-              done
-            fi
-            env -i PATH="$PATH" HOME="$clean_home" docker image rm "skill-effectiveness-probe:$GITHUB_SHA"
+          root="$RUNNER_TEMP/protected-input"
+          export SKILL="$PWD" PROBE_ROOT="$root"
+          status=0
+          if [[ -f "$root/probe.mjs" ]]; then
+            timeout --signal=TERM --kill-after=5s 90s node "$root/probe.mjs" cleanup > /dev/null 2>&1 || status=1
+          else
+            printf '%s\n' '::error::Protected-input preparation unavailable; no native acceptance'
+            status=1
           fi
-      - name: Upload synthetic native Docker evidence
-        if: always()
+          for target in raw cases context home probe.mjs protected-input-check.mjs protected-input-probe.eval.yaml; do
+            file="$root/$target"
+            if [[ -e "$file" ]]; then
+              if [[ "$(realpath "$file" 2>/dev/null)" == "$file" ]]; then rm -r "$file" > /dev/null 2>&1 || status=1; else status=1; fi
+            fi
+          done
+          if [[ -f "$root/upload-ready" ]]; then printf '%s\n' 'safe=true' >> "$GITHUB_OUTPUT"; fi
+          if [[ "$status" -ne 0 ]]; then printf '%s\n' '::error::Protected-input cleanup or projection failed'; fi
+          exit "$status"
+      - name: Upload only bounded synthetic structural evidence
+        if: always() && steps.cleanup.outputs.safe == 'true'
+        timeout-minutes: 2
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: skill-effectiveness-public-appliance-smoke
-          path: ${{ runner.temp }}/evidence/
+          name: skill-effectiveness-protected-input-probe
+          path: |
+            ${{ runner.temp }}/protected-input/safe/identities.json
+            ${{ runner.temp }}/protected-input/safe/summary.json
           if-no-files-found: error
           retention-days: 14
