@@ -145,7 +145,7 @@ try {
     spec.environment = { skills: arm === "treatment" ? ["./canary-skill"] : [] };
     const evalFile = join(fixture, arm + ".eval.yaml");
     writeFileSync(evalFile, stringify(spec));
-    const code = await native(["eval", evalFile, "--executor-plugin", plugin, "--output-dir", join(root, "out", arm),
+    const code = await native(["eval", "--eval-spec", evalFile, "--executor-plugin", plugin, "--output-dir", join(root, "out", arm),
       "--workspace", join(root, "preserved", arm), ...backend]);
     await Promise.all(captureTasks);
     if (observerError) throw observerError;
