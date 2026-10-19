@@ -97,6 +97,10 @@ try {
       }), "Actual offered bash invocation");
       const text = typeof result === "string" ? result : [result?.error, result?.textResultForLlm].filter(value => typeof value === "string").join("\n");
       record.resultType = typeof result?.resultType === "string" ? result.resultType : "untyped-result";
+      if (record.resultType !== "success") record.diagnostic = text.slice(0, 768)
+        .replace(/\u001b\[[0-9;]*m/g, "")
+        .replace(/(?:[a-z][a-z0-9+.-]*:\/\/|\/)[^\s"'<>]*/gi, "[path]")
+        .replace(/(?:token|secret|password|authorization|api[_-]?key)\s*[:=]\s*\S+/gi, "[redacted]");
       record.permissionDenied = /permission[\s\S]{0,100}denied|denied[\s\S]{0,100}permission|denied-no-approval|not approved|user rejected/i.test(text);
       record.notOffered = /unknown tool|tool[\s\S]{0,120}not (?:found|available|offered)/i.test(text);
       record.markerPresent = existsSync(marker);
