@@ -334,13 +334,26 @@ jobs:
               : Object.keys(tmpfs).length === 0, "invalid-tmpfs");
             return service ?? "check";
           }
+          export function bindRequest(actual, config) {
+            ensure(Array.isArray(actual.graderConfigs) && actual.graderConfigs.length === 1, "invalid-request");
+            const grader = actual.graderConfigs[0];
+            exact(grader, ["type", "name", "config"]); exact(grader.config, ["program", "timeout", "args"]);
+            ensure(grader.type === "program" && grader.name === "protected-input-probe" &&
+              grader.config.program === "node" && grader.config.timeout === "30s" &&
+              Array.isArray(grader.config.args) && grader.config.args.every(v => typeof v === "string") &&
+              JSON.stringify(grader.config.args) === JSON.stringify(config.args), "invalid-request");
+            const trajectory = actual.trajectory;
+            ensure(trajectory?.id === config.id && trajectory.workDir === "/workspace", "invalid-request");
+            return { id: trajectory.id, workDir: trajectory.workDir, assetsDir: trajectory.assetsDir,
+              artifactDir: trajectory.artifactDir, programBound: true };
+          }
           export function correlate(facts, request, config, dir) {
             ensure(facts.length === 3 && new Set(facts.map(f => f.id)).size === 3, "invalid-topology");
             const byRole = new Map(facts.map(f => [validateFact(f, dir), f]));
             ensure(byRole.size === 3 && byRole.has("check"), "invalid-topology");
             const grade = byRole.get("grade"), init = byRole.get("grade-init");
             ensure(grade && init && grade.labels["com.docker.compose.project"] === init.labels["com.docker.compose.project"], "invalid-topology");
-            ensure(request?.id === config.id && request.workDir === "/workspace", "invalid-request");
+            ensure(request?.id === config.id && request.workDir === "/workspace" && request.programBound === true, "invalid-request");
             const refs = grade.mounts.filter(m => m.Type === "volume" && m.Destination.startsWith("/var/lib/vally-host/"));
             ensure(refs.length === 2 && refs.every(m => !m.RW), "writable-reference");
             ensure(grade.mounts.length === 5 && init.mounts.length === 6, "invalid-topology");
@@ -386,32 +399,37 @@ jobs:
             const visit = (value, depth = 0) => {
               ensure(++visited <= 128 && depth <= 8, "traversal-limit");
               if (value && typeof value === "object") {
-                if (value.metadata?.program !== undefined) {
-                  ensure(value.metadata.program === "node", "unexpected-program"); programs.push(value);
+                if (value.configuredName !== undefined) {
+                  ensure(value.configuredName === "protected-input-probe" && value.graderType === "program", "unexpected-program");
+                  programs.push(value);
                 }
                 for (const item of Object.values(value)) visit(item, depth + 1);
               }
             };
             at("program-result"); visit(record.gradeResult); ensure(programs.length === 1, "invalid-program");
-            const result = programs[0], meta = result.metadata;
-            ensure(JSON.stringify(meta.args) === JSON.stringify(config.args) && meta.timeout === "30s" && result.kind === "code" &&
-              [meta.stdout, meta.stderr].every(v => typeof v === "string" && Buffer.byteLength(v) <= 65536), "invalid-program");
+            const result = programs[0], meta = result.metadata, aggregate = record.gradeResult;
+            ensure(aggregate.name === "trajectory-grade" && aggregate.kind === "code" && aggregate.status !== "error" &&
+              Array.isArray(aggregate.details) && aggregate.details.length === 1 && aggregate.details[0] === result &&
+              result.kind === "code" && result.name === "protected-input-probe" && result.status !== "error", "invalid-program");
             at("verdict"); const positive = config.name === "positive";
             if (positive) {
-              ensure(exitCode === 0 && (!Object.hasOwn(meta, "exit_code") || meta.exit_code === 0) &&
-                result.passed === true && result.score === 1 && result.name === "protected-input-probe" &&
-                result.status !== "error" && meta.stderr === "protected-input-checker-entered\n", "positive-failed");
-              const verdict = JSON.parse(meta.stdout), evidence = JSON.parse(verdict.evidence);
-              ensure(Object.keys(verdict).sort().join() === ["name", "kind", "passed", "score", "evidence"].sort().join() &&
-                verdict.name === result.name && verdict.kind === "code" && verdict.passed === true && verdict.score === 1 &&
-                result.evidence === verdict.evidence &&
+              exact(result, ["name", "kind", "passed", "score", "evidence", "graderType", "configuredName"]);
+              ensure(exitCode === 0 && aggregate.passed === true && aggregate.score === 1 &&
+                result.passed === true && result.score === 1 && typeof result.evidence === "string" &&
+                Buffer.byteLength(result.evidence) <= 65536, "positive-failed");
+              const evidence = JSON.parse(result.evidence);
+              ensure(evidence && !Array.isArray(evidence) &&
                 Object.keys(evidence).length === keys.length && keys.every(k => evidence[k] === true), "invalid-verdict");
             } else {
-              ensure(exitCode === 1 && meta.exit_code === 1 && result.passed === false && result.score === 0 && result.name === "program" &&
+              ensure(meta && meta.program === "node" && JSON.stringify(meta.args) === JSON.stringify(config.args) &&
+                meta.timeout === "30s" && [meta.stdout, meta.stderr].every(v => typeof v === "string" &&
+                  Buffer.byteLength(v) <= 65536), "invalid-program");
+              ensure(exitCode === 1 && aggregate.passed === false && aggregate.score === 0 && meta.exit_code === 1 &&
+                result.passed === false && result.score === 0 &&
                 meta.stdout === "" && meta.stderr === "protected-input-failure:trusted-integrity-mismatch\n", "negative-failed");
             }
             return { name: config.name, status: "passed", nativePassed: positive, expectedRejection: !positive,
-              nativeCliExit: exitCode, nativeProgramExit: Object.hasOwn(meta, "exit_code") ? meta.exit_code : null,
+              nativeCliExit: exitCode, nativeProgramExit: positive ? null : meta.exit_code,
               proof: positive ? Object.fromEntries(keys.map(k => [k, true])) : { trustedIntegrityMismatch: true, checkerBodyEntered: false },
               nativeRunId: record.runId, inputId: config.id, inputHash: config.inputHash, evalHash: config.evalHash,
               checkerHash: config.checkerHash, mountsCorrelated: true, nativeCleanupComplete: false, ...topology };
@@ -482,8 +500,7 @@ jobs:
                         const matches = files.filter(n => /^grade-request-[a-f0-9-]{36}\.json$/.test(n));
                         ensure(matches.length === 1, "invalid-request");
                         const actual = JSON.parse(bounded(path.join(control, matches[0]), 65536));
-                        state.request = { id: actual.trajectory.id, workDir: actual.trajectory.workDir,
-                          assetsDir: actual.trajectory.assetsDir, artifactDir: actual.trajectory.artifactDir };
+                        state.request = bindRequest(actual, read(path.join(dir, "case.json")));
                       }
                     }
                     persist();
