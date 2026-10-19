@@ -99,6 +99,7 @@ jobs:
             "failed failure invalid unknown unrecognized unexpected unsupported missing required argument option command value expected received " +
             "unresolved parameter placeholder define them params provide inline defaults reason --param " +
             "no such object container volume response daemon inspect stat lstat realpath bind canonicalization validation type function listener format " +
+            "template parsing executing map has entry key tmpfs hostconfig config labels mounts " +
             "not found is a an the of for to in at and or must be provided specified available directory file path permission denied access " +
             "docker backend task grade image network workspace assets artifact eval spec validation stdin input output json jsonl " +
             "enoent eacces eperm einval err_module_not_found err_require_esm err_unknown_file_extension err_invalid_arg_value " +
@@ -296,7 +297,7 @@ jobs:
           }
           const inspect = id => {
             ensure(/^[a-f0-9]{64}$/.test(id), "invalid-container");
-            const format = '{"id":{{json .Id}},"image":{{json .Image}},"user":{{json .Config.User}},"mounts":{{json .Mounts}},"tmpfs":{{json .HostConfig.Tmpfs}},"network":{{json .HostConfig.NetworkMode}},"privileged":{{json .HostConfig.Privileged}},"labels":{{json .Config.Labels}}}';
+            const format = '{"id":{{json .Id}},"image":{{json .Image}},"user":{{json .Config.User}},"mounts":{{json .Mounts}},"tmpfs":{{json (index .HostConfig "Tmpfs")}},"network":{{json .HostConfig.NetworkMode}},"privileged":{{json .HostConfig.Privileged}},"labels":{{json .Config.Labels}}}';
             const fact = JSON.parse(docker(["inspect", "--format", format, id]));
             ensure(fact.id === id, "invalid-container"); return fact;
           };
