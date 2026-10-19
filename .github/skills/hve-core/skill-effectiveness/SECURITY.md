@@ -380,8 +380,10 @@ and disabled infinite sessions. These controls apply to the reviewer, not the
 Vally candidate. Dependencies and the local runtime execute with host privileges.
 The built-in candidate executor's approving permission path is not deny-by-default.
 The distinct adapter source replaces that handler with explicit tools, native
-managed rules and a denial callback, but its exact-stack integration, runtime
-support and OS containment are unverified. No gap is closed by mocked wiring. Broad
+managed rules and the canonical `{ kind: "reject" }` denial callback. Malformed
+permission responses are operational failures, not verified policy denials.
+Its exact-stack integration, runtime support and OS containment are unverified.
+No gap is closed by mocked wiring. Broad
 shell/interpreter access is not safe merely because a session is fresh.
 
 ### Risk Rating

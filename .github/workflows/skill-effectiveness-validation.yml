@@ -36,6 +36,9 @@ jobs:
           set -euo pipefail
           node ../../../validation/skill-effectiveness/containment-identity.mjs
           npm ci --ignore-scripts --include=dev --no-audit --no-fund --fetch-retries=0 --fetch-timeout=60000
+      - name: Run full model-free package regression
+        timeout-minutes: 5
+        run: npm test
       - name: Verify actual offered-tool denial with positive control
         timeout-minutes: 5
         run: |

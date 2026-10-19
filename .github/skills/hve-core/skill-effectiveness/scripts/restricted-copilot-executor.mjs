@@ -82,7 +82,7 @@ export function restrictedFactories(context, createClient = options => new Copil
                 disableBypassPermissionsMode: "disable",
               },
             },
-            onPermissionRequest: () => ({ kind: "denied-no-approval-rule-and-could-not-request-from-user" }),
+            onPermissionRequest: () => ({ kind: "reject" }),
           }), timeoutMs, "Restricted session creation");
           await bounded(() => session.rpc.tools.initializeAndValidate(), timeoutMs, "Restricted tool initialization");
           const metadata = await bounded(() => session.rpc.tools.getCurrentMetadata(), timeoutMs, "Restricted tool inventory");

@@ -383,7 +383,7 @@ test("restricted factories forward native environment and hooks and deny every h
     });
     for (const kind of ["read", "write", "shell", "url", "mcp", "custom-tool", "future-kind"]) {
       assert.deepEqual(await options.onPermissionRequest({ kind }), {
-        kind: "denied-no-approval-rule-and-could-not-request-from-user",
+        kind: "reject",
       });
     }
     options.availableTools.push("unexpected-mutation");
@@ -451,7 +451,7 @@ test("restricted policy and diagnostic inventory capture compose before returnin
     assert.deepEqual(received.availableTools, ["view"]);
     assert.equal(received.managedSettings.permissions.disableBypassPermissionsMode, "disable");
     assert.equal(received.onPermissionRequest({ kind: "shell" }).kind,
-      "denied-no-approval-rule-and-could-not-request-from-user");
+      "reject");
     assert.equal(input.availableTools, undefined);
     assert.deepEqual(calls, ["initialize", "skills", "initialize"]);
     const record = JSON.parse(readFileSync(join(root, `${session.sessionId}.json`), "utf8"));

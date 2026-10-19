@@ -8,7 +8,7 @@ const hash = value => createHash("sha256").update(value).digest("hex");
 const files = execFileSync("git", ["ls-files", "."], { encoding: "utf8" }).trim().split("\n").sort();
 assert.equal(files.length, 24);
 const inventory = files.map(file => `${file} ${hash(readFileSync(file, "utf8").replace(/\r\n/g, "\n"))}\n`).join("");
-assert.equal(hash(inventory), "af5126c38001aaca5c85b6c25bef803a924683398516790fc05e34c055843afb");
+assert.equal(hash(inventory), "a5090731b421f2b854545cedfb9cea60be10905fab48a56b72f34c2bb26ace19");
 assert.equal(hash(readFileSync("package-lock.json")), "b9c750fbb43bcf37350da9f62722d737380f0e271a78210be6ad64cd63862da2");
 assert.equal(process.version, "v24.14.0");
 console.log("Frozen production source, lock and Node verified.");

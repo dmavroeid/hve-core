@@ -153,10 +153,12 @@ sessionPolicy:
   not a handwritten command-prefix or filesystem parser. Validate malformed
   rules through native session initialization before any candidate prompt.
 * Replace the executor's approving handler with an explicit SDK denial result,
-  `kind: "denied-no-approval-rule-and-could-not-request-from-user"`, for every
+  `kind: "reject"`, for every
   permission request reaching the host. Only native rules may admit operations
   before this fallback. Unknown kinds deny; no request is left pending, no
   original approving callback is invoked and no interactive approval is assumed.
+  Use the pinned native permission protocol's canonical decision; a malformed
+  callback response is an operational failure, not evidence of policy denial.
 * Apply policy last on each fresh environment-scoped session and replacement
   client. Per-execution context prevents concurrent runs from sharing policy.
   Preserve native provider validation and delegate only provider configuration

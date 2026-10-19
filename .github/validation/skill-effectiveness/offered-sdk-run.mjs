@@ -54,7 +54,7 @@ try {
           onPermissionRequest: async (...args) => {
             record.permissionRequests++;
             const decision = await handler(...args);
-            record.decisionKinds.push(["approved", "denied-no-approval-rule-and-could-not-request-from-user"].includes(decision?.kind) ? decision.kind : "other");
+            record.decisionKinds.push(["approve-once", "reject", "denied-no-approval-rule-and-could-not-request-from-user"].includes(decision?.kind) ? decision.kind : "other");
             persist();
             return decision;
           },
@@ -76,7 +76,7 @@ try {
       };
       if (positive) {
         client = createClient({});
-        session = await bounded(() => client.createSession({ ...config, availableTools: ["bash"], onPermissionRequest: () => ({ kind: "approved" }) }), "Positive-control session");
+        session = await bounded(() => client.createSession({ ...config, availableTools: ["bash"], onPermissionRequest: () => ({ kind: "approve-once" }) }), "Positive-control session");
         await bounded(() => session.rpc.tools.initializeAndValidate(), "Positive-control tools");
       } else {
         await context.run({ policy, timeoutMs: 10000 }, async () => {
@@ -102,10 +102,12 @@ try {
         .replace(/(?:[a-z][a-z0-9+.-]*:\/\/|\/)[^\s"'<>]*/gi, "[path]")
         .replace(/(?:token|secret|password|authorization|api[_-]?key)\s*[:=]\s*\S+/gi, "[redacted]");
       record.permissionDenied = /permission[\s\S]{0,100}denied|denied[\s\S]{0,100}permission|denied-no-approval|not approved|user rejected/i.test(text);
+      record.protocolFailure = /malformed payload|unexpected user permission response|internal error|unknown variant/i.test(text);
       record.notOffered = /unknown tool|tool[\s\S]{0,120}not (?:found|available|offered)/i.test(text);
       record.markerPresent = existsSync(marker);
       record.markerMatches = record.markerPresent && readFileSync(marker, "utf8") === "SYNTHETIC";
       persist();
+      assert.equal(record.protocolFailure, false, "Malformed permission responses are not valid denial evidence");
       assert.equal(record.notOffered, false, "Offered-tool proof must not rely on unavailable tools");
       if (positive) {
         assert.equal(record.resultType, "success");
@@ -113,7 +115,7 @@ try {
       } else {
         assert.equal(record.markerPresent, false);
         assert.ok(record.permissionRequests > 0, "Actual production deny handler must be reached");
-        assert.ok(record.decisionKinds.every(kind => kind === "denied-no-approval-rule-and-could-not-request-from-user"));
+        assert.ok(record.decisionKinds.every(kind => kind === "reject"));
         assert.ok(record.resultType === "denied" || (["failure", "rejected"].includes(record.resultType) && record.permissionDenied),
           "Explicit offered-tool permission rejection required");
       }
