@@ -175,6 +175,10 @@ try {
     assert.equal(record.status, "error");
     assert.equal(record.trajectory, null, "No fabricated successful task trajectory");
     assert.equal(record.gradeResult, null, "Expected preflight stop is not a completed grade");
+    const nativeRecordHash = createHash("sha256").update(line).digest("hex");
+    const nativeRecordDir = join(safe, "native-records");
+    mkdirSync(nativeRecordDir, { recursive: true });
+    writeFileSync(join(nativeRecordDir, arm + ".json"), line, { flag: "wx" });
     const workspace = record.workspacePath;
     const facts = JSON.parse(readFileSync(join(workspace, "same-session-facts.json"), "utf8"));
     const capture = summary.captures.find(c => c.arm === arm);
@@ -189,10 +193,6 @@ try {
     assert.equal(facts.createSessionCalls, 1);
     for (const key of ["promptCalls", "modelEvents", "catalogCalls"]) assert.equal(facts[key], 0);
     assert.equal(capture.status, "passed");
-    const nativeRecordHash = createHash("sha256").update(line).digest("hex");
-    const nativeRecordDir = join(safe, "native-records");
-    mkdirSync(nativeRecordDir, { recursive: true });
-    writeFileSync(join(nativeRecordDir, arm + ".json"), line, { flag: "wx" });
     summary.cases.push({ arm, nativeStatus: record.status, preflightStatus: "passed", createSessionCalls: 1, promptCalls: 0, modelEvents: 0,
       captureSessionId: capture.sessionId, containerId: capture.containerId, inventorySha256: capture.sha256,
       nativeRecordHash, bindingToken: capture.bindingToken, trajectory: null, gradeResult: null });
@@ -210,7 +210,7 @@ try {
   summary.status = "passed"; summary.stage = "complete";
 } catch (error) {
   summary.status = "failed";
-  const collect = dir => existsSync(dir) ? readdirSync(dir, { withFileTypes: true }).flatMap(entry => entry.isDirectory() ? collect(join(dir, entry.name)) : entry.name === "sdk-result.json" ? [JSON.parse(readFileSync(join(dir, entry.name), "utf8"))] : []) : [];
+  const collect = dir => existsSync(dir) ? readdirSync(dir, { withFileTypes: true }).flatMap(entry => entry.isDirectory() ? collect(join(dir, entry.name)) : ["sdk-result.json", "same-session-facts.json"].includes(entry.name) ? [JSON.parse(readFileSync(join(dir, entry.name), "utf8"))] : []) : [];
   summary.sdkDiagnostics = collect(join(root, "preserved"));
   const diagnostic = ["native-last.log", "last-command.log"].filter(name => existsSync(join(root, name))).map(name => readFileSync(join(root, name), "utf8").slice(-2048)).join("\n");
   summary.failure = { stage: summary.stage, name: error.name, code: error.code ?? null, exitCode: error.exitCode ?? null,
