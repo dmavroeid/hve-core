@@ -38,14 +38,14 @@ stimuli:
                 const roots = ["EVALUATE_ASSETS", "EVALUATE_ARTIFACT_DIR", "EVALUATE_WORKSPACE"]
                   .map(key => {
                     const value = process.env[key];
-                    if (!value || !isAbsolute(value)) throw new Error(`Missing/invalid ${key}`);
+                    if (!value || !isAbsolute(value)) throw new Error("Missing/invalid " + key);
                     const root = realpathSync(value);
-                    if (!lstatSync(root).isDirectory()) throw new Error(`Invalid ${key}`);
+                    if (!lstatSync(root).isDirectory()) throw new Error("Invalid " + key);
                     return root;
                   });
                 const within = (root, file) => {
                   const part = relative(root, file);
-                  return part === "" || (!isAbsolute(part) && part !== ".." && !part.startsWith(`..${sep}`));
+                  return part === "" || (!isAbsolute(part) && part !== ".." && !part.startsWith(".." + sep));
                 };
                 for (const [index, root] of roots.entries()) {
                   for (const other of roots.slice(index + 1)) {
@@ -88,6 +88,6 @@ stimuli:
                   report(true, "Authenticated task checker completed");
                 }
               } catch (error) {
-                report(false, `${error.name}: ${error.message}`, "error");
+                report(false, error.name + ": " + error.message, "error");
               }
             - "<checker-sha256>"

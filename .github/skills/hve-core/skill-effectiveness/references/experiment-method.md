@@ -364,6 +364,9 @@ bound completed snapshot. Preserve original file/record hashes, native identitie
 eval/config hashes, snapshot origin/digest, trusted checker/dependency provenance
 and the exact new grade command/output link in EVALS.md. Native grade output
 drops outer item/variant/trial/experiment metadata; do not pair it by order alone.
+With native `--workspace` preservation, verify the original `workspacePath`
+and its readable completed output; do not assume `trajectory.artifactDir`
+exists or add it to the original record to make grading work.
 Successful nonnull trajectories are freshly graded even with earlier passing
 public grades. Non-success/null trajectories can pass through without dispatch.
 

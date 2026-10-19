@@ -120,6 +120,7 @@ test("native staging templates separate public inputs, offline checkers and save
   assert.deepEqual(candidate.stimuli[0].graders.map(grader => grader.type), ["completed", "file-exists"]);
   assert.equal(grade.stimuli[0].name, candidate.stimuli[0].name);
   assert.deepEqual(grade.stimuli[0].graders.map(grader => grader.type), ["program"]);
+  assert.doesNotMatch(grade.stimuli[0].graders[0].config.args[2], /\$\{/);
   for (const key of ["agent_environment", "grading_environment", "executor_plugins"]) assert.equal(grade[key], undefined);
   assert.equal(grade.defaults, undefined);
   assert.match(candidate.stimuli[0].prompt, /private evaluator is unavailable/);
@@ -652,6 +653,11 @@ test("native mock runs preserve identities, task failures and operational errors
   assert.deepEqual(reversed.map(record => record.variant), ["a-treatment", "b-baseline"]);
   assert.ok(reversed.every(record => record.trialIndex === undefined && typeof record.shardKey === "string"));
   assert.ok(reversed.every(record => record.experiment.baseline === "b-baseline"));
+  f.spec.agent_environment.files.push({ src: "../fixtures/unavailable-input", dest: "unavailable-input" });
+  f.write("evals/task.eval.yaml", stringify(f.spec));
+  const failedRecords = execute("unavailable-input", 1);
+  assert.equal(failedRecords.length, 2);
+  assert.ok(failedRecords.every(record => record.status !== "success"));
   const bindings = [];
   const gradeOriginal = (record, snapshot, expectedExit = 0) => {
     const index = bindings.length, scratch = join(f.root, "grade-scratch", String(index));
@@ -671,10 +677,12 @@ test("native mock runs preserve identities, task failures and operational errors
   const successfulRecords = [...records, ...reversed].filter(record => record.stimulus === "task");
   for (const [index, record] of successfulRecords.entries()) {
     assert.equal(record.gradeResult.passed, true, "original public grade already exists");
-    assert.equal(typeof record.trajectory.artifactDir, "string", "completed native artifact export required");
+    assert.equal(record.status, "success");
+    assert.equal(typeof record.workspacePath, "string", "completed native workspace export required");
+    assert.equal(record.trajectory.workDir, record.workspacePath);
     const snapshot = join(f.root, "snapshots", String(index));
     f.write(`snapshots/${index}/deliverable/result.txt`,
-      readFileSync(join(record.trajectory.artifactDir, "deliverable/result.txt")));
+      readFileSync(join(record.workspacePath, "deliverable/result.txt")));
     const outcome = gradeOriginal(record, snapshot);
     assert.equal(outcome.gradeResult.passed, true);
     assert.equal(outcome.gradeResult.details[0].name, "behavior");
@@ -688,7 +696,7 @@ test("native mock runs preserve identities, task failures and operational errors
   // A vanilla native pass cannot authenticate the operator's arm/snapshot pairing.
   assert.notEqual(successfulRecords[0].variant, successfulRecords[2].variant);
   assert.equal(gradeOriginal(successfulRecords[2], bindings[0].snapshot).gradeResult.passed, true);
-  const failedAttempt = records.find(record => record.status !== "success");
+  const failedAttempt = failedRecords[0];
   assert.ok(failedAttempt, "native producer must retain operationally unsuccessful attempts");
   gradeOriginal(failedAttempt, bindings[0].snapshot, 1);
   assert.equal(existsSync(join(bindings.at(-1).scratch, "checker-entered")), false);
