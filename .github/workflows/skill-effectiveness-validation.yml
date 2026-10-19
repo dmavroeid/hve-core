@@ -93,19 +93,22 @@ jobs:
             "activity-proof-unavailable", "observation-unavailable", "container-proof-unavailable", "volume-proof-unavailable", "correlation-unavailable"];
           let gate = "unavailable";
           const at = value => { ensure(gates.includes(value), "invalid-gate"); gate = value; };
-          const freshDiagnostic = name => ({ name, phase: "not-started", nativeCliExit: null, failure: null, observerFailure: null, cleanup: { status: "not-started", reason: "not-started" } });
+          const freshDiagnostic = name => ({ name, phase: "not-started", nativeCliExit: null, failure: null, observerFailure: null, nativeOutput: { stdout: "unavailable", stderr: "unavailable" }, cleanup: { status: "not-started", reason: "not-started" } });
           const cleanFailure = value => {
             if (value === null) return null;
             exact(value, ["gate", "reason"]); ensure(gates.includes(value.gate) && reasons.includes(value.reason), "invalid-diagnostic");
             return { gate: value.gate, reason: value.reason };
           };
           export function cleanDiagnostic(value) {
-            exact(value, ["name", "phase", "nativeCliExit", "failure", "observerFailure", "cleanup"]); exact(value.cleanup, ["status", "reason"]);
+            exact(value, ["name", "phase", "nativeCliExit", "failure", "observerFailure", "nativeOutput", "cleanup"]); exact(value.cleanup, ["status", "reason"]);
+            exact(value.nativeOutput, ["stdout", "stderr"]);
+            ensure(["unavailable", "empty", "single-json", "invalid-json", "multiple-lines"].includes(value.nativeOutput.stdout) &&
+              ["unavailable", "empty", "eval-validation", "input-rejected", "path-rejected", "other", "ambiguous"].includes(value.nativeOutput.stderr), "invalid-diagnostic");
             ensure(names.includes(value.name) && phases.includes(value.phase) &&
               (value.nativeCliExit === null || Number.isInteger(value.nativeCliExit) && value.nativeCliExit >= 0 && value.nativeCliExit <= 255) &&
               ["not-started", "passed", "failed-or-unavailable"].includes(value.cleanup.status) && cleanupReasons.includes(value.cleanup.reason) &&
               (value.cleanup.status === "passed" ? value.cleanup.reason === "verified-absent" : value.cleanup.status === "not-started" ? value.cleanup.reason === "not-started" : !["not-started", "verified-absent"].includes(value.cleanup.reason)), "invalid-diagnostic");
-            return { ...value, failure: cleanFailure(value.failure), observerFailure: cleanFailure(value.observerFailure), cleanup: { ...value.cleanup } };
+            return { ...value, failure: cleanFailure(value.failure), observerFailure: cleanFailure(value.observerFailure), nativeOutput: { ...value.nativeOutput }, cleanup: { ...value.cleanup } };
           }
           const diagnosticFile = name => path.join(root, "cases", name, "diagnostic.json");
           const diagnosticState = name => {
@@ -123,6 +126,41 @@ jobs:
             save(diagnosticFile(name), value, 4096);
           }
           const caseDiagnostic = name => { const { gate: current, ...value } = diagnosticState(name); return value; };
+          export function classifyOutput(stream, text) {
+            if (!text.trim()) return "empty";
+            if (stream === "stdout") {
+              const lines = text.trim().split("\n");
+              if (lines.length !== 1) return "multiple-lines";
+              try { JSON.parse(lines[0]); return "single-json"; } catch { return "invalid-json"; }
+            }
+            const families = new Set();
+            for (const line of text.split("\n").map(line => line.replace(/\r$/, ""))) {
+              if (line === "Error: eval spec validation failed") families.add("eval-validation");
+              if (["Error: no input received on stdin", "Error: no valid input found"].includes(line) ||
+                line.startsWith("Error: stdin did not match a recognized shape.")) families.add("input-rejected");
+              for (const flag of ["--workspace", "--artifact-dir", "--assets-dir"]) {
+                if (line === `Error: ${flag} requires a non-empty path` ||
+                  [`Error: ${flag} is not a directory: `, `Error: ${flag} not found: `, `Error: ${flag} is not readable: `,
+                    `Error: could not access ${flag} `].some(prefix => line.startsWith(prefix))) families.add("path-rejected");
+              }
+            }
+            return families.size > 1 ? "ambiguous" : families.values().next().value ?? "other";
+          }
+          export function collectNativeOutput(name, dir) {
+            const diagnostic = diagnosticState(name), output = {}; let failure;
+            diagnostic.nativeOutput = { stdout: "unavailable", stderr: "unavailable" };
+            for (const [stream, limit, next] of [["stdout", 1048576, "native-output"], ["stderr", 65536, "native-stderr-read"]]) {
+              at(next);
+              try {
+                output[stream] = bounded(path.join(dir, stream), limit).toString("utf8");
+                diagnostic.nativeOutput[stream] = classifyOutput(stream, output[stream]);
+                diagnostic.gate = next; const { gate: current, ...value } = diagnostic; cleanDiagnostic(value);
+                save(diagnosticFile(name), diagnostic, 4096);
+              } catch (error) { failure ??= { error, gate: next }; }
+            }
+            if (failure) { at(failure.gate); throw failure.error; }
+            return output;
+          }
           export function safeDiagnostics(value) {
             exact(value, ["cases"]); ensure(Array.isArray(value.cases) && value.cases.length === 3, "invalid-diagnostic");
             const result = { cases: value.cases.map((item, i) => { ensure(item.name === names[i], "invalid-diagnostic"); return cleanDiagnostic(item); }) };
@@ -418,13 +456,13 @@ jobs:
             at("case-input"); const dir = path.join(root, "cases", name), config = read(path.join(dir, "case.json"));
             at("safe-projection"); const summaryFile = path.join(root, "safe/summary.json"), summary = safeSummary(read(summaryFile));
             try {
-              at("native-output"); const lines = bounded(path.join(dir, "stdout")).toString("utf8").trim().split("\n");
+              const output = collectNativeOutput(name, dir);
+              at("native-output"); const lines = output.stdout.trim().split("\n");
               ensure(lines.length === 1, "invalid-native-result");
               at("observation"); const observed = read(path.join(dir, "observation.json"));
               at("native-exit-record"); const exit = bounded(path.join(dir, "exit")).toString(); ensure(/^[01]\n$/.test(exit), "invalid-exit");
               at("native-stdout-parse"); const record = JSON.parse(lines[0]);
-              at("native-stderr-read"); const stderr = bounded(path.join(dir, "stderr")).toString("utf8");
-              const facts = project(record, config, Number(exit), stderr, observed);
+              const facts = project(record, config, Number(exit), output.stderr, observed);
               at("native-cleanup"); cleanupComplete(observed, facts);
               facts.nativeCleanupComplete = true;
               const { owner, volumes, ...safe } = facts;
