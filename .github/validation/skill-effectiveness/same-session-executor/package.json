@@ -1,0 +1,10 @@
+{
+  "name": "same-session-preflight-executor",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "index.mjs",
+  "peerDependencies": {
+    "@microsoft/vally": "0.19.0"
+  }
+}

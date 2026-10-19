@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
-name: Temporary native protected inventory integration
+name: Temporary actual-session model-free preflight
 on:
   push:
     branches: [automation/skill-effectiveness-validation-20261017]
@@ -39,18 +39,18 @@ jobs:
           set -euo pipefail
           node ../../../validation/skill-effectiveness/containment-identity.mjs
           npm ci --ignore-scripts --include=dev --no-audit --no-fund --fetch-retries=0 --fetch-timeout=60000
-      - name: Bind protected inventory to actual native task lifecycles
+      - name: Capture actual production session before intentional pre-prompt stop
         timeout-minutes: 20
         run: |
           set -euo pipefail
           unset SKILL_EFFECTIVENESS_NATIVE_PREFLIGHT SKILL_EVAL_INVENTORY_DIR NODE_OPTIONS NODE_TEST_CONTEXT
-          node ../../../validation/skill-effectiveness/native-inventory-run.mjs
+          node ../../../validation/skill-effectiveness/same-session-run.mjs
           git diff --exit-code -- .
       - name: Upload only synthetic structural results
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: skill-effectiveness-native-inventory-d72
-          path: ${{ runner.temp }}/native-inventory-d72/safe
+          name: skill-effectiveness-same-session-d74
+          path: ${{ runner.temp }}/same-session-d74/safe
           if-no-files-found: error
           retention-days: 14
