@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: MIT
 
 import { AsyncLocalStorage } from "node:async_hooks";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { findPackageJSON } from "node:module";
+import { isAbsolute, join } from "node:path";
 import { CopilotClient } from "@github/copilot-sdk";
 import { CopilotSdkExecutor } from "@microsoft/vally/executor";
+import { backupInventory, captureInventory, verifyInventoryBackup } from "./native-inventory.mjs";
 
 function object(value, keys, label) {
   if (!value || typeof value !== "object" || Array.isArray(value)
@@ -94,6 +96,12 @@ export function restrictedFactories(context, createClient = options => new Copil
             || actual.some(name => !policy.availableTools.includes(name))) {
             throw new Error("Restricted tool inventory does not match the explicit allowlist; unsupported or unexpected tools");
           }
+          if (!config.workingDirectory || !isAbsolute(config.workingDirectory)) {
+            throw new Error("Startup inventory requires the actual absolute native working directory");
+          }
+          run.inventoryDirectory ??= mkdtempSync(join(config.workingDirectory, ".skill-effectiveness-evidence-"));
+          const file = await captureInventory(session, config, run.inventoryDirectory, { timeoutMs });
+          run.inventories.push(backupInventory(file));
           return session;
         } catch (error) {
           if (session) {
@@ -139,8 +147,22 @@ export class RestrictedCopilotExecutor extends CopilotSdkExecutor {
     }
     const policy = validateSessionPolicy(options.executorConfig);
     const nativeConfig = options.executorConfig.provider === undefined ? {} : { provider: options.executorConfig.provider };
-    return this.#context.run({ policy, timeoutMs: Math.min(options.timeout, 10000) },
-      () => super.execute(stimulus, { ...options, executorConfig: nativeConfig }));
+    const run = { policy, timeoutMs: Math.min(options.timeout, 10000), inventories: [] };
+    return this.#context.run(run, async () => {
+      let result;
+      const errors = [];
+      try {
+        result = await super.execute(stimulus, { ...options, executorConfig: nativeConfig });
+      } catch (error) {
+        errors.push(error);
+      }
+      for (const reference of run.inventories) {
+        try { verifyInventoryBackup(reference); } catch (error) { errors.push(error); }
+      }
+      if (errors.length === 1) throw errors[0];
+      if (errors.length > 1) throw new AggregateError(errors, "Native execution and startup-evidence verification failed");
+      return result;
+    });
   }
 }
 

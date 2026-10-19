@@ -30,6 +30,9 @@ It is not an isolation boundary, spending controller, or automatic adoption gate
 Image review can disclose the supplied prompt and images to an external model.
 Inventory capture records available skills before the first prompt but cannot
 establish that later context is uncontaminated.
+Normal candidate execution independently backs up startup bytes and compares
+both copies against an in-memory digest after native execution. This is a
+supervised consistency check, not candidate-resistant host attestation.
 
 The templates do not establish verified candidate/grader containment. The
 [restricted execution profile](references/experiment-method.md#restricted-execution-profile-not-yet-runtime-verified)
@@ -49,13 +52,13 @@ and observed. Financial approval cannot waive those prerequisites.
 
 ### Security Posture Overview
 
-| Dimension          | Value                                                                                            |
-|--------------------|--------------------------------------------------------------------------------------------------|
-| Runtime surface    | Tool-using intake, native candidates/graders, Node preload, SDK image review and evidence writes |
-| Trust buckets      | B1 local content and evidence; B2 runtime and model                                              |
-| Credentials        | SDK/CLI-managed account authentication; no custom token store                                    |
-| Network egress     | Copilot runtime/model services selected by the SDK and account                                   |
-| Open residual gaps | 8; highest severity High; planned controls do not close current gaps                             |
+| Dimension          | Value                                                                                                                    |
+|--------------------|--------------------------------------------------------------------------------------------------------------------------|
+| Runtime surface    | Tool-using intake, native candidates/graders, scoped startup capture/backup, optional log snapshots and SDK image review |
+| Trust buckets      | B1 local content and evidence; B2 runtime and model                                                                      |
+| Credentials        | SDK/CLI-managed account authentication; no custom token store                                                            |
+| Network egress     | Copilot runtime/model services selected by the SDK and account                                                           |
+| Open residual gaps | 8; highest severity High; planned controls do not close current gaps                                                     |
 
 ## Contents
 
@@ -74,10 +77,14 @@ and observed. Financial approval cannot waive those prerequisites.
 
 1. `SKILL.md` and references guide task selection, candidate extraction,
    fair comparison, evidence selection, authorization, and interpretation.
-2. `scripts/native-inventory.mjs` wraps the pinned SDK's session creation,
-   bounds tool initialization and skill listing, then atomically publishes
-   diagnostic inventory before return. Capture failure bounds disconnect and
-   retains capture, cleanup and persistence errors.
+2. `scripts/native-inventory.mjs` bounds tool initialization and skill listing,
+   then publishes the actual startup inventory and an independent backup.
+   The session-policy factory retains its digest in per-execution memory and
+   verifies both files after native execution/cleanup, publishing a separate
+   verification outcome. Errors preserve original bytes and initiating failures.
+   A separately invoked diagnostic prototype preload remains available but is
+   not part of the generated run command. The explicit `backup-log` command
+   snapshots one selected completed log, never a home or session tree.
 3. `scripts/review-images.mjs` validates approved-root prompt and PNG/JPEG inputs,
    bounds bytes/count/decoded pixels/base64 before SDK contact, then submits one
    no-tools image review with bounded waits and atomic status/failure records.
@@ -116,7 +123,8 @@ flowchart TD
         INPUT["Prompt, images, task sources"]
         AUTHOR["Tool-using authoring session"]
         POLICY["Fresh environment-scoped policy adapter"]
-        INV["Inventory preload"]
+        INV["Scoped startup capture / backup / final comparison"]
+        LOG["Opt-in completed log snapshot"]
         REVIEW["Image-review helper"]
         CLI["Vally candidate SDK / CLI"]
         TEXT["Native text-grader SDK"]
@@ -135,9 +143,12 @@ flowchart TD
     AUTHOR -->|"shared native evaluation configuration"| POLICY
     POLICY -->|"SDK client factory / policy and tool RPC"| CLI
     INPUT -->|"filesystem reads"| REVIEW
+    POLICY -->|"before session return / after native cleanup"| INV
     INV -->|"SDK session RPC"| CLI
     CLI -->|"inventory RPC result"| INV
-    INV -->|"exclusive JSON write"| OUT
+    INV -->|"independent bytes / in-memory digest / verification JSON"| OUT
+    OUT -->|"operator-selected completed native log, at most 16 MiB"| LOG
+    LOG -->|"exclusive bytes and digest metadata"| OUT
     CLI -->|"native original trial records / exported artifacts"| OUT
     OUT -->|"operator record identity / completed arm binding"| SNAP
     SNAP -->|"native artifact reference / required readonly input"| GRADE
@@ -170,7 +181,8 @@ flowchart TD
 | Candidate SDK / CLI -> workspace -> executable grader      |
 | Original record -> bound snapshot -> separate native grade |
 | Approved saved evidence -> separate native text reviewer   |
-| Inventory preload -> writable evidence                    |
+| Scoped inventory + backup -> final consistency report     |
+| Selected completed log -> explicit local backup           |
 | Selected prompt / pixels -> no-tools image-review SDK      |
 |------------------------------------------------------------|
 | No candidate/grader OS boundary is enforced by the helpers |
@@ -188,22 +200,23 @@ flowchart TD
 |-------------------------------|----------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Input to helper               | Selected prompt and images                               | Approved root; detected-link rejection; opened-file identity; byte/count/pixel/base64 limits; strict local decode wired, actual codec validation pending |
 | SDK to inventory              | Session identity and inventory                           | Required identity and enabled-state fields; capture before return; disconnect on failure                                                                 |
-| Helper to filesystem          | Prior evidence                                           | Exclusive inventory writes; image-review destination must be new                                                                                         |
+| Helper to filesystem          | Prior evidence                                           | Exclusive complete writes; independent startup backup; bounded selected-log snapshots; image-review destination must be new                              |
 | Runtime to model              | Project content and account usage                        | Empty-mode image reviewer, no tools, rejected permissions, response timeout; no hard credit cap                                                          |
 | Repository to authoring tools | Authoring context and host authority                     | Imported content is untrusted; no helper-enforced intake sandbox                                                                                         |
 | Candidate to grader           | Checker integrity, host files, credentials and execution | No enforced candidate/grader OS separation; reviewer no-tools settings do not apply here                                                                 |
-| Candidate to startup evidence | Inventory provenance and comparison integrity            | Exclusive writes are not host attestation or protection from a candidate with filesystem authority                                                       |
+| Candidate to startup evidence | Inventory provenance and comparison integrity            | In-memory startup digest checks both independent copies after execution; supervised detection, not an independent authority                              |
 
 The diagrams and controls above describe current mechanics. The planned native
-boundary has separate candidate, offline executable-grading, online saved-review
-and host-evidence roles. Its adapter must apply explicit tool visibility,
+boundary has separate candidate, offline executable-grading and online saved-review
+roles. Its adapter must apply explicit tool visibility,
 native managed permission rules and an explicit deny fallback on both fresh and
 resumed sessions through both public factories. Runtime enforcement remains
 unverified; the SDK warns that older runtimes can ignore injected managed policy.
 Offline grading needs readonly executed inputs, an immediate pre-use checker
 hash, a scrubbed credential-free environment and no egress. Online review must
-not execute submissions. Host-owned startup records must be outside candidate
-write/delete authority. None of these planned controls is credited as present.
+not execute submissions. Stronger host-attested startup records, when required,
+need independent write/delete authority; the supervised backup does not supply
+that property. No candidate/grader OS boundary is credited to these helpers.
 
 ## Assets
 
@@ -236,8 +249,13 @@ Moving a candidate-owned record to the host does not establish host provenance.
 
 Inventory filenames encode the session ID. Complete records publish through an
 exclusive temporary file and same-directory hard link without replacing existing
-records; this is failure safety, not candidate-resistant storage. Independently
-retained original bytes/hashes can detect changes, not prevent them. The image
+records; this is failure safety, not candidate-resistant storage. The native
+session factory also publishes an independent startup copy before the prompt
+and retains the expected digest in execution memory. Completion checks reject
+changed/missing copies, shared-inode aliases and redirected paths, recording
+verification errors without repairing originals. This detects ordinary changes,
+including consistent edits to both copies, but does not protect the process,
+its memory or all retained evidence against equivalent authority. The image
 reviewer requires a new destination and records prompt/image hashes. Evidence
 remains writable by the operator or another process with filesystem access.
 Neither template overlays a private checker into a candidate/workspace tree.
@@ -251,7 +269,11 @@ not automatic; a valid opposite-arm snapshot can still pass native grading.
 
 ### Repudiation
 
-Inventories record timestamps and session IDs. Image records retain requested
+Inventories record timestamps and session IDs; completion reports retain their
+expected digest and outcome. Native workspace preservation and explicit
+operator mapping to the original trial are still required. Optional log
+snapshots retain source, timestamp, byte count and SHA-256, not completeness
+or independent session authentication. Image records retain requested
 model, session identity, hashes, usage events, errors, and completion status.
 There is no signature or append-only store.
 Original records remain separate and byte-preserved; EVALS notes explicitly link
@@ -262,9 +284,11 @@ pairing or protected executed bytes. No tamper-evident binding store is provided
 ### Information Disclosure
 
 Saved inventories contain paths and skill descriptions. Image review persists
-the full supplied prompt and image bytes. There is no redaction or custom ACL
+the full supplied prompt and image bytes. Optional log snapshots copy the entire
+selected file and can retain prompts, source or credentials. They are never
+collected or uploaded automatically. There is no redaction or custom ACL
 enforcement; operators must select publishable content and protect the directory.
-The inventory preload removes its evidence-directory variable before runtime
+The separate diagnostic preload removes its evidence-directory variable before runtime
 startup and does not log the directory on success; a closure is not isolation.
 Local graders can load submitted code with the host's environment and authority;
 reviewing saved text/pixels is not equivalent to safely executing that code.
@@ -280,8 +304,14 @@ hostile same-user race immunity. Sharp full-decode wiring still awaits actual
 codec validation and a clean standalone restore.
 Inventory initialization, listing and failure-path disconnect each have a
 ten-second deadline with cleared timers. A deadline does not cancel the RPC or
-prove shutdown. Failure records retain capture/cleanup errors; failure-record
-persistence errors remain in the thrown aggregate. Image decoder, client
+prove shutdown. The diagnostic preload retains failure records; the scoped
+factory propagates capture/backup and disconnect errors to native execution.
+Completion verification retains both execution and evidence errors.
+Startup-backup and optional log reads require nonempty regular files of at most
+16 MiB and check opened-file identity, size and modification time. This does
+not establish hostile same-user race immunity or bound SDK response memory.
+Log backup never truncates a large file into a success-shaped partial history.
+Image decoder, client
 creation/startup, model inventory, session creation, response and cleanup waits
 are bounded. Atomic status writes retain failures, including terminal-persistence
 errors. Timeout reports unconfirmed shutdown, not cancellation or a stopped
@@ -401,17 +431,17 @@ shell/interpreter access is not safe merely because a session is fresh.
 
 Ratings are qualitative project assessments, not CVSS scores.
 
-| Id      | Gap                                                                                                | Severity         | Status                                                                                                                                            |
-|---------|----------------------------------------------------------------------------------------------------|------------------|---------------------------------------------------------------------------------------------------------------------------------------------------|
-| G-INF-1 | Prompt, image, and inventory evidence has no redaction or custom access control                    | InfoDisc-Med     | Operator must protect inputs and outputs and review before sharing                                                                                |
-| G-TAM-1 | Startup capture does not enforce candidate isolation or cover later context                        | Tampering-High   | Supervised inspection and symmetric exclusions required                                                                                           |
-| G-DOS-1 | Pinned native execution and review paths lack an enforced credit cap                               | DoS-High         | Supervise approved targets; stop before the next invocation; block if a required enforced maximum is unavailable                                  |
-| G-DOS-2 | Media decoder and review lifecycle still need actual-codec/exact-stack verification                | DoS-Med          | Partially mitigated; fixed preflight limits and bounded waits pass model-free tests; actual decode/runtime cleanup remain unverified              |
-| G-EOP-1 | Tool-using intake and current candidate permissions lack an enforced least-authority boundary      | EoP-High         | Open; fresh environment-scoped adapter source exists, but native enforcement is unverified; intake remains separate                               |
-| G-TAM-2 | Writable checker/dependencies or incorrect original-record/snapshot binding can invalidate grading | Tampering-High   | Open; separate authored entry authentication exists, but readonly inputs, dependency provenance and manual arm binding still require verification |
-| G-INF-2 | Executable grading and candidate access are not verified credential-isolated or egress-restricted  | InfoDisc-High    | Open; no claim that fresh homes, variable deletion or no-tools image review solve this                                                            |
-| G-TAM-3 | Task-owned startup capture is not authoritative host evidence                                      | Tampering-High   | Open; bounded diagnostic capture, atomic publication and variable scrubbing do not establish protected originals                                  |
-| G-SUP-1 | Imported lockfile previously contained SHA-1 entries                                               | SupplyChain-High | Resolved; regenerated from public npm with canonical URLs and SHA-512 integrity                                                                   |
+| Id      | Gap                                                                                                | Severity         | Status                                                                                                                                                 |
+|---------|----------------------------------------------------------------------------------------------------|------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------|
+| G-INF-1 | Prompt, image, and inventory evidence has no redaction or custom access control                    | InfoDisc-Med     | Operator must protect inputs and outputs and review before sharing                                                                                     |
+| G-TAM-1 | Startup capture does not enforce candidate isolation or cover later context                        | Tampering-High   | Supervised inspection and symmetric exclusions required                                                                                                |
+| G-DOS-1 | Pinned native execution and review paths lack an enforced credit cap                               | DoS-High         | Supervise approved targets; stop before the next invocation; block if a required enforced maximum is unavailable                                       |
+| G-DOS-2 | Media decoder and review lifecycle still need actual-codec/exact-stack verification                | DoS-Med          | Partially mitigated; fixed preflight limits and bounded waits pass model-free tests; actual decode/runtime cleanup remain unverified                   |
+| G-EOP-1 | Tool-using intake and current candidate permissions lack an enforced least-authority boundary      | EoP-High         | Open; fresh environment-scoped adapter source exists, but native enforcement is unverified; intake remains separate                                    |
+| G-TAM-2 | Writable checker/dependencies or incorrect original-record/snapshot binding can invalidate grading | Tampering-High   | Open; separate authored entry authentication exists, but readonly inputs, dependency provenance and manual arm binding still require verification      |
+| G-INF-2 | Executable grading and candidate access are not verified credential-isolated or egress-restricted  | InfoDisc-High    | Open; no claim that fresh homes, variable deletion or no-tools image review solve this                                                                 |
+| G-TAM-3 | Supervised startup backups are not independent host attestation                                    | Tampering-High   | Open for stronger assurance; independent bytes and in-memory-digest comparison detect changes but cannot protect runtime memory or every retained copy |
+| G-SUP-1 | Imported lockfile previously contained SHA-1 entries                                               | SupplyChain-High | Resolved; regenerated from public npm with canonical URLs and SHA-512 integrity                                                                        |
 
 ## References
 

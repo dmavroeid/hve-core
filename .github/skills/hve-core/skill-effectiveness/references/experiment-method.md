@@ -70,7 +70,7 @@ financial limits. This skill owns task/evidence authoring and honest supervision
 | Candidate                    | Native `experiment run`, Docker backend and `task-*` role settings                    | Public task/sources and declared skills only; identical explicit session policy in both arms; no private checker, review machinery or host evidence; no general access to runtime authentication | Effective tool/permission policy, image identity, filesystem/process containment and credential/egress protection |
 | Offline executable grading   | Native experiment's grading phase with executable-only graders and `grade-*` settings | No credentials or egress; readonly trusted checker and submission; protected temporary outputs; check checker hash immediately before use                                                        | Actual mounts, scrubbed environment, execution paths and network denial                                           |
 | Online saved-evidence review | Separate native assessment or the no-tools SDK image reviewer                         | Selected saved artifacts only; no submission execution or execution tools; model-service access must not reopen offline execution                                                                | Exact native text-review restrictions and separation from executable grading                                      |
-| Startup evidence controller  | Host/controller outside candidate authority                                           | Capture before the first prompt; candidate cannot name, mount, write or delete authoritative records                                                                                             | Supported host-owned inventory transport, not a copied task-owned record                                          |
+| Supervised startup evidence  | Existing session factory and native-preserved workspace                               | Capture and independently back up actual inventory before the first prompt; compare both files with the in-memory digest after execution; keep audit files out of grading inputs                 | Exact-stack capture/completion and native workspace retention; independent host attestation is not supplied       |
 
 Use native `--backend docker` and documented `--backend-args` role settings,
 including `task-image`, `grade-image`, `task-env`, `grade-env`, `task-network`
@@ -94,15 +94,16 @@ reports. Retire an addition when a released native feature satisfies its contrac
 not merely when Vally's version increases. Do not add a compatibility framework
 or automatic fallback to less restrictive behavior.
 
-| Addition                      | Replacement contract                                                                                                                          | Integration points to remove or update                                                                          |
-|-------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------|
-| Session-policy plugin         | Equivalent explicit tool visibility, permission decisions and fresh environment-scoped session behavior, verified on the selected runtime     | `study:*`'s `--executor-plugin`, eval executor/config, plugin module and its focused contract tests             |
-| Diagnostic inventory preload  | Actual full skill inventory before the first prompt; a protected original when authoritative evidence is required, not merely generic tracing | `study:run`'s `--import`, inventory environment setting, recorder and capture/composition tests                 |
-| Optional image-review command | Actual PNG/JPEG delivery, bounded approved inputs, no execution tools and retained usage/failure evidence, not text-only snapshots            | `review:images`, image helper, decoder dependency and image-review tests; human visual review remains available |
+| Addition                      | Replacement contract                                                                                                                      | Integration points to remove or update                                                                          |
+|-------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------|
+| Session-policy plugin         | Equivalent explicit tool visibility, permission decisions and fresh environment-scoped session behavior, verified on the selected runtime | `study:*`'s `--executor-plugin`, eval executor/config, plugin module and its focused contract tests             |
+| Startup inventory and backup  | Actual full skill inventory before the first prompt, independent backup and completion comparison with retained startup digest            | Session factory, recorder, backup/verification tests and workspace preservation                                 |
+| Optional image-review command | Actual PNG/JPEG delivery, bounded approved inputs, no execution tools and retained usage/failure evidence, not text-only snapshots        | `review:images`, image helper, decoder dependency and image-review tests; human visual review remains available |
 
-The inventory preload currently wraps the SDK's process-wide session-creation
-prototype. That is localized but version-sensitive coupling, not a stable native
-inventory hook. Prefer removing it when a verified native hook becomes available.
+Normal execution uses the existing environment-aware client factory, not a
+process-wide SDK prototype wrapper. The recorder's separately invoked diagnostic
+preload remains available for explicit no-prompt investigation; it is not the
+generated run command or a production evidence boundary.
 For any replacement, update development/generated pins and canonical locks
 together, translate configuration explicitly, and run the existing contract
 checks against the native replacement. Preserve completed experiment packages;
@@ -192,8 +193,10 @@ source-only task; a methodology change requires a user decision and disclosure.
 Before the final run gate, independently authorize model-free runtime checks
 using synthetic, non-secret canaries in a disposable environment. Check
 outside-workspace reads, inherited environment access, undeclared commands,
-controlled egress, private checker replacement, and inventory write/delete
-attempts. Never use personal files, real credentials or public exfiltration
+controlled egress and private checker replacement. Separately check startup
+backup/verification and native workspace retention, including changed/deleted
+inventory copies; supervised detection does not require write denial.
+Never use personal files, real credentials or public exfiltration
 targets. Verify immediate pre-use checker hashes and readonly executed paths,
 not just the original source mount.
 
@@ -218,7 +221,7 @@ npm ci
 npm test
 ```
 
-The four test files validate packaging, native lint/dry-run/mock results,
+The five test files validate packaging, native lint/dry-run/mock results,
 code-plus-prompt evidence wiring, inventory capture and SDK image attachments.
 Ordinary tests use mocked SDK sessions and do not require the optional Copilot
 binary. Native session-startup coverage is skipped unless explicitly selected.
@@ -476,7 +479,9 @@ There is no approved restricted-runtime command recipe yet; do not substitute
 unrestricted local execution. No custom launcher or separate collection path is
 needed.
 
-Each invocation needs a new external evidence directory. Record the exact command,
+Each invocation needs fresh native output and preserved-workspace locations.
+Use native `--workspace` preservation and retain each trial's audit directory
+alongside its original native record. Record the exact command,
 role mapping and output location in EVALS.md. Inspect results and reported usage
 before authorizing the next invocation. Do not start the next invocation when the
 approved scope is complete or reported usage reaches the agreed target. This
@@ -484,9 +489,10 @@ does not promise cancellation of an in-flight call, reminder or native retry.
 Missing or incomparable usage stays unknown, not zero or proof of budget
 compliance. Pause for explicit continuation unless existing approval already
 covers that specific bounded unknown-usage scope. Do not automate silent reruns.
-`study:run` is just Node with `--import`
-followed by the pinned Vally CLI. It forwards native arguments and exit status.
-Direct CLI execution without the preload does not capture inventories.
+`study:run` invokes the pinned Vally CLI and session-policy plugin directly.
+It forwards native arguments and exit status; it does not preload a process-wide
+SDK wrapper or require `SKILL_EVAL_INVENTORY_DIR`. Selecting a different executor
+bypasses this plugin's policy and inventory capture and is not an equivalent run.
 
 ## Publisher Iteration, Repetition And Pairing
 
@@ -523,36 +529,76 @@ repetition. No duplicate schedule format or cross-block analyzer is supplied.
 ## Inspect The Evidence
 
 The [recorder](../scripts/native-inventory.mjs) saves actual skill metadata after
-SDK initialization and before returning a new session for its first prompt.
-Its only setup variable is the absolute `SKILL_EVAL_INVENTORY_DIR`. Loaded as a
-Node preload, it rejects missing configuration rather than silently doing nothing.
-It resolves the pinned runtime from its package, not the host installation.
-The preload retains the directory in its parent-process closure and removes the
-variable before runtime startup. It does not log the directory on success.
-Neither measure is filesystem isolation or protection from a same-user process.
+SDK initialization. The session-policy factory captures it and independently
+publishes a byte-identical backup before returning that session for its first
+prompt. Each execution creates a unique `.skill-effectiveness-evidence-*`
+directory in the actual native workspace. It contains `<session-id>.json`,
+`startup-backups/<session-id>.json` and the completion
+`<session-id>.verification.json`. Filenames encode the actual SDK session ID.
+The two copies are separate files, not hard-linked aliases of one mutable inode.
 
 Snapshots retain enabled states, runtime source paths when available, requested
-skill directories, timestamp and actual session ID. Match each filename/ID to
-native trial session metadata. Native judge sessions created in the same CLI
-process can also be captured; they are not candidate trials. Separate grader
-processes do not inherit the preload.
+skill directories, timestamp and actual session ID. Unexpected skills are
+recorded, not rejected. The candidate may know its own inventory; the baseline
+still must not receive treatment-only skill contents.
 
-The recorder changes no discovery, instructions, permissions, tools, memory,
-resume behavior or credit settings. Unexpected skills are recorded, not rejected.
-Capture/persistence errors stop that session before a prompt. Vally can omit the
-transient inventory from persisted history; this is why the recorder remains.
-Initialization, skill listing and failure-path disconnect each have a separate
-ten-second deadline with cleared timers. A timeout bounds the wait, not the
-underlying RPC: disconnect is attempted after capture failure, but a timed-out
-disconnect leaves shutdown unverified. Vally still owns runtime cleanup; stop
-further execution and have the operator verify cleanup before another invocation.
+After native execution and its cleanup return, the plugin compares both copies
+against the digest retained in per-execution memory. Changed or missing copies,
+shared-inode backups, redirected paths and failed verification-report publication
+are operational errors. Verification also runs when native execution throws;
+neither failure masks the other. The report records the expected digest, session
+identity and verification outcome without replacing altered originals. A verified
+inventory does not turn a failed native trial into a successful trial.
+Missing reports or partial backups are not verified evidence.
 
-Records publish complete bytes atomically without replacing an existing session
-record; the evidence filesystem must support same-directory hard links. On
-capture failure, `<session-id>.failure.json` retains capture and disconnect
-errors. If failure-record persistence also fails, the thrown aggregate retains
-that error as well. Inspect failure records even when a snapshot exists; missing
-or failed evidence is not success and must not be silently omitted or retried.
+Native workspace preservation must retain these audit files before cleanup.
+Match them to the original trial's session/workspace identity and copy the
+completed audit directory into operator-controlled evidence storage. Keep audit
+files outside `deliverable/**`. Do not include them in the deliverable-only
+snapshot bound to offline grading or in blinded saved-evidence review inputs.
+These are ordinary supervised consistency checks, not an adversarial host-owned
+audit store. They do not stop a process with equivalent authority from changing
+code, memory or every persisted copy, and do not provide grader protection.
+Exact-stack native retention still needs its separately authorized runtime check.
+
+Initialization, skill listing and failure-path disconnect each have a bounded
+wait of at most ten seconds. A timeout does not cancel the RPC or prove shutdown.
+Capture/backup failure stops that session before return and attempts disconnect;
+native Vally still owns execution, results and cleanup. Stop further execution
+until the operator checks an unverified shutdown.
+Complete bytes publish without replacing existing destinations; the filesystem
+must support same-directory hard links. Independent backup reads are limited
+to 16 MiB and check regular-file identity, size and modification time.
+
+### Optional Completed Session Log Backup
+
+Native session history can help explain a result but may omit transient inventory.
+Keep native logs and records as originals. After the session has stopped, an
+operator may explicitly back up one selected regular log file:
+
+```powershell
+node .\scripts\native-inventory.mjs backup-log `
+  --source "C:\approved-evidence\trial\events.jsonl" `
+  --output "C:\approved-evidence\log-backups\trial-events.jsonl"
+```
+
+Use actual absolute paths and a new output filename. The helper copies complete
+nonempty files up to 16 MiB, rejects links and observable changes during reading,
+and exclusively writes the copy plus `<output>.metadata.json` with source,
+timestamp, byte count and SHA-256. Publication failure is an error even when a
+partial pair remains; retain it for inspection, not as a completed backup.
+It does not scan homes, collect arbitrary session trees, upload logs or redact
+content. Metadata goes to stdout, never log contents. Private-file modes apply
+where supported, not a custom Windows ACL guarantee.
+
+Logs may contain prompts, source, paths or credentials. Select and protect them,
+and review before sharing. Link the chosen file/digest to its native trial in
+EVALS.md. A snapshot does not prove complete history or independent provenance.
+Later growth of the original log is expected, not startup-inventory tampering.
+
+The separately invoked diagnostic preload still supports
+`SKILL_EVAL_INVENTORY_DIR` for explicit no-prompt investigation. Its prototype
+hook and failure records are not used by the generated native run command.
 Retain original bytes or their digest independently when checking later changes.
 An altered or deleted record invalidates that evidence; a hash stored beside a
 same-user-writable file does not make either authoritative. This diagnostic

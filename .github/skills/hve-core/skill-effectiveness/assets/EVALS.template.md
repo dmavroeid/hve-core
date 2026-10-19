@@ -152,4 +152,18 @@ session inventories. Match task/variant/trial/session identities, not file order
 Keep independent reviews alongside the native evidence. Record unavailable
 evidence and exclusions explicitly; preserve all failed and incomplete attempts.
 
+<For each native session, retain the workspace's `.skill-effectiveness-evidence-*`
+directory: original startup JSON, independent `startup-backups` copy and completion
+verification report. Record the expected SHA-256 and the link to the original
+native trial. Missing/failed verification is an operational error, not a task
+score. This is supervised consistency evidence, not candidate-resistant host
+attestation. Keep audit files out of deliverable-only grading snapshots and
+blinded review inputs. Grader/checker readonly protection, dependency provenance
+and arm binding remain separate prerequisites.>
+
+<If useful, back up only explicitly selected completed native session logs with
+the recorder's `backup-log` command. Link their metadata/digests to the trial and
+review for secrets before sharing. Do not copy entire session homes, assume
+automatic redaction, or treat evolving log contents as immutable startup data.>
+
 🤖 Crafted with precision by ✨Copilot following brilliant human instruction, then carefully refined by our team of discerning human reviewers.

@@ -14,7 +14,6 @@ import { parse, stringify } from "yaml";
 import { applyEnvironment, createDefaultGraderRegistry, hasGraderError, PromptGrader, RunCommandGrader, resolveGradePass } from "@microsoft/vally";
 import { CopilotSdkExecutor } from "@microsoft/vally/executor";
 import { CopilotClient } from "@github/copilot-sdk";
-import { installInventoryCapture } from "../scripts/native-inventory.mjs";
 import { RestrictedCopilotExecutor, registerExecutors, restrictedFactories, validateSessionPolicy } from "../scripts/restricted-copilot-executor.mjs";
 
 const runtime = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -196,13 +195,14 @@ async function protectedCases(t, native) {
   for (const name of ["valid", "alternative", "wrong", "missing-output", "wrong-digest",
     "malformed-digest", "missing-digest", "modified-checker", "missing-checker", "workspace-impostor",
     "checker-escape", "linked-checker", "output-escape", "missing-assets", "missing-snapshot",
-    "unavailable-snapshot", "overlapping-roots", "body-error"]) {
+    "unavailable-snapshot", "overlapping-roots", "body-error", "linked-submission", "snapshot-checker-impostor"]) {
     await t.test(name, async t => {
       const f = fixture(t), config = structuredClone(f.grade.stimuli[0].graders[0].config);
       const scratch = join(f.root, "scratch"), snapshot = join(f.root, "snapshot"), assetsDir = join(f.root, "grading/task");
       mkdirSync(scratch); mkdirSync(snapshot);
       if (name !== "missing-output") f.write("snapshot/deliverable/result.txt",
-        JSON.stringify({ answer: name === "wrong" ? 7 : 42, ...(name === "alternative" ? { explanation: "Valid alternative." } : {}) }));
+        JSON.stringify({ answer: ["wrong", "snapshot-checker-impostor"].includes(name) ? 7 : 42,
+          ...(name === "alternative" ? { explanation: "Valid alternative." } : {}) }));
       f.write("scratch/evaluator/check.mjs", 'throw new Error("Workspace impostor entered");');
       const trajectory = { workDir: scratch, assetsDir, artifactDir: snapshot };
       if (name === "wrong-digest") config.args[3] = "0".repeat(64);
@@ -216,6 +216,14 @@ async function protectedCases(t, native) {
         symlinkSync(join(f.root, "outside"), join(assetsDir, "link"), process.platform === "win32" ? "junction" : "dir");
         config.args[2] = config.args[2].replace('"check.mjs"', '"link/check.mjs"');
       }
+      if (name === "linked-submission") {
+        f.write("outside/result.txt", '{"answer":42}');
+        rmSync(join(snapshot, "deliverable"), { recursive: true });
+        symlinkSync(join(f.root, "outside"), join(snapshot, "deliverable"), process.platform === "win32" ? "junction" : "dir");
+      }
+      if (name === "snapshot-checker-impostor") {
+        f.write("snapshot/check.mjs", 'console.log(JSON.stringify({passed:true,score:1}));');
+      }
       if (name === "output-escape") config.args[2] = config.args[2].replace('"deliverable/result.txt"', '"../result.txt"');
       if (name === "missing-assets") delete trajectory.assetsDir;
       if (name === "missing-snapshot") delete trajectory.artifactDir;
@@ -227,7 +235,8 @@ async function protectedCases(t, native) {
         config.args[3] = createHash("sha256").update(checker).digest("hex");
       }
       const passed = ["valid", "alternative", "workspace-impostor"].includes(name);
-      const operational = !["valid", "alternative", "wrong", "missing-output", "workspace-impostor"].includes(name);
+      const wrong = ["wrong", "snapshot-checker-impostor"].includes(name);
+      const operational = !["valid", "alternative", "wrong", "missing-output", "workspace-impostor", "snapshot-checker-impostor"].includes(name);
       if (native) {
         const grade = await createDefaultGraderRegistry().get("program").grade({ trajectory, config: { ...config, program: process.execPath } });
         assert.equal(grade.passed, passed, JSON.stringify(grade));
@@ -235,15 +244,15 @@ async function protectedCases(t, native) {
       } else {
         const result = f.run(config.args, { ...config.env, EVALUATE_WORKSPACE: scratch,
           EVALUATE_ASSETS: trajectory.assetsDir ?? "", EVALUATE_ARTIFACT_DIR: trajectory.artifactDir ?? "" }, undefined, scratch);
-        assert.equal(result.status, name === "wrong" ? 1 : 0, result.stderr);
-        if (name === "wrong") assert.equal(result.stdout, "");
+        assert.equal(result.status, wrong ? 1 : 0, result.stderr);
+        if (wrong) assert.equal(result.stdout, "");
         else {
           const verdict = JSON.parse(result.stdout);
           assert.equal(verdict.passed, passed);
           assert.equal(verdict.status === "error", operational, verdict.evidence);
         }
       }
-      assert.equal(existsSync(join(scratch, "checker-entered")), ["valid", "alternative", "wrong", "workspace-impostor"].includes(name));
+      assert.equal(existsSync(join(scratch, "checker-entered")), ["valid", "alternative", "wrong", "workspace-impostor", "snapshot-checker-impostor"].includes(name));
       assert.match(readFileSync(join(scratch, "evaluator/check.mjs"), "utf8"), /Workspace impostor/);
     });
   }
@@ -331,9 +340,13 @@ test("restricted execution delegates native options and results unchanged except
   const failure = new Error("native execution failed");
   delegated.mock.mockImplementation(async () => { throw failure; });
   await assert.rejects(executor.execute(stimulus, options), error => error === failure);
+  delegated.mock.mockImplementation(async () => { throw undefined; });
+  await assert.rejects(executor.execute(stimulus, options), error => error === undefined);
 });
 
-test("restricted factories forward native environment and hooks and deny every host request on replacement clients", async () => {
+test("restricted factories forward native environment and hooks and deny every host request on replacement clients", async t => {
+  const workingDirectory = mkdtempSync(join(runtime, ".native-package-test-"));
+  t.after(() => rmSync(workingDirectory, { recursive: true, force: true }));
   const context = new AsyncLocalStorage();
   const config = policyConfig(["view"]);
   config.sessionPolicy.permissions = { allow: ["Read(approved/**)"], deny: ["Shell(*)"] };
@@ -346,7 +359,7 @@ test("restricted factories forward native environment and hooks and deny every h
     return {
       createSession: async options => {
         sessions.push(options);
-        return { rpc: { tools: {
+        return { sessionId: `replacement-${sessions.length}`, rpc: { skills: { list: async () => ({ skills: [] }) }, tools: {
           initializeAndValidate: async () => {},
           getCurrentMetadata: async () => ({ tools: options.availableTools.map(name => ({ name })) }),
         } } };
@@ -359,8 +372,8 @@ test("restricted factories forward native environment and hooks and deny every h
   const env = Object.freeze({ COPILOT_HOME: "native-owned-home", FLAG: "1" });
   const telemetry = Object.freeze({ otlpEndpoint: "synthetic" });
   const trace = () => ({ traceparent: "synthetic" });
-  const input = Object.freeze({ sessionId: "fresh", onPermissionRequest: () => { approvals++; } });
-  const run = { policy: validateSessionPolicy(config), timeoutMs: 1000 };
+  const input = Object.freeze({ sessionId: "fresh", workingDirectory, onPermissionRequest: () => { approvals++; } });
+  const run = { policy: validateSessionPolicy(config), timeoutMs: 1000, inventories: [] };
   for (let replacement = 0; replacement < 2; replacement++) {
     const client = context.run(run, () => factories.createEnvClient(env, telemetry, trace));
     await client.createSession(input);
@@ -393,34 +406,37 @@ test("restricted factories forward native environment and hooks and deny every h
   assert.deepEqual(config, original);
   assert.deepEqual(run.policy.availableTools, ["view"]);
   assert.deepEqual(run.policy.permissions.allow, ["Read(approved/**)"]);
+  assert.equal(run.inventories.length, 2);
 });
 
-test("restricted concurrent factories capture their own policy, including an empty explicit tool set", async () => {
+test("restricted concurrent factories capture their own policy, including an empty explicit tool set", async t => {
+  const workingDirectory = mkdtempSync(join(runtime, ".native-package-test-"));
+  t.after(() => rmSync(workingDirectory, { recursive: true, force: true }));
   const context = new AsyncLocalStorage();
   const received = [];
   const factories = restrictedFactories(context, () => ({
     createSession: async config => {
       await new Promise(resolve => setImmediate(resolve));
       received.push(config);
-      return { rpc: { tools: {
+      return { sessionId: config.sessionId, rpc: { skills: { list: async () => ({ skills: [] }) }, tools: {
         initializeAndValidate: async () => {},
         getCurrentMetadata: async () => ({ tools: config.availableTools.map(name => ({ name })) }),
       } } };
     },
   }));
   await Promise.all([[], ["view"], ["edit"]].map(async (tools, index) => {
-    const client = await context.run({ policy: validateSessionPolicy(policyConfig(tools)), timeoutMs: 1000 }, async () => {
+    const client = await context.run({ policy: validateSessionPolicy(policyConfig(tools)), timeoutMs: 1000, inventories: [] }, async () => {
       await new Promise(resolve => setImmediate(resolve));
       return factories.createEnvClient({ RUN: `${index}` });
     });
-    await client.createSession({ sessionId: `${index}` });
+    await client.createSession({ sessionId: `${index}`, workingDirectory });
   }));
   for (const [index, tools] of [[], ["view"], ["edit"]].entries()) {
     assert.deepEqual(received.find(config => config.sessionId === `${index}`).availableTools, tools);
   }
 });
 
-test("restricted policy and diagnostic inventory capture compose before returning a session", async t => {
+test("restricted policy and scoped inventory backup complete before returning a session", async t => {
   const root = mkdtempSync(join(runtime, ".native-package-test-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const context = new AsyncLocalStorage();
@@ -441,26 +457,22 @@ test("restricted policy and diagnostic inventory capture compose before returnin
     received = config;
     return session;
   });
-  const restore = await installInventoryCapture(runtime, root);
-  try {
-    const factories = restrictedFactories(context, () => Object.create(CopilotClient.prototype));
-    const client = context.run({ policy: validateSessionPolicy(policyConfig(["view"])), timeoutMs: 1000 },
-      () => factories.createEnvClient({ DO_NOT_TRACK: "1" }));
-    const input = Object.freeze({ workingDirectory: "native-workspace", skillDirectories: Object.freeze([]) });
-    assert.equal(await client.createSession(input), session);
-    assert.deepEqual(received.availableTools, ["view"]);
-    assert.equal(received.managedSettings.permissions.disableBypassPermissionsMode, "disable");
-    assert.equal(received.onPermissionRequest({ kind: "shell" }).kind,
-      "reject");
-    assert.equal(input.availableTools, undefined);
-    assert.deepEqual(calls, ["initialize", "skills", "initialize"]);
-    const record = JSON.parse(readFileSync(join(root, `${session.sessionId}.json`), "utf8"));
-    assert.equal(record.phase, "before-first-prompt");
-    assert.deepEqual(record.skillDetails.skills, [{ name: "ambient", enabled: true }]);
-    await assert.rejects(client.resumeSession("old"), /resume/);
-  } finally {
-    restore();
-  }
+  const run = { policy: validateSessionPolicy(policyConfig(["view"])), timeoutMs: 1000, inventories: [] };
+  const factories = restrictedFactories(context, () => Object.create(CopilotClient.prototype));
+  const client = context.run(run,
+    () => factories.createEnvClient({ DO_NOT_TRACK: "1" }));
+  const input = Object.freeze({ workingDirectory: root, skillDirectories: Object.freeze([]) });
+  assert.equal(await client.createSession(input), session);
+  assert.deepEqual(received.availableTools, ["view"]);
+  assert.equal(received.managedSettings.permissions.disableBypassPermissionsMode, "disable");
+  assert.equal(received.onPermissionRequest({ kind: "shell" }).kind, "reject");
+  assert.equal(input.availableTools, undefined);
+  assert.deepEqual(calls, ["initialize", "initialize", "skills"]);
+  assert.equal(run.inventories.length, 1);
+  const record = JSON.parse(readFileSync(run.inventories[0].file, "utf8"));
+  assert.equal(record.phase, "before-first-prompt");
+  assert.deepEqual(record.skillDetails.skills, [{ name: "ambient", enabled: true }]);
+  await assert.rejects(client.resumeSession("old"), /resume/);
 });
 
 test("restricted preflight rejects unsupported, unexpected and unavailable tool inventories before returning a session", async () => {
@@ -531,18 +543,15 @@ test("restricted registration checks the exact target stack without starting an 
   }
 });
 
-test("native execution preload requires an absolute evidence directory and preserves CLI errors", t => {
+test("native execution command needs no process-wide preload and preserves CLI errors", t => {
   const f = fixture(t);
-  for (const directory of [undefined, "relative-evidence"]) {
-    const result = f.script("study:run", ["--help"], directory ? { SKILL_EVAL_INVENTORY_DIR: directory } : {});
-    assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /SKILL_EVAL_INVENTORY_DIR must be an absolute evidence directory/);
-  }
+  const help = f.script("study:run", ["--help"]);
+  assert.equal(help.status, 0, help.stdout + help.stderr);
   const inventories = join(f.temporary, "inventories");
   const invalid = f.script("study:run", ["--not-a-native-option"], { SKILL_EVAL_INVENTORY_DIR: inventories });
   assert.notEqual(invalid.status, 0);
   assert.match(invalid.stderr, /unknown option/i);
-  assert.deepEqual(readdirSync(inventories), []);
+  assert.equal(existsSync(inventories), false);
   const copilot = JSON.parse(readFileSync(join(runtime, "node_modules", "@github", "copilot", "package.json"), "utf8"));
   assert.equal(copilot.optionalDependencies[`@github/copilot-${process.platform}-${process.arch}`], "1.0.89");
 });

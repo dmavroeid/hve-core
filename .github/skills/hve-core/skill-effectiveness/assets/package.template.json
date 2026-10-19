@@ -8,7 +8,7 @@
   },
   "scripts": {
     "study:dry-run": "node node_modules/@microsoft/vally-cli/dist/index.js experiment run --dry-run --executor-plugin ../scripts/restricted-copilot-executor.mjs",
-    "study:run": "node --import ./scripts/native-inventory.mjs node_modules/@microsoft/vally-cli/dist/index.js experiment run --executor-plugin ../scripts/restricted-copilot-executor.mjs",
+    "study:run": "node node_modules/@microsoft/vally-cli/dist/index.js experiment run --executor-plugin ../scripts/restricted-copilot-executor.mjs",
     "review:images": "node scripts/review-images.mjs",
     "vally": "node node_modules/@microsoft/vally-cli/dist/index.js"
   },

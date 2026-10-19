@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: MIT
 
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { parseArgs } from "node:util";
 
 async function bounded(operation, timeoutMs, label) {
   let timer;
@@ -23,11 +24,17 @@ async function bounded(operation, timeoutMs, label) {
 }
 
 function persist(file, record) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
+  publish(file, Buffer.from(JSON.stringify(record, null, 2) + "\n"));
+}
+
+function publish(file, bytes) {
+  const directory = path.dirname(file);
+  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+  assert.equal(normalizePath(fs.realpathSync(directory)), normalizePath(path.resolve(directory)),
+    "Evidence destination must not traverse symbolic links");
   const temporary = `${file}.tmp-${randomUUID()}`;
   let created = false, handle, failure;
   try {
-    const bytes = JSON.stringify(record, null, 2) + "\n";
     handle = fs.openSync(temporary, "wx", 0o600);
     created = true;
     fs.writeFileSync(handle, bytes);
@@ -49,6 +56,105 @@ function persist(file, record) {
     }
   }
   if (failure) throw failure;
+}
+
+function normalizePath(file) {
+  return process.platform === "win32" ? file.toLowerCase() : file;
+}
+
+const digest = bytes => createHash("sha256").update(bytes).digest("hex");
+const maxEvidenceBytes = 16 * 1024 * 1024;
+const sameFile = (a, b) => a.dev === b.dev && a.ino === b.ino
+  && a.size === b.size && a.mtimeNs === b.mtimeNs;
+
+function readEvidence(file) {
+  assert.ok(path.isAbsolute(file), "Evidence file must be absolute");
+  const before = fs.lstatSync(file, { bigint: true });
+  assert.ok(before.isFile() && !before.isSymbolicLink(), "Evidence must be a regular file, not a symbolic link");
+  assert.equal(normalizePath(fs.realpathSync(file)), normalizePath(path.resolve(file)),
+    "Evidence must not traverse symbolic links");
+  assert.ok(before.size > 0n && before.size <= BigInt(maxEvidenceBytes),
+    "Evidence must be nonempty and at most 16 MiB");
+  const handle = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+  let bytes, failure;
+  try {
+    assert.ok(sameFile(before, fs.fstatSync(handle, { bigint: true })), "Evidence changed before reading");
+    bytes = Buffer.alloc(Number(before.size));
+    let offset = 0;
+    while (offset < bytes.length) {
+      const count = fs.readSync(handle, bytes, offset, bytes.length - offset, null);
+      assert.ok(count > 0, "Evidence truncated while reading");
+      offset += count;
+    }
+    assert.ok(sameFile(before, fs.fstatSync(handle, { bigint: true })) && sameFile(before, fs.lstatSync(file, { bigint: true })),
+      "Evidence changed while reading");
+  } catch (error) {
+    failure = error;
+  }
+  try { fs.closeSync(handle); } catch (error) {
+    failure = failure ? new AggregateError([failure, error], "Evidence read and file close failed") : error;
+  }
+  if (failure) throw failure;
+  return { bytes, stat: before };
+}
+
+export function backupInventory(file) {
+  const { bytes } = readEvidence(file);
+  const record = JSON.parse(bytes);
+  assert.ok(typeof record.sessionId === "string" && record.sessionId.length > 0
+    && record.phase === "before-first-prompt"
+    && path.basename(file) === `${encodeURIComponent(record.sessionId)}.json`,
+  "Startup inventory identity or phase is invalid");
+  const backupFile = path.join(path.dirname(file), "startup-backups", path.basename(file));
+  publish(backupFile, bytes);
+  return Object.freeze({ file, backupFile, sessionId: record.sessionId, sha256: digest(bytes) });
+}
+
+export function verifyInventoryBackup(reference) {
+  const report = {
+    at: new Date().toISOString(), phase: "after-native-execution",
+    sessionId: reference.sessionId, expectedSha256: reference.sha256,
+    original: path.basename(reference.file),
+    backup: path.join("startup-backups", path.basename(reference.backupFile)),
+    status: "error",
+    limitation: "Supervised consistency only; not an independent host audit or tamper-proof store.",
+  };
+  let failure;
+  try {
+    const original = readEvidence(reference.file);
+    const backup = readEvidence(reference.backupFile);
+    assert.ok(original.stat.dev !== backup.stat.dev || original.stat.ino !== backup.stat.ino,
+      "Inventory backup must not share the original inode");
+    report.originalSha256 = digest(original.bytes);
+    report.backupSha256 = digest(backup.bytes);
+    assert.equal(report.originalSha256, reference.sha256, "Startup inventory changed");
+    assert.equal(report.backupSha256, reference.sha256, "Startup inventory backup changed");
+    report.status = "verified";
+  } catch (error) {
+    failure = error;
+    report.error = errorRecord(error);
+  }
+  try {
+    persist(path.join(path.dirname(reference.file),
+      `${encodeURIComponent(reference.sessionId)}.verification.json`), report);
+  } catch (error) {
+    failure = failure ? new AggregateError([failure, error], "Inventory verification and report publication failed") : error;
+  }
+  if (failure) throw failure;
+  return report;
+}
+
+export function backupSessionLog(source, output) {
+  assert.ok(path.isAbsolute(output), "Log backup output must be absolute");
+  const { bytes } = readEvidence(source);
+  const record = {
+    at: new Date().toISOString(), phase: "operator-selected-log-snapshot",
+    source, bytes: bytes.length, sha256: digest(bytes),
+    limitation: "Selected file snapshot only; not complete session history, redacted content or startup attestation.",
+  };
+  publish(output, bytes);
+  persist(`${output}.metadata.json`, record);
+  return record;
 }
 
 function errorRecord(error) {
@@ -145,4 +251,12 @@ if (preloaded) {
   assert.ok(directory && path.isAbsolute(directory), "SKILL_EVAL_INVENTORY_DIR must be an absolute evidence directory");
   const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   await installInventoryCapture(packageRoot, directory);
+} else if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
+  assert.equal(process.argv[2], "backup-log", "Usage: native-inventory.mjs backup-log --source <absolute-file> --output <new-absolute-file>");
+  const { values } = parseArgs({
+    args: process.argv.slice(3), strict: true, allowPositionals: false,
+    options: { source: { type: "string" }, output: { type: "string" } },
+  });
+  assert.ok(values.source && values.output, "Log backup requires --source and --output");
+  console.log(JSON.stringify(backupSessionLog(values.source, values.output)));
 }

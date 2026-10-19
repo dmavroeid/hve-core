@@ -14,14 +14,14 @@ const skillRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const assets = join(skillRoot, "assets");
 const read = name => readFileSync(join(assets, name), "utf8");
 
-test("generated commands invoke native Vally directly and only execution preloads capture", () => {
+test("generated commands invoke native Vally directly through the session-policy and inventory plugin", () => {
   const pkg = JSON.parse(read("package.template.json"));
   const cli = "node_modules/@microsoft/vally-cli/dist/index.js";
   assert.equal(pkg.engines.node, ">=24");
   assert.equal(pkg.scripts.vally, `node ${cli}`);
   const plugin = "--executor-plugin ../scripts/restricted-copilot-executor.mjs";
   assert.equal(pkg.scripts["study:dry-run"], `node ${cli} experiment run --dry-run ${plugin}`);
-  assert.equal(pkg.scripts["study:run"], `node --import ./scripts/native-inventory.mjs ${cli} experiment run ${plugin}`);
+  assert.equal(pkg.scripts["study:run"], `node ${cli} experiment run ${plugin}`);
   assert.equal(pkg.scripts["review:images"], "node scripts/review-images.mjs");
 });
 
@@ -103,7 +103,7 @@ test("the transferable package has only declared content, two runtime helpers an
     "references/experiment-method.md", "references/holistic-review.md",
     "references/repository-intake.md", "references/visual-review.md",
     "scripts/native-inventory.mjs", "scripts/review-images.mjs", "scripts/restricted-copilot-executor.mjs",
-    "tests/native-inventory.test.mjs", "tests/review-images.test.mjs",
+    "tests/native-inventory.test.mjs", "tests/review-images.test.mjs", "tests/evidence-backup.test.mjs",
     "tests/native-templates.test.mjs", "tests/skill-package-architecture.test.mjs",
   ].sort());
   const npmrc = readFileSync(join(skillRoot, ".npmrc"), "utf8");
