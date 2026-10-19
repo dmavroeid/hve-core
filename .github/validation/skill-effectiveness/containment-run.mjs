@@ -56,7 +56,7 @@ const asyncNative = (args, input, cwd) => new Promise((resolveChild, reject) => 
   child.stdin.end(input);
 });
 const observe = () => {
-  const ids = docker("ps", "-a", "--filter", "ancestor=" + image, "--format", "{{.ID}}").trim().split("\n").filter(Boolean);
+  const ids = docker("ps", "-a", "--filter", "ancestor=" + image, "--filter", "label=com.docker.compose.project", "--format", "{{.ID}}").trim().split("\n").filter(Boolean);
   for (const id of ids) {
     if (inspected.has(id)) continue;
     const [c] = JSON.parse(docker("inspect", id));
@@ -137,7 +137,7 @@ try {
   assert.equal(grade.stimuli[0].graders[0].type, "program");
   const overrides = join(root, "hardening.yml");
   const hardening = { read_only: true, pids_limit: 128, mem_limit: "512m", cpus: 1, tmpfs: ["/tmp:rw,nosuid,nodev,noexec,size=67108864"] };
-  writeFileSync(overrides, stringify({ services: { task: hardening, grade: hardening } }));
+  writeFileSync(overrides, stringify({ services: { grade: hardening } }));
   summary.stage = "actual-native-contained-grading"; persist();
   let observationError;
   poll = setInterval(() => { if (!observationError) try { observe(); } catch (error) { observationError = error; } }, 150);
