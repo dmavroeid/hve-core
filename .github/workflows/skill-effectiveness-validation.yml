@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
-name: Temporary actual-session model-free preflight
+name: Temporary native service-log eligibility check
 on:
   push:
     branches: [automation/skill-effectiveness-validation-20261017]
@@ -13,7 +13,7 @@ jobs:
   validate:
     if: github.repository == 'dmavroeid/hve-core' && github.ref == 'refs/heads/automation/skill-effectiveness-validation-20261017'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 15
     permissions:
       contents: read
     defaults:
@@ -39,18 +39,18 @@ jobs:
           set -euo pipefail
           node ../../../validation/skill-effectiveness/containment-identity.mjs
           npm ci --ignore-scripts --include=dev --no-audit --no-fund --fetch-retries=0 --fetch-timeout=60000
-      - name: Capture actual production session before intentional pre-prompt stop
-        timeout-minutes: 20
+      - name: Check the unchanged native service log stream without SDK or model calls
+        timeout-minutes: 10
         run: |
           set -euo pipefail
           unset SKILL_EFFECTIVENESS_NATIVE_PREFLIGHT SKILL_EVAL_INVENTORY_DIR NODE_OPTIONS NODE_TEST_CONTEXT
-          node ../../../validation/skill-effectiveness/same-session-run.mjs
+          node ../../../validation/skill-effectiveness/native-log-stream-run.mjs
           git diff --exit-code -- .
       - name: Upload only synthetic structural results
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: skill-effectiveness-same-session-d74
-          path: ${{ runner.temp }}/same-session-d74/safe
+          name: skill-effectiveness-native-log-stream
+          path: ${{ runner.temp }}/native-log-stream/safe
           if-no-files-found: error
           retention-days: 14
