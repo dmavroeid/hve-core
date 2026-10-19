@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
-name: Temporary two-stage skill authoring validation
+name: Temporary native containment execution
 on:
   push:
     branches: [automation/skill-effectiveness-validation-20261017]
@@ -13,7 +13,7 @@ jobs:
   validate:
     if: github.repository == 'dmavroeid/hve-core' && github.ref == 'refs/heads/automation/skill-effectiveness-validation-20261017'
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30
     permissions:
       contents: read
     defaults:
@@ -23,7 +23,6 @@ jobs:
     env:
       DO_NOT_TRACK: '1'
       VALLY_TELEMETRY_OPTOUT: '1'
-      SKILL_EFFECTIVENESS_NATIVE_PREFLIGHT: '0'
     steps:
       - name: Checkout exact snapshot
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
@@ -34,52 +33,24 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: '24.14.0'
-      - name: Verify approved source identity
-        run: |
-          set -euo pipefail
-          node --input-type=module <<'NODE'
-          import assert from "node:assert/strict";
-          import { execFileSync } from "node:child_process";
-          import { createHash } from "node:crypto";
-          import { readFileSync } from "node:fs";
-          const hash = value => createHash("sha256").update(value).digest("hex");
-          const files = execFileSync("git", ["ls-files", "."], { encoding: "utf8" }).trim().split("\n").sort();
-          assert.equal(files.length, 24);
-          const inventory = files.map(file => `${file} ${hash(readFileSync(file, "utf8").replace(/\r\n/g, "\n"))}\n`).join("");
-          assert.equal(hash(inventory), "af5126c38001aaca5c85b6c25bef803a924683398516790fc05e34c055843afb");
-          assert.equal(hash(readFileSync("package-lock.json")), "b9c750fbb43bcf37350da9f62722d737380f0e271a78210be6ad64cd63862da2");
-          assert.equal(process.env.SKILL_EFFECTIVENESS_NATIVE_PREFLIGHT, "0");
-          console.log("Approved source, frozen lock and native opt-out verified.");
-          NODE
-      - name: Restore unchanged public frozen dependencies
+      - name: Restore frozen host tooling
         timeout-minutes: 4
         run: |
           set -euo pipefail
-          npm ci --ignore-scripts --include=dev --no-audit --no-fund --fetch-retries=0 --fetch-timeout=60000 2>&1 | tee "$RUNNER_TEMP/p04-t22-restore.log"
-      - name: Validate exact package without SDK or model startup
-        timeout-minutes: 9
+          node ../../../validation/skill-effectiveness/containment-identity.mjs
+          npm ci --ignore-scripts --include=dev --no-audit --no-fund --fetch-retries=0 --fetch-timeout=60000
+      - name: Execute native Docker containment assertions
+        timeout-minutes: 20
         run: |
           set -euo pipefail
           unset SKILL_EFFECTIVENESS_NATIVE_PREFLIGHT SKILL_EVAL_INVENTORY_DIR NODE_OPTIONS NODE_TEST_CONTEXT
-          node --input-type=module <<'NODE'
-          import assert from "node:assert/strict";
-          import { readFileSync, writeFileSync } from "node:fs";
-          import { join } from "node:path";
-          const expected = JSON.parse(readFileSync("package.json", "utf8")).devDependencies;
-          const versions = Object.fromEntries(Object.keys(expected).map(name => [name, JSON.parse(readFileSync(join("node_modules", name, "package.json"), "utf8")).version]));
-          assert.deepEqual(versions, expected);
-          writeFileSync(join(process.env.RUNNER_TEMP, "p04-t22-versions.json"), JSON.stringify({ commit: process.env.GITHUB_SHA, node: process.version, versions, nativeStartup: false }, null, 2));
-          NODE
-          npm test 2>&1 | tee "$RUNNER_TEMP/p04-t22-tests.log"
+          node ../../../validation/skill-effectiveness/containment-run.mjs
           git diff --exit-code -- .
-      - name: Retain synthetic validation evidence
+      - name: Upload only synthetic structural results
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: skill-effectiveness-two-stage-validation
-          path: |
-            ${{ runner.temp }}/p04-t22-restore.log
-            ${{ runner.temp }}/p04-t22-tests.log
-            ${{ runner.temp }}/p04-t22-versions.json
-          if-no-files-found: warn
+          name: skill-effectiveness-containment-d63
+          path: ${{ runner.temp }}/containment-d63/safe/summary.json
+          if-no-files-found: error
           retention-days: 14
