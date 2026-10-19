@@ -115,8 +115,8 @@ try {
   const hardening = { image: imageTag, read_only: true, pids_limit: 128, mem_limit: "512m", cpus: 1, tmpfs: ["/tmp:rw,nosuid,nodev,noexec,size=67108864"] };
   const overlay = join(root, "hardened.compose.yaml");
   writeFileSync(overlay, stringify({ services: { task: { ...hardening, profiles: ["vally-task"] }, grade: { ...hardening, profiles: ["vally-grade"] } } }));
-  const backend = ["--backend", "docker", "--backend-config", "task-image=" + imageTag, "--backend-config", "grade-image=" + imageTag,
-    "--backend-config", "task-network=none", "--backend-config", "grade-network=none", "--backend-config", "compose-file=" + overlay];
+  const backend = ["--backend", "docker", "--backend-args", "task-image=" + imageTag, "--backend-args", "grade-image=" + imageTag,
+    "--backend-args", "task-network=none", "--backend-args", "grade-network=none", "--backend-args", "compose-file=" + overlay];
   summary.stage = "actual-native-task-execution"; persist();
   poll = setInterval(() => { if (!observerError) { try { observe(); } catch (error) { observerError = error; } } }, 150);
   const code = await native(["experiment", "run", join(fixture, "candidate.experiment.yaml"), "--executor-plugin", plugin, "--output-dir", join(root, "out"), "--workspace", join(root, "preserved"), ...backend]);
