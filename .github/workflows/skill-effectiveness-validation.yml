@@ -93,14 +93,45 @@ jobs:
             "activity-proof-unavailable", "observation-unavailable", "container-proof-unavailable", "volume-proof-unavailable", "correlation-unavailable"];
           let gate = "unavailable";
           const at = value => { ensure(gates.includes(value), "invalid-gate"); gate = value; };
-          const freshDiagnostic = name => ({ name, phase: "not-started", nativeCliExit: null, failure: null, observerFailure: null, nativeOutput: { stdout: "unavailable", stderr: "unavailable" }, cleanup: { status: "not-started", reason: "not-started" } });
+          const unavailableError = () => ({ status: "unavailable", excerpt: null, truncated: false });
+          const errorWords = new Set(("error typeerror syntaxerror referenceerror rangeerror cause code cannot find module package imported from require stack " +
+            "failed failure invalid unknown unrecognized unexpected unsupported missing required argument option command value expected received " +
+            "not found is a an the of for to in at and or must be provided specified available directory file path permission denied access " +
+            "docker backend task grade image network workspace assets artifact eval spec validation stdin input output json jsonl " +
+            "enoent eacces eperm einval err_module_not_found err_require_esm err_unknown_file_extension err_invalid_arg_value " +
+            "--backend --backend-args --eval-spec --output --require-pass --workspace --assets-dir --artifact-dir redacted").split(" "));
+          const redactError = text => text.replace(/(?:[a-z][a-z0-9+.-]*:\/\/|[a-z]:[\\/]|\/|\\\\)[^\s"'<>]*/gi, " [redacted] ")
+            .replace(/(?:token|secret|password|authorization|api[_-]?key)\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s]+)/gi, " [redacted] ")
+            .replace(/--[a-z][a-z-]*|[a-z][a-z0-9_-]*|\[redacted\]|[^\s]/gi, token =>
+              errorWords.has(token.toLowerCase()) || token === "[redacted]" ? token : /^[():.,-]$/.test(token) ? token : "[redacted]")
+            .replace(/(?:\[redacted\]\s*)+/g, "[redacted] ").replace(/\s+/g, " ").trim();
+          export function captureNativeError(text) {
+            ensure(typeof text === "string" && Buffer.byteLength(text) <= 65536, "invalid-diagnostic");
+            if (text.length === 0) return { status: "empty", excerpt: null, truncated: false };
+            const bytes = Buffer.from(text), preview = bytes.subarray(0, 8192).toString("utf8"), sanitized = redactError(preview);
+            if (!/\b(error|failed|invalid|unknown|unrecognized|unexpected|unsupported|missing|cannot|denied|enoent|eacces|eperm|einval|err_[a-z_]+)\b/i.test(sanitized))
+              return { ...unavailableError(), truncated: bytes.length > 8192 };
+            let excerpt = sanitized;
+            if (Buffer.byteLength(excerpt) > 512) { excerpt = excerpt.slice(0, 512); excerpt = excerpt.slice(0, excerpt.lastIndexOf(" ")).trimEnd(); }
+            return { status: "redacted", excerpt, truncated: bytes.length > 8192 || Buffer.byteLength(sanitized) > 512 };
+          }
+          export function cleanNativeError(value) {
+            exact(value, ["status", "excerpt", "truncated"]);
+            ensure(typeof value.truncated === "boolean" && ["unavailable", "empty", "redacted"].includes(value.status), "invalid-diagnostic");
+            ensure(value.status === "redacted" ? typeof value.excerpt === "string" && value.excerpt.length > 0 &&
+              Buffer.byteLength(value.excerpt) <= 512 && redactError(value.excerpt) === value.excerpt &&
+              captureNativeError(value.excerpt).status === "redacted" : value.excerpt === null &&
+              (value.status !== "empty" || !value.truncated), "invalid-diagnostic");
+            return { status: value.status, excerpt: value.excerpt, truncated: value.truncated };
+          }
+          const freshDiagnostic = name => ({ name, phase: "not-started", nativeCliExit: null, failure: null, observerFailure: null, nativeOutput: { stdout: "unavailable", stderr: "unavailable" }, nativeError: unavailableError(), cleanup: { status: "not-started", reason: "not-started" } });
           const cleanFailure = value => {
             if (value === null) return null;
             exact(value, ["gate", "reason"]); ensure(gates.includes(value.gate) && reasons.includes(value.reason), "invalid-diagnostic");
             return { gate: value.gate, reason: value.reason };
           };
           export function cleanDiagnostic(value) {
-            exact(value, ["name", "phase", "nativeCliExit", "failure", "observerFailure", "nativeOutput", "cleanup"]); exact(value.cleanup, ["status", "reason"]);
+            exact(value, ["name", "phase", "nativeCliExit", "failure", "observerFailure", "nativeOutput", "nativeError", "cleanup"]); exact(value.cleanup, ["status", "reason"]);
             exact(value.nativeOutput, ["stdout", "stderr"]);
             ensure(["unavailable", "empty", "single-json", "invalid-json", "multiple-lines"].includes(value.nativeOutput.stdout) &&
               ["unavailable", "empty", "eval-validation", "input-rejected", "path-rejected", "other", "ambiguous"].includes(value.nativeOutput.stderr), "invalid-diagnostic");
@@ -108,7 +139,7 @@ jobs:
               (value.nativeCliExit === null || Number.isInteger(value.nativeCliExit) && value.nativeCliExit >= 0 && value.nativeCliExit <= 255) &&
               ["not-started", "passed", "failed-or-unavailable"].includes(value.cleanup.status) && cleanupReasons.includes(value.cleanup.reason) &&
               (value.cleanup.status === "passed" ? value.cleanup.reason === "verified-absent" : value.cleanup.status === "not-started" ? value.cleanup.reason === "not-started" : !["not-started", "verified-absent"].includes(value.cleanup.reason)), "invalid-diagnostic");
-            return { ...value, failure: cleanFailure(value.failure), observerFailure: cleanFailure(value.observerFailure), nativeOutput: { ...value.nativeOutput }, cleanup: { ...value.cleanup } };
+            return { ...value, failure: cleanFailure(value.failure), observerFailure: cleanFailure(value.observerFailure), nativeOutput: { ...value.nativeOutput }, nativeError: cleanNativeError(value.nativeError), cleanup: { ...value.cleanup } };
           }
           const diagnosticFile = name => path.join(root, "cases", name, "diagnostic.json");
           const diagnosticState = name => {
@@ -149,11 +180,13 @@ jobs:
           export function collectNativeOutput(name, dir) {
             const diagnostic = diagnosticState(name), output = {}; let failure;
             diagnostic.nativeOutput = { stdout: "unavailable", stderr: "unavailable" };
+            diagnostic.nativeError = unavailableError();
             for (const [stream, limit, next] of [["stdout", 1048576, "native-output"], ["stderr", 65536, "native-stderr-read"]]) {
               at(next);
               try {
                 output[stream] = bounded(path.join(dir, stream), limit).toString("utf8");
                 diagnostic.nativeOutput[stream] = classifyOutput(stream, output[stream]);
+                if (stream === "stderr") diagnostic.nativeError = captureNativeError(output[stream]);
                 diagnostic.gate = next; const { gate: current, ...value } = diagnostic; cleanDiagnostic(value);
                 save(diagnosticFile(name), diagnostic, 4096);
               } catch (error) { failure ??= { error, gate: next }; }
