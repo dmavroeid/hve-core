@@ -98,7 +98,7 @@ test("the transferable package has only declared content, two runtime helpers an
   assert.deepEqual(files.sort(), [
     ".gitignore", ".npmrc", "LICENSE", "SKILL.md", "SECURITY.md", "package.json", "package-lock.json",
     "assets/EVALS.template.md", "assets/native-eval.template.yaml", "assets/native-experiment.template.yaml",
-    "assets/native-review-eval.template.yaml",
+    "assets/native-grade-eval.template.yaml", "assets/native-review-eval.template.yaml",
     "assets/package.template.json",
     "references/experiment-method.md", "references/holistic-review.md",
     "references/repository-intake.md", "references/visual-review.md",

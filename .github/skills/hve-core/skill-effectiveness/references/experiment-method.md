@@ -274,7 +274,9 @@ inputs. Stage only needed sources, not an entire authoring workspace.
 
 Both variants explicitly list complete skill arrays, with shared skills in both
 and the focus skill only in treatment. Keep every other condition identical.
-The candidate template demonstrates completion, delivery and executable checking.
+The candidate template demonstrates public completion and delivery checks only.
+Copy the [grade-only template](../assets/native-grade-eval.template.yaml) for
+separate protected executable quality grading of each completed native trial.
 The optional [review template](../assets/native-review-eval.template.yaml)
 demonstrates native saved-evidence `prompt` grading in a separate invocation.
 Replace task/checker/rubric placeholders, remove methods that do not fit and
@@ -282,22 +284,22 @@ agree judge usage before execution. `capability`
 and `regression` are Vally classifications, not choices of grading method.
 Keep the existing-skill and repository-origin routes on this same execution path.
 
-Prefer native file/content graders for simple checks and `run-command` for existing
-tests. Disclose the checked contract, not a command to a withheld evaluator:
+Use native public delivery graders during collection. The grade-only `program`
+prelude supplies the protected checker seam; reuse task tests/validators behind
+that entry point rather than staging a private `run-command` in the candidate
+workspace. Disclose the checked contract, not a command to a withheld evaluator.
+Author the exact same stimulus name in both specs and replace every placeholder.
+Pin the reviewed checker's SHA-256 in the trusted grade config, outside candidate
+authority. Its authored entry point is relative to the protected assets root.
+The checker receives the disclosed submission-relative output as `process.argv[2]`
+with the submission root as its working directory; writable scratch remains at
+`EVALUATE_WORKSPACE`. Keep stdout silent; return normally/exit 0 for pass, exit 1
+for task failure and throw for broken checker execution. The prelude reports
+prerequisite/body errors through native `status: error`, not a task-quality zero.
+Adapt the checker to classify invalid task content intentionally.
 
-```yaml
-- type: run-command
-  name: behavior
-  config:
-    command: node
-    args: ["evaluator/check.mjs", "deliverable/<artifact>"]
-    expected_exit_code: 0
-    timeout: 3m
-```
-
-Test a passing result, a meaningful failing result and a broken checker setup.
-A process exit alone cannot explain why a command failed; inspect the native
-details and logs. Use a task-specific `program` grader only when necessary.
+Test passing alternatives, wrong/missing output and broken checker setup.
+Inspect actual native grader-error details, not just process exit.
 Do not return success plus a private "uninspected" flag: native reports do not
 interpret that as unavailable.
 
@@ -307,10 +309,14 @@ Use these three scopes, not a copied authoring workspace:
 
 * `fixtures/<task>/public` contains only the public request, sources and required
   interfaces. The candidate template stages it at `task-fixture`.
-* `grading/<task>` is the reviewed original evaluator tree, outside candidate
-  staging. Native `grading_environment.files` overlays it at `evaluator` after
-  candidate execution. Never execute `task-fixture/check.mjs` as the private
-  checker. Do not remove legitimate public tools from the full focus skill.
+* `grading/<task>` is the reviewed original evaluator/dependency tree, outside
+  candidate mounts. Pass it explicitly as native `--assets-dir` only for
+  separate offline grading; neither spec uses a private workspace overlay.
+  Never execute a workspace or `task-fixture` substitute as the trusted checker.
+  Do not remove legitimate public tools from the full focus skill.
+* A completed host-owned arm-specific submission snapshot supplies native
+  `--artifact-dir`. Preserve the original record and record the binding in
+  EVALS.md; a directory's existence is not complete immutable export evidence.
 * An evaluator-owned saved-review directory contains only one submission's
   approved artifacts and needed original public sources. Exclude private
   evaluators, focus-skill trees, role maps, EVALS.md, prior assessments and
@@ -324,39 +330,66 @@ grader-local installation resolved from its own location, not candidate
 outside candidate authority before offline grading; do not fetch them during it.
 Verify that the selected native backend actually stages the required closure.
 
-Native saved grading can prepare a disposable workspace with grader files.
-That local behavior does not establish Docker artifact transfer, immutable
-executed checker bytes or container teardown. Verify the selected backend's
-actual behavior instead of inferring it from local staging.
-
-Staging is not immutable execution. Record reviewed-original digests and require
-candidate-inaccessible checker/dependency sources, protected executed bytes and
-trusted integrity verification at the closest supported point before use.
-Operator before/after hashes alone do not satisfy immediate pre-use verification.
+The prelude consumes only reserved native `EVALUATE_ASSETS`,
+`EVALUATE_ARTIFACT_DIR` and `EVALUATE_WORKSPACE` roots. It rejects missing or
+overlapping roots, invalid/escaping or linked input paths and missing/mismatched
+trusted checker digests before checker-body entry. It hashes the actual entry
+point immediately before import. This authenticates that file, not its complete
+dependency closure or the arm identity. Readonly inputs and independently trusted
+dependency provisioning remain necessary against changes after authentication.
+Missing output under intact correctly bound inputs is a task failure without a
+checker-body claim; unavailable roots/checker or integrity/startup errors are
+operationally invalid. Original errors/skips/null trajectories stay unavailable
+as fresh quality evidence. Do not invent missing native subprocess metadata.
 Unverified read-only mounts, integrity timing, artifact export, image identity,
 credential removal or egress denial block runtime acceptance; do not substitute
 a writable local grade or claim these YAML files enforce them.
 
-### Run Native Experiments, Then Review Saved Evidence
+### Run Native Experiments, Grade Each Trial, Then Review Saved Evidence
 
-Keep `experiment run` for candidates and offline executable grading. Use one
-native eval and the experiment's complete skill arrays for both variants;
-Vally owns repetitions, staging, grading, identities and reports. Its native
-grading phase consumes `grading_environment.files` after candidate execution.
-The absence of `experiment run --skip-grade` does not require a different
-collection path or duplicate eval files per arm.
+Keep `experiment run` for collection and public delivery checks. Use the same
+candidate eval and complete skill arrays for both variants. Vally owns
+repetitions, staging, identities, results and cleanup; no skip-grade flag or
+custom collector is needed. Preserve its per-variant `results.jsonl` files.
+Native `grade` consumes their original `trial-result` records directly;
+`vally export` exports eval specifications, not saved outcomes.
 
 Verify fresh candidate homes and unique sessions/workspaces through native
 behavior. If separate arm invocations are necessary, use native `--variant`
 selection from the same experiment file. Retain the planned order and native
 pair identities in EVALS.md; do not add a scheduler or pairing engine.
 
-The experiment's executable grading role requires no model credentials, denied
-egress, no LLM graders and no global `judge_provider`. Select the verified native
-backend and `grade-*` role settings; removing only the prompt grader does not
-establish the security boundary. Separate role authority does not require
-separate top-level collection and grading commands. Preserve native outcomes
-and errors; do not rerun a candidate to repair a grade.
+For each completed trial, select exactly one original record and one explicitly
+bound completed snapshot. Preserve original file/record hashes, native identities,
+eval/config hashes, snapshot origin/digest, trusted checker/dependency provenance
+and the exact new grade command/output link in EVALS.md. Native grade output
+drops outer item/variant/trial/experiment metadata; do not pair it by order alone.
+Successful nonnull trajectories are freshly graded even with earlier passing
+public grades. Non-success/null trajectories can pass through without dispatch.
+
+The following PowerShell recipe is illustrative and gated, not a verified runtime
+profile or permission to execute. Supply compatible selected native images and
+pre-created, distinct host-owned inputs/scratch and a fresh output location.
+Only the original single record enters stdin; do not fabricate a trajectory.
+
+```powershell
+Get-Content -Raw .\selected-original-trial.jsonl | npm run vally -- grade `
+  --eval-spec .\evals\<task>.grade.eval.yaml --output jsonl --require-pass `
+  --backend docker --backend-args "task-image=<compatible-image>" `
+  --backend-args "grade-image=<compatible-image>" `
+  --backend-args task-network=none --backend-args grade-network=none `
+  --workspace "<fresh-scratch>" --assets-dir "<trusted-checker-tree>" `
+  --artifact-dir "<bound-submission-snapshot>" > .\fresh-grade-output.jsonl
+```
+
+These overrides apply to every input record: never submit a multi-arm batch with
+one artifact directory. A valid opposite-arm snapshot can still pass vanilla
+native grading; operator-owned binding is a prerequisite, not an automatic check.
+Require readonly authoritative checker/submission paths, writable scratch, no
+model credentials, denied grade egress and verified native lifecycle. No LLM
+grader/provider is configured in this grade-only spec. Preserve all attempts
+and errors and never overwrite original reports or rerun candidates to repair
+grading. Source/local mechanics do not establish actual-route containment.
 
 Only after offline capture succeeds, assemble and approve the one-submission
 review directory and snapshot coverage. For optional online text review, feed
@@ -389,6 +422,7 @@ Run from the generated package root, replacing task/model placeholders:
 ```powershell
 npm ci
 npm run vally -- lint --strict --eval-spec evals/<task>.eval.yaml
+npm run vally -- lint --strict --eval-spec evals/<task>.grade.eval.yaml
 npm run vally -- lint --strict --eval-spec evals/<task>.review.eval.yaml
 npm run study:dry-run -- experiments/<task>.experiment.yaml --param AGENT_MODEL=<id>
 ```

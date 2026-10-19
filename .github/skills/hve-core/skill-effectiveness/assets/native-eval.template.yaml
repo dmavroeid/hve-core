@@ -31,17 +31,9 @@ agent_environment:
     - src: ../fixtures/<task>/public
       dest: task-fixture
 
-# Reviewed originals live outside candidate inputs. Vally overlays this tree in
-# its grading workspace after execution, not into the preserved candidate tree.
-grading_environment:
-  files:
-    - src: ../grading/<task>
-      dest: evaluator
-
-# Offline executable grading only: no LLM graders or global judge_provider.
-# Native experiment run collects candidates and performs these offline checks.
-# Backend containment, credential removal and denied egress are separate gates.
-# Semantic assessment uses the review spec, never this executable-grading view.
+# Collection and public delivery checks only, not private quality evidence.
+# Grade each original trial separately with the protected grade-only spec.
+# Backend containment, credential removal and denied egress remain separate gates.
 # No aggregate threshold: native trial success requires every grader to pass.
 # Otherwise a mean score could hide a failed test or require a perfect judge score.
 scoring: {}
@@ -66,10 +58,3 @@ stimuli:
         name: delivery
         config:
           path: deliverable/<artifact>
-      - type: run-command
-        name: behavior
-        config:
-          command: node
-          args: ["evaluator/check.mjs", "deliverable/<artifact>"]
-          expected_exit_code: 0
-          timeout: 3m

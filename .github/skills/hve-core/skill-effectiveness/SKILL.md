@@ -1,6 +1,6 @@
 ---
 name: skill-effectiveness
-description: "Use when creating, reviewing or improving a native Vally A/B evaluation of whether an Agent Skill helps on a realistic task, including deriving a candidate skill from repository knowledge."
+description: "Use when authoring or reviewing a native Vally baseline-versus-with-skill evaluation, with separate protected offline grading and existing-skill or repository-derived candidate entry routes."
 license: MIT AND CC-BY-4.0
 user-invocable: true
 compatibility: "Node.js 24+, Vally 0.19.0, Copilot CLI 1.0.89 and SDK 1.0.15. Windows exact-stack and runtime verification are pending."
@@ -92,7 +92,7 @@ Choose evidence for the claimed benefit, not whichever grader is easiest to add:
 
 | Claim                                                   | Evidence to generate                                                                    |
 |---------------------------------------------------------|-----------------------------------------------------------------------------------------|
-| Behavior, calculations or contract fidelity             | Native `run-command` with relevant tests or validators                                  |
+| Behavior, calculations or contract fidelity             | Protected native `program` grading of relevant tests or validators                      |
 | Source-grounded interpretation, omissions or usefulness | Native `prompt` assessment of actual artifacts and sources, or an explicit human review |
 | Legibility or visual communication                      | Rendered images inspected by a human or the supplied SDK image-review path              |
 
@@ -112,8 +112,10 @@ why the difference matters to the user, accept alternatives and allow a tie.
 If delivery itself is the claimed benefit, say so.
 
 For open-ended tasks, implement the assessment using [holistic review](references/holistic-review.md).
-The candidate template stages public inputs separately from private executable
-checks. The optional saved-review template contains only a `prompt` grader;
+The candidate template collects public task/delivery evidence only. A separate
+grade-only template authenticates a private checker against an operator-pinned
+digest and grades one bound submission through native protected-input paths.
+The optional saved-review template contains only a `prompt` grader;
 adapt or remove methods that do not fit. Give each review the same task, relevant
 original sources and criteria, but only its submission. Native `repo` evidence
 supplies bounded text snapshots, not pixels or automatic anonymity. Inspect what
@@ -144,22 +146,29 @@ a panel or another deciding model without a reason.
 Follow [native execution](references/experiment-method.md). Vally owns candidate
 execution, workspaces, graders, native records and reports.
 
-| Asset                                                            | Generated-package destination                  |
-|------------------------------------------------------------------|------------------------------------------------|
-| [Package](assets/package.template.json)                          | `package.json`; generate an exact lockfile     |
-| [Registry configuration](.npmrc)                                 | `.npmrc`; retain the canonical public registry |
-| [MIT notice](LICENSE)                                            | `LICENSE`; retain with redistributed helpers   |
-| [Native eval](assets/native-eval.template.yaml)                  | `evals/<task>.eval.yaml`                       |
-| [Saved-evidence review](assets/native-review-eval.template.yaml) | `evals/<task>.review.eval.yaml`; optional      |
-| [Native experiment](assets/native-experiment.template.yaml)      | `experiments/<task>.experiment.yaml`           |
-| [Inventory recorder](scripts/native-inventory.mjs)               | `scripts/native-inventory.mjs`                 |
-| [SDK image review](scripts/review-images.mjs)                    | `scripts/review-images.mjs`                    |
-| [Session-policy plugin](scripts/restricted-copilot-executor.mjs) | `scripts/restricted-copilot-executor.mjs`      |
-| [Evaluation notes](assets/EVALS.template.md)                     | `EVALS.md`                                     |
+| Asset                                                             | Generated-package destination                  |
+|-------------------------------------------------------------------|------------------------------------------------|
+| [Package](assets/package.template.json)                           | `package.json`; generate an exact lockfile     |
+| [Registry configuration](.npmrc)                                  | `.npmrc`; retain the canonical public registry |
+| [MIT notice](LICENSE)                                             | `LICENSE`; retain with redistributed helpers   |
+| [Native eval](assets/native-eval.template.yaml)                   | `evals/<task>.eval.yaml`                       |
+| [Protected offline grade](assets/native-grade-eval.template.yaml) | `evals/<task>.grade.eval.yaml`                 |
+| [Saved-evidence review](assets/native-review-eval.template.yaml)  | `evals/<task>.review.eval.yaml`; optional      |
+| [Native experiment](assets/native-experiment.template.yaml)       | `experiments/<task>.experiment.yaml`           |
+| [Inventory recorder](scripts/native-inventory.mjs)                | `scripts/native-inventory.mjs`                 |
+| [SDK image review](scripts/review-images.mjs)                     | `scripts/review-images.mjs`                    |
+| [Session-policy plugin](scripts/restricted-copilot-executor.mjs)  | `scripts/restricted-copilot-executor.mjs`      |
+| [Evaluation notes](assets/EVALS.template.md)                      | `EVALS.md`                                     |
 
 Place public fixtures in `fixtures/<task>/public` and reviewed evaluator originals
 in `grading/<task>`. Only the former enters candidate staging. Keep the full
 focus skill intact, including legitimate public validation tools.
+Use one original native trial record and one completed arm-bound snapshot per
+offline grade invocation. Keep trusted checker/dependency originals outside
+candidate mounts, bind their reviewed digest before execution and use fresh
+scratch/output locations. Preserve original native reports byte-for-byte;
+link every new grade explicitly in EVALS.md. A grade pass alone cannot prove
+correct arm binding, immutable inputs or credential/egress isolation.
 Keep review evidence and EVALS.md outside both candidate inputs and broad source
 copies. See the [staging contract](references/experiment-method.md#separate-public-grading-and-review-inputs)
 for grader-only dependencies, saved-result review and the remaining runtime gates.

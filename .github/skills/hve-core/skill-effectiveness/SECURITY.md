@@ -3,7 +3,7 @@ title: Skill Effectiveness Skill Security Model
 description: "STRIDE model for tool-using intake, native candidate and grader gaps, inventory capture, and no-tools image review"
 author: microsoft/hve-core
 ms.topic: reference
-ms.date: 2026-10-17
+ms.date: 2026-10-19
 keywords:
   - security
   - STRIDE
@@ -83,9 +83,11 @@ and observed. Financial approval cannot waive those prerequisites.
    no-tools image review with bounded waits and atomic status/failure records.
    Actual codec checks passed on Ubuntu; model vision and Windows compatibility
    remain unverified.
-4. Native Vally templates stage only `fixtures/<task>/public` for candidates and
-   overlay reviewed originals from `grading/<task>` at `evaluator` for executable
-   grading. The optional review spec has only a prompt grader and receives an
+4. The candidate template stages only `fixtures/<task>/public` and collects
+   public completion/delivery checks. A separate native `program` grade-only
+   template authenticates a reviewed checker from reserved `EVALUATE_ASSETS`,
+   consuming one bound snapshot from `EVALUATE_ARTIFACT_DIR` with distinct
+   writable scratch. The optional review spec has only a prompt grader and receives an
    approved saved-evidence workspace, not that private grading view. Templates
    do not enforce role containment, retries or spending.
 5. Repository intake occurs in the tool-using authoring session. The candidate
@@ -94,9 +96,10 @@ and observed. Financial approval cannot waive those prerequisites.
    access, recording its revision, and stopping when activation is unavailable.
 6. Executable graders can load candidate-controlled files or code. The current
    package does not isolate these processes from host files, credentials or
-   network access. Native grading-only placement separates context; protected
-   executed bytes, dependency provenance and immediate pre-use integrity remain
-   independent requirements.
+   network access. The authored entry-point authenticator rejects missing roots,
+   digest/path errors and changed checker bytes; it does not protect mounts,
+   authenticate dependencies or prove correct original-record/arm binding.
+   Those controls and actual-route verification remain independent requirements.
 7. `scripts/restricted-copilot-executor.mjs` delegates native execution/lifecycle
    to Vally through its public environment-aware client factory. Per-run policy
    context and bounded SDK preflight do not supply OS containment or authoritative
@@ -119,9 +122,11 @@ flowchart TD
         TEXT["Native text-grader SDK"]
         JUDGE["No-tools image-review SDK"]
         CHECK["Executable grader and submitted code"]
+        GRADE["Separate native grade / entry authentication"]
+        SNAP["Operator-bound completed submission snapshot"]
         PRIVATE["Reviewed original checker and dependencies"]
         SAVED["Approved one-submission saved evidence"]
-        OUT["Declared evidence directories"]
+        OUT["Separate original and new grade evidence"]
     end
     subgraph SERVICE["External model services"]
         MODEL["Configured Copilot model"]
@@ -133,8 +138,11 @@ flowchart TD
     INV -->|"SDK session RPC"| CLI
     CLI -->|"inventory RPC result"| INV
     INV -->|"exclusive JSON write"| OUT
-    CLI -->|"native grader invocation / workspace files"| CHECK
-    PRIVATE -->|"native grading-only file overlay"| CHECK
+    CLI -->|"native original trial records / exported artifacts"| OUT
+    OUT -->|"operator record identity / completed arm binding"| SNAP
+    SNAP -->|"native artifact reference / required readonly input"| GRADE
+    PRIVATE -->|"native assets reference / required readonly input"| GRADE
+    GRADE -->|"immediate checker digest / authored submission argv"| CHECK
     CHECK -->|"grader results and logs"| OUT
     OUT -->|"operator-selected saved artifacts / public sources"| SAVED
     SAVED -->|"separate native repo evidence / read-search tools"| TEXT
@@ -160,7 +168,7 @@ flowchart TD
 | Imported sources -> tool-using authoring -> native Vally    |
 | Shared session-policy plugin -> environment-scoped SDK     |
 | Candidate SDK / CLI -> workspace -> executable grader      |
-| Reviewed originals -> native grading-only overlay          |
+| Original record -> bound snapshot -> separate native grade |
 | Approved saved evidence -> separate native text reviewer   |
 | Inventory preload -> writable evidence                    |
 | Selected prompt / pixels -> no-tools image-review SDK      |
@@ -232,17 +240,24 @@ records; this is failure safety, not candidate-resistant storage. Independently
 retained original bytes/hashes can detect changes, not prevent them. The image
 reviewer requires a new destination and records prompt/image hashes. Evidence
 remains writable by the operator or another process with filesystem access.
-The template no longer stages the private checker for candidate sessions. Native
-grading-file replacement is not immutable execution: grading paths and dependency
-closures still need independent readonly protection and an immediate pre-use
-integrity check. Source digests and operator before/after hashes are insufficient.
+Neither template overlays a private checker into a candidate/workspace tree.
+The grade-only prelude checks distinct reserved roots and input paths, then
+hashes the actual trusted entry immediately before import. It rejects prerequisite
+failures as native grader errors; intact snapshots missing task output produce a
+task failure without claiming checker execution. Authentication does not prevent
+post-check races or protect dependency closures: readonly input protection and
+trusted provisioning remain required. Operator-owned record/snapshot binding is
+not automatic; a valid opposite-arm snapshot can still pass native grading.
 
 ### Repudiation
 
 Inventories record timestamps and session IDs. Image records retain requested
 model, session identity, hashes, usage events, errors, and completion status.
 There is no signature or append-only store.
-Native grading records do not prove which protected checker bytes were executed.
+Original records remain separate and byte-preserved; EVALS notes explicitly link
+each new grade to native identity, config hashes and its snapshot. Normalized
+grade output drops outer arm/trial metadata; that output alone cannot prove the
+pairing or protected executed bytes. No tamper-evident binding store is provided.
 
 ### Information Disclosure
 
@@ -282,12 +297,12 @@ and protected checker/submission paths.
 
 ### Risk Rating
 
-| Threat                              | Likelihood | Impact | Residual Risk | Status                                                                  |
-|-------------------------------------|------------|--------|---------------|-------------------------------------------------------------------------|
-| Sensitive local evidence exposed    | Med        | High   | Med           | Partially mitigated; operator-controlled storage                        |
-| Evidence or checkers changed        | Med        | High   | High          | Open; exclusive creation and hashes do not restrict candidate authority |
-| Oversized inputs exhaust memory     | Med        | Med    | Med           | Open; no input-size limit                                               |
-| Grader code inherits host authority | Med        | High   | High          | Open; no verified credential-free, egress-denied grading boundary       |
+| Threat                              | Likelihood | Impact | Residual Risk | Status                                                                     |
+|-------------------------------------|------------|--------|---------------|----------------------------------------------------------------------------|
+| Sensitive local evidence exposed    | Med        | High   | Med           | Partially mitigated; operator-controlled storage                           |
+| Evidence or checkers changed        | Med        | High   | High          | Open; entry authentication does not enforce readonly inputs or arm binding |
+| Oversized inputs exhaust memory     | Med        | Med    | Med           | Open; no input-size limit                                                  |
+| Grader code inherits host authority | Med        | High   | High          | Open; no verified credential-free, egress-denied grading boundary          |
 
 ## Bucket B2: Copilot Runtime and Model
 
@@ -384,17 +399,17 @@ shell/interpreter access is not safe merely because a session is fresh.
 
 Ratings are qualitative project assessments, not CVSS scores.
 
-| Id      | Gap                                                                                               | Severity         | Status                                                                                                                               |
-|---------|---------------------------------------------------------------------------------------------------|------------------|--------------------------------------------------------------------------------------------------------------------------------------|
-| G-INF-1 | Prompt, image, and inventory evidence has no redaction or custom access control                   | InfoDisc-Med     | Operator must protect inputs and outputs and review before sharing                                                                   |
-| G-TAM-1 | Startup capture does not enforce candidate isolation or cover later context                       | Tampering-High   | Supervised inspection and symmetric exclusions required                                                                              |
-| G-DOS-1 | Pinned native execution and review paths lack an enforced credit cap                              | DoS-High         | Supervise approved targets; stop before the next invocation; block if a required enforced maximum is unavailable                     |
-| G-DOS-2 | Media decoder and review lifecycle still need actual-codec/exact-stack verification               | DoS-Med          | Partially mitigated; fixed preflight limits and bounded waits pass model-free tests; actual decode/runtime cleanup remain unverified |
-| G-EOP-1 | Tool-using intake and current candidate permissions lack an enforced least-authority boundary     | EoP-High         | Open; fresh environment-scoped adapter source exists, but native enforcement is unverified; intake remains separate                  |
-| G-TAM-2 | Candidate-visible or writable checker/executed paths can invalidate grading                       | Tampering-High   | Open; require independent readonly grading inputs and immediate pre-use checker hash                                                 |
-| G-INF-2 | Executable grading and candidate access are not verified credential-isolated or egress-restricted | InfoDisc-High    | Open; no claim that fresh homes, variable deletion or no-tools image review solve this                                               |
-| G-TAM-3 | Task-owned startup capture is not authoritative host evidence                                     | Tampering-High   | Open; bounded diagnostic capture, atomic publication and variable scrubbing do not establish protected originals                     |
-| G-SUP-1 | Imported lockfile previously contained SHA-1 entries                                              | SupplyChain-High | Resolved; regenerated from public npm with canonical URLs and SHA-512 integrity                                                      |
+| Id      | Gap                                                                                                | Severity         | Status                                                                                                                                            |
+|---------|----------------------------------------------------------------------------------------------------|------------------|---------------------------------------------------------------------------------------------------------------------------------------------------|
+| G-INF-1 | Prompt, image, and inventory evidence has no redaction or custom access control                    | InfoDisc-Med     | Operator must protect inputs and outputs and review before sharing                                                                                |
+| G-TAM-1 | Startup capture does not enforce candidate isolation or cover later context                        | Tampering-High   | Supervised inspection and symmetric exclusions required                                                                                           |
+| G-DOS-1 | Pinned native execution and review paths lack an enforced credit cap                               | DoS-High         | Supervise approved targets; stop before the next invocation; block if a required enforced maximum is unavailable                                  |
+| G-DOS-2 | Media decoder and review lifecycle still need actual-codec/exact-stack verification                | DoS-Med          | Partially mitigated; fixed preflight limits and bounded waits pass model-free tests; actual decode/runtime cleanup remain unverified              |
+| G-EOP-1 | Tool-using intake and current candidate permissions lack an enforced least-authority boundary      | EoP-High         | Open; fresh environment-scoped adapter source exists, but native enforcement is unverified; intake remains separate                               |
+| G-TAM-2 | Writable checker/dependencies or incorrect original-record/snapshot binding can invalidate grading | Tampering-High   | Open; separate authored entry authentication exists, but readonly inputs, dependency provenance and manual arm binding still require verification |
+| G-INF-2 | Executable grading and candidate access are not verified credential-isolated or egress-restricted  | InfoDisc-High    | Open; no claim that fresh homes, variable deletion or no-tools image review solve this                                                            |
+| G-TAM-3 | Task-owned startup capture is not authoritative host evidence                                      | Tampering-High   | Open; bounded diagnostic capture, atomic publication and variable scrubbing do not establish protected originals                                  |
+| G-SUP-1 | Imported lockfile previously contained SHA-1 entries                                               | SupplyChain-High | Resolved; regenerated from public npm with canonical URLs and SHA-512 integrity                                                                   |
 
 ## References
 

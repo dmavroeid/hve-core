@@ -4,13 +4,14 @@
 import assert from "node:assert/strict";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { findPackageJSON } from "node:module";
 import test from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parse, stringify } from "yaml";
-import { applyEnvironment, gradeInDisposableWorkspace, hasGraderError, PromptGrader, RunCommandGrader, resolveGradePass } from "@microsoft/vally";
+import { applyEnvironment, createDefaultGraderRegistry, hasGraderError, PromptGrader, RunCommandGrader, resolveGradePass } from "@microsoft/vally";
 import { CopilotSdkExecutor } from "@microsoft/vally/executor";
 import { CopilotClient } from "@github/copilot-sdk";
 import { installInventoryCapture } from "../scripts/native-inventory.mjs";
@@ -22,6 +23,7 @@ const read = name => readFileSync(join(assets, name), "utf8");
 const fill = text => text.replace(/<[^>\r\n]+>/g, value => ({
   "<task>": "task", "<task-name>": "task", "<candidate-skill>": "demo",
   "<artifact>": "result.txt", "<experiment-name>": "baseline-first",
+  "<checker-entry>": "check.mjs",
 })[value] ?? "example");
 
 function fixture(t) {
@@ -42,31 +44,37 @@ function fixture(t) {
   copyFileSync(join(runtime, "scripts", "restricted-copilot-executor.mjs"), join(root, "scripts", "restricted-copilot-executor.mjs"));
   write("skills/demo/SKILL.md", "---\nname: demo\ndescription: Local fixture.\n---\nCheck your work.\n");
   write("fixtures/task/public/request.txt", "Create deliverable/result.txt. Synthetic test input.");
-  write("grading/task/check.mjs", `import { readFileSync } from "node:fs";
-if (!readFileSync(process.argv[2], "utf8").trim()) process.exit(1);`);
+  write("grading/task/check.mjs", `import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+writeFileSync(join(process.env.EVALUATE_WORKSPACE, "checker-entered"), "entered");
+if (JSON.parse(readFileSync(process.argv[2], "utf8")).answer !== 42) process.exit(1);`);
   const spec = parse(fill(read("native-eval.template.yaml")));
+  const grade = parse(fill(read("native-grade-eval.template.yaml")));
+  grade.stimuli[0].graders[0].config.args[3] =
+    createHash("sha256").update(readFileSync(join(root, "grading/task/check.mjs"))).digest("hex");
   const review = parse(fill(read("native-review-eval.template.yaml")));
   const experiment = parse(fill(read("native-experiment.template.yaml")));
   write("evals/task.eval.yaml", stringify(spec));
+  write("evals/task.grade.eval.yaml", stringify(grade));
   write("evals/task.review.eval.yaml", stringify(review));
   write("experiments/task.experiment.yaml", stringify(experiment));
   const environment = { ...process.env, DO_NOT_TRACK: "1", VALLY_TELEMETRY_OPTOUT: "1" };
   for (const key of ["NODE_OPTIONS", "SKILL_EVAL_INVENTORY_DIR", "SKILL_EVAL_INVENTORY_PACKAGE",
     "EVALUATE_USE_HOST_COPILOT_HOME", "COPILOT_HOME_SETTINGS_JSON", "NODE_TEST_CONTEXT"]) delete environment[key];
-  const run = (args, env = {}) => {
+  const run = (args, env = {}, input, cwd = root) => {
     const child = spawnSync(process.execPath, args, {
-      cwd: root, env: { ...environment, ...env }, encoding: "utf8", timeout: 90000, maxBuffer: 4 * 1024 * 1024,
+      cwd, input, env: { ...environment, ...env }, encoding: "utf8", timeout: 90000, maxBuffer: 4 * 1024 * 1024,
     });
     assert.ifError(child.error);
     return child;
   };
   const scripts = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).scripts;
-  const script = (name, args, env) => {
+  const script = (name, args, env, input) => {
     const [node, ...command] = scripts[name].split(" ");
     assert.equal(node, "node");
-    return run([...command, ...args], env);
+    return run([...command, ...args], env, input);
   };
-  return { root, temporary, write, spec, review, experiment, run, script };
+  return { root, temporary, write, spec, grade, review, experiment, run, script };
 }
 
 function files(directory) {
@@ -79,7 +87,9 @@ test("copied native templates lint and dry-run both role orders without capture 
   const lint = f.script("vally", ["lint", "--strict", "--eval-spec", "evals/task.eval.yaml"]);
   assert.equal(lint.status, 0, lint.stdout + lint.stderr);
   assert.deepEqual(f.spec.stimuli[0].graders.map(grader => grader.type),
-    ["completed", "file-exists", "run-command"]);
+    ["completed", "file-exists"]);
+  const gradeLint = f.script("vally", ["lint", "--strict", "--eval-spec", "evals/task.grade.eval.yaml"]);
+  assert.equal(gradeLint.status, 0, gradeLint.stdout + gradeLint.stderr);
   const reviewLint = f.script("vally", ["lint", "--strict", "--eval-spec", "evals/task.review.eval.yaml"]);
   assert.equal(reviewLint.status, 0, reviewLint.stdout + reviewLint.stderr);
   assert.deepEqual(f.review.stimuli[0].graders[0].config.evidence, ["repo"]);
@@ -103,11 +113,15 @@ test("copied native templates lint and dry-run both role orders without capture 
 
 test("native staging templates separate public inputs, offline checkers and saved review evidence", () => {
   const candidate = parse(fill(read("native-eval.template.yaml")));
+  const grade = parse(fill(read("native-grade-eval.template.yaml")));
   const review = parse(fill(read("native-review-eval.template.yaml")));
   assert.deepEqual(candidate.agent_environment.files, [{ src: "../fixtures/task/public", dest: "task-fixture" }]);
-  assert.deepEqual(candidate.grading_environment.files, [{ src: "../grading/task", dest: "evaluator" }]);
-  assert.deepEqual(candidate.stimuli[0].graders.map(grader => grader.type), ["completed", "file-exists", "run-command"]);
-  assert.deepEqual(candidate.stimuli[0].graders.at(-1).config.args, ["evaluator/check.mjs", "deliverable/result.txt"]);
+  assert.equal(candidate.grading_environment, undefined);
+  assert.deepEqual(candidate.stimuli[0].graders.map(grader => grader.type), ["completed", "file-exists"]);
+  assert.equal(grade.stimuli[0].name, candidate.stimuli[0].name);
+  assert.deepEqual(grade.stimuli[0].graders.map(grader => grader.type), ["program"]);
+  for (const key of ["agent_environment", "grading_environment", "executor_plugins"]) assert.equal(grade[key], undefined);
+  assert.equal(grade.defaults, undefined);
   assert.match(candidate.stimuli[0].prompt, /private evaluator is unavailable/);
   assert.doesNotMatch(candidate.stimuli[0].prompt, /check\.mjs|Public checks run:/);
   assert.equal(candidate.defaults.judge_model, undefined);
@@ -124,7 +138,7 @@ test("native staging templates separate public inputs, offline checkers and save
 test("native staging specs pass available CLI lint and mock experiment dry-run without SDK startup", { timeout: 180000 }, t => {
   const f = fixture(t);
   const cli = join(dirname(findPackageJSON("@microsoft/vally-cli", import.meta.url)), "dist", "index.js");
-  for (const spec of ["evals/task.eval.yaml", "evals/task.review.eval.yaml"]) {
+  for (const spec of ["evals/task.eval.yaml", "evals/task.grade.eval.yaml", "evals/task.review.eval.yaml"]) {
     const result = f.run([cli, "lint", "--strict", "--eval-spec", spec]);
     assert.equal(result.status, 0, result.stdout + result.stderr);
   }
@@ -142,10 +156,9 @@ test("native staging specs pass available CLI lint and mock experiment dry-run w
   }
 });
 
-test("native saved grading replaces candidate checkers and preserves both arms and complete skills", async t => {
+test("native candidate staging preserves both complete skill arms without private checkers", async t => {
   const f = fixture(t);
   const input = readFileSync(join(f.root, "fixtures", "task", "public", "request.txt"), "utf8");
-  const expected = readFileSync(join(f.root, "grading", "task", "check.mjs"), "utf8");
   const publicTool = "export const validate = value => value !== undefined;\n";
   f.write("skills/demo/validate.mjs", publicTool);
   f.write("EVALS.md", "Evaluator-only notes.");
@@ -166,84 +179,85 @@ test("native saved grading replaces candidate checkers and preserves both arms a
         readFileSync(join(f.root, "skills", "demo", "SKILL.md"), "utf8"));
       assert.equal(readFileSync(join(skill, "validate.mjs"), "utf8"), publicTool);
     }
-    const substitute = 'throw new Error("Candidate substitute must not execute");';
-    f.write(`submissions/${variant}/evaluator/check.mjs`, substitute);
-    f.write(`submissions/${variant}/deliverable/result.txt`, "Valid synthetic output.");
-    const result = await gradeInDisposableWorkspace({
-      trajectory: { workDir: submission },
-      graderFiles: f.spec.grading_environment.files,
-      baseDir: join(f.root, "evals"),
-      grade: async trajectory => {
-        assert.notEqual(trajectory.workDir, submission);
-        assert.equal(readFileSync(join(trajectory.workDir, "evaluator", "check.mjs"), "utf8"), expected);
-        const grade = await new RunCommandGrader().grade({ trajectory,
-          config: { ...f.spec.stimuli[0].graders.at(-1).config, command: process.execPath } });
-        return { workDir: trajectory.workDir, grade };
-      },
-    });
-    assert.equal(result.grade.passed, true, JSON.stringify(result.grade));
-    assert.equal(existsSync(result.workDir), false);
-    assert.equal(readFileSync(join(submission, "evaluator", "check.mjs"), "utf8"), substitute);
-    assert.equal(readFileSync(join(submission, "task-fixture", "request.txt"), "utf8"), input);
   }
 });
 
-test("native staging fails explicitly for missing public inputs and trusted checker sources", async t => {
+test("native staging fails explicitly for missing public inputs", async t => {
   const f = fixture(t);
   const submission = join(f.root, "submission");
   mkdirSync(submission);
   await assert.rejects(applyEnvironment({
     files: [{ src: "../fixtures/missing", dest: "task-fixture" }],
   }, submission, join(f.root, "evals")), /ENOENT|not found|does not exist/);
-  mkdirSync(submission, { recursive: true });
-  const substitute = 'throw new Error("Missing trusted source must not fall back to this file");';
-  f.write("submission/evaluator/check.mjs", substitute);
-  let invoked = false;
-  await assert.rejects(gradeInDisposableWorkspace({
-    trajectory: { workDir: submission },
-    graderFiles: [{ src: "../grading/missing", dest: "evaluator" }],
-    baseDir: join(f.root, "evals"),
-    grade: async () => { invoked = true; },
-  }), /ENOENT|not found|does not exist/);
-  assert.equal(invoked, false, "missing trusted checker must stop before grading");
-  assert.equal(readFileSync(join(submission, "evaluator", "check.mjs"), "utf8"), substitute);
 });
 
-test("native saved grading distinguishes valid alternatives, wrong output and checker startup errors", async t => {
-  const f = fixture(t);
-  f.write("grading/task/check.mjs", `import { readFileSync } from "node:fs";
-const result = JSON.parse(readFileSync(process.argv[2], "utf8"));
-if (result.answer !== 42) process.exit(1);`);
-  for (const [name, output, passed, startupError] of [
-    ["valid", { answer: 42 }, true, false],
-    ["alternative", { explanation: "A valid alternative representation.", answer: 42 }, true, false],
-    ["wrong", { answer: 7 }, false, false],
-    ["missing-output", undefined, false, false],
-    ["checker-startup", { answer: 42 }, false, true],
-  ]) {
-    await t.test(name, async () => {
-      const submission = join(f.root, "submissions", name);
-      mkdirSync(submission, { recursive: true });
-      if (output !== undefined) f.write(`submissions/${name}/deliverable/result.txt`, JSON.stringify(output));
-      const grade = await gradeInDisposableWorkspace({
-        trajectory: { workDir: submission },
-        graderFiles: f.spec.grading_environment.files,
-        baseDir: join(f.root, "evals"),
-        grade: trajectory => new RunCommandGrader().grade({ trajectory, config: {
-          ...f.spec.stimuli[0].graders.at(-1).config,
-          command: startupError ? join(f.temporary, "missing-interpreter") : process.execPath,
-        } }),
-      });
-      assert.equal(grade.passed, passed, JSON.stringify(grade));
-      assert.equal(hasGraderError(grade), startupError, JSON.stringify(grade));
-      if (startupError) {
-        assert.match(JSON.stringify(grade), /ENOENT|not found|spawn/i);
-      } else {
-        if (name === "wrong") assert.equal(grade.score, 0);
-        if (name === "missing-output") assert.match(JSON.stringify(grade), /ENOENT/);
+async function protectedCases(t, native) {
+  for (const name of ["valid", "alternative", "wrong", "missing-output", "wrong-digest",
+    "malformed-digest", "missing-digest", "modified-checker", "missing-checker", "workspace-impostor",
+    "checker-escape", "linked-checker", "output-escape", "missing-assets", "missing-snapshot",
+    "unavailable-snapshot", "overlapping-roots", "body-error"]) {
+    await t.test(name, async t => {
+      const f = fixture(t), config = structuredClone(f.grade.stimuli[0].graders[0].config);
+      const scratch = join(f.root, "scratch"), snapshot = join(f.root, "snapshot"), assetsDir = join(f.root, "grading/task");
+      mkdirSync(scratch); mkdirSync(snapshot);
+      if (name !== "missing-output") f.write("snapshot/deliverable/result.txt",
+        JSON.stringify({ answer: name === "wrong" ? 7 : 42, ...(name === "alternative" ? { explanation: "Valid alternative." } : {}) }));
+      f.write("scratch/evaluator/check.mjs", 'throw new Error("Workspace impostor entered");');
+      const trajectory = { workDir: scratch, assetsDir, artifactDir: snapshot };
+      if (name === "wrong-digest") config.args[3] = "0".repeat(64);
+      if (name === "malformed-digest") config.args[3] = "bad";
+      if (name === "missing-digest") config.args.pop();
+      if (name === "modified-checker") f.write("grading/task/check.mjs", 'throw new Error("Altered checker entered");');
+      if (name === "missing-checker") rmSync(join(assetsDir, "check.mjs"));
+      if (name === "checker-escape") config.args[2] = config.args[2].replace('"check.mjs"', '"../check.mjs"');
+      if (name === "linked-checker") {
+        f.write("outside/check.mjs", readFileSync(join(assetsDir, "check.mjs")));
+        symlinkSync(join(f.root, "outside"), join(assetsDir, "link"), process.platform === "win32" ? "junction" : "dir");
+        config.args[2] = config.args[2].replace('"check.mjs"', '"link/check.mjs"');
       }
+      if (name === "output-escape") config.args[2] = config.args[2].replace('"deliverable/result.txt"', '"../result.txt"');
+      if (name === "missing-assets") delete trajectory.assetsDir;
+      if (name === "missing-snapshot") delete trajectory.artifactDir;
+      if (name === "unavailable-snapshot") trajectory.artifactDir = join(f.temporary, "missing-snapshot");
+      if (name === "overlapping-roots") trajectory.artifactDir = assetsDir;
+      if (name === "body-error") {
+        const checker = 'throw new Error("Trusted checker body failed");';
+        f.write("grading/task/check.mjs", checker);
+        config.args[3] = createHash("sha256").update(checker).digest("hex");
+      }
+      const passed = ["valid", "alternative", "workspace-impostor"].includes(name);
+      const operational = !["valid", "alternative", "wrong", "missing-output", "workspace-impostor"].includes(name);
+      if (native) {
+        const grade = await createDefaultGraderRegistry().get("program").grade({ trajectory, config: { ...config, program: process.execPath } });
+        assert.equal(grade.passed, passed, JSON.stringify(grade));
+        assert.equal(hasGraderError(grade), operational, JSON.stringify(grade));
+      } else {
+        const result = f.run(config.args, { ...config.env, EVALUATE_WORKSPACE: scratch,
+          EVALUATE_ASSETS: trajectory.assetsDir ?? "", EVALUATE_ARTIFACT_DIR: trajectory.artifactDir ?? "" }, undefined, scratch);
+        assert.equal(result.status, name === "wrong" ? 1 : 0, result.stderr);
+        if (name === "wrong") assert.equal(result.stdout, "");
+        else {
+          const verdict = JSON.parse(result.stdout);
+          assert.equal(verdict.passed, passed);
+          assert.equal(verdict.status === "error", operational, verdict.evidence);
+        }
+      }
+      assert.equal(existsSync(join(scratch, "checker-entered")), ["valid", "alternative", "wrong", "workspace-impostor"].includes(name));
+      assert.match(readFileSync(join(scratch, "evaluator/check.mjs"), "utf8"), /Workspace impostor/);
     });
   }
+}
+
+test("authored protected prelude executes directly without native runtime or model calls", t => protectedCases(t, false));
+test("native protected program distinguishes task failures from integrity and checker errors", t => protectedCases(t, true));
+
+test("native protected program reports interpreter startup as a grader error", async t => {
+  const f = fixture(t);
+  const grade = await createDefaultGraderRegistry().get("program").grade({ trajectory: { workDir: f.root },
+    config: { ...f.grade.stimuli[0].graders[0].config, program: join(f.temporary, "missing-interpreter.exe") } });
+  assert.equal(grade.passed, false);
+  assert.equal(hasGraderError(grade), true);
+  assert.match(JSON.stringify(grade), /ENOENT|not found|spawn/i);
 });
 
 const policyConfig = (tools = []) => ({
@@ -559,7 +573,7 @@ CopilotClient.prototype.createSession = async config => ({
   assert.deepEqual(record.skillDetails.skills, [{ name: "ambient", enabled: true, path: "fixture/SKILL.md" }]);
 });
 
-test("native mock runs preserve identities, task failures and operational errors without a converter", { timeout: 120000 }, t => {
+test("native mock runs preserve identities, task failures and operational errors without a converter", { timeout: 240000 }, t => {
   const f = fixture(t);
   f.spec.defaults.executor = "mock";
   f.experiment.overrides.runs = 2;
@@ -579,8 +593,9 @@ test("native mock runs preserve identities, task failures and operational errors
       output: "Synthetic result.", events: [{ type: "turn_end", data: {}, timestamp: new Date().toISOString() }],
     }));
   }
-  f.write("fixtures/mock/deliverable/result.txt", "Synthetic output staged for native delivery checks.");
+  f.write("fixtures/mock/deliverable/result.txt", JSON.stringify({ answer: 42 }));
   f.write("evals/task.eval.yaml", stringify(f.spec));
+  const originals = new Map();
   const execute = (name, expectedExit) => {
     const output = join(f.temporary, name);
     const result = f.script("study:run", ["experiments/task.experiment.yaml", "--param", "AGENT_MODEL=mock",
@@ -590,6 +605,7 @@ test("native mock runs preserve identities, task failures and operational errors
     assert.ok(existsSync(output), result.stdout + result.stderr);
     const outputs = files(output);
     assert.ok(outputs.some(file => file.endsWith("report.md")));
+    for (const file of outputs.filter(file => file.endsWith(".jsonl"))) originals.set(file, readFileSync(file));
     return outputs.filter(file => file.endsWith(".jsonl")).flatMap(file =>
       readFileSync(file, "utf8").split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line))
         .filter(record => record.type === "trial-result"));
@@ -636,6 +652,53 @@ test("native mock runs preserve identities, task failures and operational errors
   assert.deepEqual(reversed.map(record => record.variant), ["a-treatment", "b-baseline"]);
   assert.ok(reversed.every(record => record.trialIndex === undefined && typeof record.shardKey === "string"));
   assert.ok(reversed.every(record => record.experiment.baseline === "b-baseline"));
+  const bindings = [];
+  const gradeOriginal = (record, snapshot, expectedExit = 0) => {
+    const index = bindings.length, scratch = join(f.root, "grade-scratch", String(index));
+    mkdirSync(scratch, { recursive: true });
+    const child = f.script("vally", ["grade", "--eval-spec", "evals/task.grade.eval.yaml",
+      "--workspace", scratch, "--assets-dir", join(f.root, "grading/task"),
+      "--artifact-dir", snapshot, "--output", "jsonl", "--require-pass"], {}, JSON.stringify(record) + "\n");
+    assert.equal(child.status, expectedExit, child.stdout + child.stderr);
+    const outcomes = child.stdout.trim().split(/\r?\n/).map(line => JSON.parse(line));
+    assert.equal(outcomes.length, 1);
+    const output = f.write(`grade-output/${index}.jsonl`, child.stdout);
+    bindings.push({ record, snapshot, output, scratch });
+    assert.equal(outcomes[0].runId, record.runId);
+    for (const key of ["variant", "itemId", "experiment"]) assert.equal(outcomes[0][key], undefined);
+    return outcomes[0];
+  };
+  const successfulRecords = [...records, ...reversed].filter(record => record.stimulus === "task");
+  for (const [index, record] of successfulRecords.entries()) {
+    assert.equal(record.gradeResult.passed, true, "original public grade already exists");
+    assert.equal(typeof record.trajectory.artifactDir, "string", "completed native artifact export required");
+    const snapshot = join(f.root, "snapshots", String(index));
+    f.write(`snapshots/${index}/deliverable/result.txt`,
+      readFileSync(join(record.trajectory.artifactDir, "deliverable/result.txt")));
+    const outcome = gradeOriginal(record, snapshot);
+    assert.equal(outcome.gradeResult.passed, true);
+    assert.equal(outcome.gradeResult.details[0].name, "behavior");
+    assert.equal(existsSync(join(bindings.at(-1).scratch, "checker-entered")), true);
+  }
+  assert.equal(new Set(bindings.map(binding => binding.record.shardKey)).size, successfulRecords.length);
+  const wrong = join(f.root, "wrong-snapshot");
+  f.write("wrong-snapshot/deliverable/result.txt", JSON.stringify({ answer: 7 }));
+  assert.equal(gradeOriginal(successfulRecords[0], wrong, 1).gradeResult.passed, false,
+    "an earlier successful public grade must not bypass fresh quality grading");
+  // A vanilla native pass cannot authenticate the operator's arm/snapshot pairing.
+  assert.notEqual(successfulRecords[0].variant, successfulRecords[2].variant);
+  assert.equal(gradeOriginal(successfulRecords[2], bindings[0].snapshot).gradeResult.passed, true);
+  const failedAttempt = records.find(record => record.status !== "success");
+  assert.ok(failedAttempt, "native producer must retain operationally unsuccessful attempts");
+  gradeOriginal(failedAttempt, bindings[0].snapshot, 1);
+  assert.equal(existsSync(join(bindings.at(-1).scratch, "checker-entered")), false);
+  const nullTrajectoryFixture = { ...successfulRecords[0], trajectory: null };
+  const echoed = gradeOriginal(nullTrajectoryFixture, bindings[0].snapshot);
+  assert.equal(echoed.trajectory, null);
+  assert.equal(echoed.gradeResult.details.some(detail => detail.name === "behavior"), false);
+  assert.equal(existsSync(join(bindings.at(-1).scratch, "checker-entered")), false);
+  assert.equal(new Set(bindings.map(binding => binding.output)).size, bindings.length);
+  for (const [file, bytes] of originals) assert.deepEqual(readFileSync(file), bytes);
 });
 
 test("native code and prompt graders retain separate outcomes and supply actual artifact evidence", async t => {

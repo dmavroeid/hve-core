@@ -63,9 +63,33 @@ arms; the separate reviewed-original grading tree, digests, checker entry point,
 interpreter and grader-only locked dependencies; and the approved one-submission
 saved-review inputs. Keep these notes, private checks, review machinery and role
 maps out of candidate staging. Preserve complete focus skills and their public
-tools. Record native checker replacement, protected executed bytes and immediate
-pre-use integrity evidence separately from before/after hashes. Missing runtime
+tools. Record protected executed bytes and immediate pre-use authentication
+separately from before/after hashes. Missing runtime
 verification blocks execution rather than being inferred from staging YAML.>
+
+For each separate offline grade, retain this linkage in these existing notes:
+
+* Original native results file and SHA-256; exact selected original record and
+  its digest; native run/item/variant/stimulus/trial/shard and trajectory/session
+  identities, original eval/config hashes. Keep all failed/skipped/retried attempts.
+* Completed host-owned submission snapshot origin, digest and explicit binding
+  to that original record. Record export completeness and unavailable facts;
+  directory existence, path names and order do not establish provenance.
+* Trusted checker/dependency origin and locked closure, entry point and reviewed
+  expected SHA-256; separate grade-spec/config hashes and interpreter/image
+  identity. Never derive the expected digest from candidate-writable bytes.
+* Exact native command, fresh scratch directory and separate new grade-output
+  location/digest. Explicitly link it back to the original record and snapshot;
+  new grade output does not preserve all outer variant/trial/experiment fields.
+
+Use one original record and one snapshot per invocation, never a shared artifact
+override for both arms. Do not overwrite originals or manufacture an ungraded
+trajectory. A previous public pass does not suppress fresh quality grading for
+successful nonnull trajectories. Error/skip/null-trajectory inputs are not proof
+of fresh grading. Missing required output under an intact bound snapshot is task
+failure; unavailable trusted roots/checker, integrity or startup failures are
+operational errors, not measured task zero. No invented checker-body verdict,
+positive subprocess exit or raw stdout/stderr when native output omits them.
 
 <For native prompt grading, define task-specific rubric/score anchors and inspect
 the selected evidence. A repo snapshot is bounded text, may omit needed sources
@@ -77,11 +101,14 @@ results, model judgments and guideline adherence separately interpretable.>
 ## Run
 
 <Candidate and judge models, pair count, order, timeouts and exact commands.
-Record native experiment execution with credential-free/egress-denied executable
+Record native experiment collection, separate per-record protected offline
 grading, then optional saved-evidence online review. Verify fresh candidate homes,
 sessions/workspaces and native pair identities; use native --variant selection
 only if separate arm invocations are needed. Do not duplicate evals per arm or
 add a collection engine. Keep execution and grading lifecycle ownership in Vally.
+Verify readonly authoritative checker/submission inputs, fresh writable scratch,
+denied grading egress and absence of model credentials. YAML/authentication alone
+does not establish those controls or automatically validate arm binding.
 Count native prompt-grader invocations and additional image reviews separately
 from candidate sessions; native judge retries/reminders can add calls.
 Record native overrides.runs and total candidate sessions across tasks, variants
