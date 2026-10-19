@@ -87,7 +87,8 @@ jobs:
           const phases = ["not-started", "observer", "native", "finish", "validated", "unavailable"];
           const gates = ["observer-start", "readiness", "attempt-record", "native-command", "native-exit-record", "observer-stop", "observer-wait", "case-input",
             "native-output", "native-stdout-parse", "native-stderr-read", "observation", "topology", "native-result", "program-result", "verdict", "native-cleanup", "validated-proof",
-            "safe-projection", "docker-events", "container-facts", "request-capture", "unavailable"];
+            "safe-projection", "docker-events", "container-facts", "container-inspect", "bind-canonicalization", "container-validation",
+            "volume-inspect", "volume-validation", "request-capture", "unavailable"];
           const reasons = ["check-failed", "command-nonzero", "output-limit", "io-failed", "missing-proof", "invalid-proof", "interrupted-or-unavailable", "unavailable"];
           const cleanupReasons = ["not-started", "verified-absent", "inspection-failed", "ownership-unavailable", "forced-removal", "residual-resource", "cleanup-operation-failed", "unavailable",
             "activity-proof-unavailable", "observation-unavailable", "container-proof-unavailable", "volume-proof-unavailable", "correlation-unavailable"];
@@ -97,6 +98,7 @@ jobs:
           const errorWords = new Set(("error typeerror syntaxerror referenceerror rangeerror cause code cannot find module package imported from require stack " +
             "failed failure invalid unknown unrecognized unexpected unsupported missing required argument option command value expected received " +
             "unresolved parameter placeholder define them params provide inline defaults reason --param " +
+            "no such object container volume response daemon inspect stat lstat realpath bind canonicalization validation type function listener format " +
             "not found is a an the of for to in at and or must be provided specified available directory file path permission denied access " +
             "docker backend task grade image network workspace assets artifact eval spec validation stdin input output json jsonl " +
             "enoent eacces eperm einval err_module_not_found err_require_esm err_unknown_file_extension err_invalid_arg_value " +
@@ -106,33 +108,42 @@ jobs:
             .replace(/--[a-z][a-z-]*|[a-z][a-z0-9_-]*|\[redacted\]|[^\s]/gi, token =>
               errorWords.has(token.toLowerCase()) || token === "[redacted]" ? token : /^[():.,-]$/.test(token) ? token : "[redacted]")
             .replace(/(?:\[redacted\]\s*)+/g, "[redacted] ").replace(/\s+/g, " ").trim();
-          export function captureNativeError(text) {
+          export function captureNativeError(text, limit = 512) {
+            ensure([256, 512].includes(limit), "invalid-diagnostic");
             ensure(typeof text === "string" && Buffer.byteLength(text) <= 65536, "invalid-diagnostic");
             if (text.length === 0) return { status: "empty", excerpt: null, truncated: false };
             const bytes = Buffer.from(text), preview = bytes.subarray(0, 8192).toString("utf8"), sanitized = redactError(preview);
             if (!/\b(error|failed|invalid|unknown|unrecognized|unexpected|unsupported|missing|cannot|denied|enoent|eacces|eperm|einval|err_[a-z_]+)\b/i.test(sanitized))
               return { ...unavailableError(), truncated: bytes.length > 8192 };
             let excerpt = sanitized;
-            if (Buffer.byteLength(excerpt) > 512) { excerpt = excerpt.slice(0, 512); excerpt = excerpt.slice(0, excerpt.lastIndexOf(" ")).trimEnd(); }
-            return { status: "redacted", excerpt, truncated: bytes.length > 8192 || Buffer.byteLength(sanitized) > 512 };
+            if (Buffer.byteLength(excerpt) > limit) { excerpt = excerpt.slice(0, limit); excerpt = excerpt.slice(0, excerpt.lastIndexOf(" ")).trimEnd(); }
+            return { status: "redacted", excerpt, truncated: bytes.length > 8192 || Buffer.byteLength(sanitized) > limit };
           }
-          export function cleanNativeError(value) {
+          export function cleanNativeError(value, limit = 512) {
+            ensure([256, 512].includes(limit), "invalid-diagnostic");
             exact(value, ["status", "excerpt", "truncated"]);
             ensure(typeof value.truncated === "boolean" && ["unavailable", "empty", "redacted"].includes(value.status), "invalid-diagnostic");
             ensure(value.status === "redacted" ? typeof value.excerpt === "string" && value.excerpt.length > 0 &&
-              Buffer.byteLength(value.excerpt) <= 512 && redactError(value.excerpt) === value.excerpt &&
+              Buffer.byteLength(value.excerpt) <= limit && redactError(value.excerpt) === value.excerpt &&
               captureNativeError(value.excerpt).status === "redacted" : value.excerpt === null &&
               (value.status !== "empty" || !value.truncated), "invalid-diagnostic");
             return { status: value.status, excerpt: value.excerpt, truncated: value.truncated };
           }
-          const freshDiagnostic = name => ({ name, phase: "not-started", nativeCliExit: null, failure: null, observerFailure: null, nativeOutput: { stdout: "unavailable", stderr: "unavailable" }, nativeError: unavailableError(), cleanup: { status: "not-started", reason: "not-started" } });
+          export function captureObserverError(error) {
+            const input = error?.stderr ?? error?.message;
+            if (!(typeof input === "string" || Buffer.isBuffer(input)) || Buffer.byteLength(input) > 65536) return unavailableError();
+            const text = Buffer.isBuffer(input) ? input.toString("utf8") : input;
+            if (Buffer.byteLength(text) > 65536) return unavailableError();
+            return captureNativeError(text, 256);
+          }
+          const freshDiagnostic = name => ({ name, phase: "not-started", nativeCliExit: null, failure: null, observerFailure: null, observerError: unavailableError(), nativeOutput: { stdout: "unavailable", stderr: "unavailable" }, nativeError: unavailableError(), cleanup: { status: "not-started", reason: "not-started" } });
           const cleanFailure = value => {
             if (value === null) return null;
             exact(value, ["gate", "reason"]); ensure(gates.includes(value.gate) && reasons.includes(value.reason), "invalid-diagnostic");
             return { gate: value.gate, reason: value.reason };
           };
           export function cleanDiagnostic(value) {
-            exact(value, ["name", "phase", "nativeCliExit", "failure", "observerFailure", "nativeOutput", "nativeError", "cleanup"]); exact(value.cleanup, ["status", "reason"]);
+            exact(value, ["name", "phase", "nativeCliExit", "failure", "observerFailure", "observerError", "nativeOutput", "nativeError", "cleanup"]); exact(value.cleanup, ["status", "reason"]);
             exact(value.nativeOutput, ["stdout", "stderr"]);
             ensure(["unavailable", "empty", "single-json", "invalid-json", "multiple-lines"].includes(value.nativeOutput.stdout) &&
               ["unavailable", "empty", "eval-validation", "input-rejected", "path-rejected", "other", "ambiguous"].includes(value.nativeOutput.stderr), "invalid-diagnostic");
@@ -140,7 +151,7 @@ jobs:
               (value.nativeCliExit === null || Number.isInteger(value.nativeCliExit) && value.nativeCliExit >= 0 && value.nativeCliExit <= 255) &&
               ["not-started", "passed", "failed-or-unavailable"].includes(value.cleanup.status) && cleanupReasons.includes(value.cleanup.reason) &&
               (value.cleanup.status === "passed" ? value.cleanup.reason === "verified-absent" : value.cleanup.status === "not-started" ? value.cleanup.reason === "not-started" : !["not-started", "verified-absent"].includes(value.cleanup.reason)), "invalid-diagnostic");
-            return { ...value, failure: cleanFailure(value.failure), observerFailure: cleanFailure(value.observerFailure), nativeOutput: { ...value.nativeOutput }, nativeError: cleanNativeError(value.nativeError), cleanup: { ...value.cleanup } };
+            return { ...value, failure: cleanFailure(value.failure), observerFailure: cleanFailure(value.observerFailure), observerError: cleanNativeError(value.observerError, 256), nativeOutput: { ...value.nativeOutput }, nativeError: cleanNativeError(value.nativeError), cleanup: { ...value.cleanup } };
           }
           const diagnosticFile = name => path.join(root, "cases", name, "diagnostic.json");
           const diagnosticState = name => {
@@ -405,7 +416,7 @@ jobs:
               checkerHash: config.checkerHash, mountsCorrelated: true, nativeCleanupComplete: false, ...topology };
           }
           export async function observe(dir) {
-            at("observer-start"); const state = { ready: false, failed: false, facts: [], request: null, observerFailure: null };
+            at("observer-start"); const state = { ready: false, failed: false, facts: [], request: null, observerFailure: null, observerError: unavailableError() };
             const file = path.join(dir, "observation.json"); save(file, state);
             const volumeCache = new Map();
             const anchor = bounded(path.join(root, "raw/grade-id")).toString().trim();
@@ -416,7 +427,9 @@ jobs:
             }));
             let response, stopping = false, count = 0, buffer = "";
             const persist = () => save(file, state);
-            const fail = (error = null) => { clearTimeout(timer); state.failed = true; state.observerFailure ??= { gate, reason: error === null || error?.code === "protected-input-check" ? "check-failed" : "interrupted-or-unavailable" }; persist(); process.exitCode = 1; request.destroy(); response?.destroy(); };
+            const fail = (error = null) => { clearTimeout(timer); state.failed = true;
+              if (!state.observerFailure) { state.observerFailure = { gate, reason: error === null || error?.code === "protected-input-check" ? "check-failed" : "interrupted-or-unavailable" }; state.observerError = captureObserverError(error); }
+              persist(); process.exitCode = 1; request.destroy(); response?.destroy(); };
             const filters = JSON.stringify({ type: ["container"], image: [process.env.IMAGE] });
             const since = bounded(path.join(root, "raw/events-since")).toString().trim();
             ensure(/^\d{10}$/.test(since), "invalid-anchor");
@@ -440,15 +453,18 @@ jobs:
                     }
                     if (previous.has(event.Actor.ID)) continue;
                     if (event.Action === "create") {
-                      at("container-facts"); const fact = inspect(event.Actor.ID);
+                      at("container-inspect"); const fact = inspect(event.Actor.ID);
+                      at("bind-canonicalization");
                       for (const mount of fact.mounts) if (mount.Type === "bind") ensure(realpathSync(mount.Source) === mount.Source, "foreign-source");
-                      fact.canonical = true; validateFact(fact, dir);
+                      at("container-validation"); fact.canonical = true; validateFact(fact, dir);
                       ensure(state.facts.length < 3 && !state.facts.some(f => f.id === fact.id), "invalid-topology");
                       const volumes = fact.mounts.filter(m => m.Type === "volume").map(m => m.Name);
                       const missing = volumes.filter(name => !volumeCache.has(name));
                       ensure(volumeCache.size + missing.length <= 3, "invalid-volumes");
                       if (missing.length) {
+                        at("volume-inspect");
                         const rows = docker(["volume", "inspect", "--format", '{"name":{{json .Name}},"labels":{{json .Labels}}}', ...missing]).split("\n").map(JSON.parse);
+                        at("volume-validation");
                         ensure(rows.length === missing.length && new Set(rows.map(v => v.name)).size === missing.length &&
                           rows.every(v => missing.includes(v.name)), "invalid-volumes");
                         for (const volume of rows) volumeCache.set(volume.name, volume);
@@ -590,7 +606,7 @@ jobs:
                   item.phase = "not-started"; item.cleanup = { status: "not-started", reason: "not-started" }; return;
                 }
                 item.cleanup.reason = "observation-unavailable"; const observed = read(path.join(dir, "observation.json"));
-                item.observerFailure = cleanFailure(observed.observerFailure); let forced = false;
+                item.observerFailure = cleanFailure(observed.observerFailure); item.observerError = cleanNativeError(observed.observerError, 256); let forced = false;
                 item.cleanup.reason = "container-proof-unavailable";
                 for (const fact of observed.facts) {
                   knownIds.add(fact.id);
@@ -668,13 +684,14 @@ jobs:
             else if (mode === "prepare") prepare();
             else if (mode === "observe") { ensure(names.includes(name), "invalid-case"); await observe(path.join(root, "cases", name)); }
             else if (mode === "finish") { ensure(names.includes(name), "invalid-case"); finish(name); }
+            else if (mode === "collect") { ensure(names.includes(name), "invalid-case"); collectNativeOutput(name, path.join(root, "cases", name)); }
             else if (mode === "stage") progress(name, next, phase);
             else if (mode === "fail") failCase(name, "command-nonzero");
             else if (mode === "cleanup") cleanup();
             else throw new Error("invalid-mode");
-          } catch {
+          } catch (error) {
             if (names.includes(name)) try {
-              if (mode === "observe") save(path.join(root, "cases", name, "observation.json"), { ready: false, failed: true, facts: [], request: null, observerFailure: { gate, reason: "interrupted-or-unavailable" } });
+              if (mode === "observe") save(path.join(root, "cases", name, "observation.json"), { ready: false, failed: true, facts: [], request: null, observerFailure: { gate, reason: "interrupted-or-unavailable" }, observerError: captureObserverError(error) });
               else failCase(name, "interrupted-or-unavailable");
             } catch { console.error("protected-input-diagnostic-unavailable"); }
             console.error("protected-input-stage-failed"); process.exitCode = 1;
@@ -764,6 +781,7 @@ jobs:
             ) || code=$?
             progress native-exit-record native
             printf '%s\n' "$code" > "$case/exit"
+            node "$root/probe.mjs" collect "$case_name" > "$case/collect.out" 2> "$case/collect.err"
             progress observer-stop finish
             kill -TERM "$observer_pid"
             progress observer-wait finish
