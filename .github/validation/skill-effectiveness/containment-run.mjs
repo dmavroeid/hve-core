@@ -115,10 +115,15 @@ try {
   writeFileSync(hostFile, "SYNTHETIC-HOST-CANARY");
   writeFileSync(inventoryFile, '{"synthetic":"host-only"}');
   let connections = 0;
-  server = net.createServer(socket => { connections++; socket.end("synthetic"); });
+  let serverError;
+  server = net.createServer(socket => {
+    connections++;
+    socket.on("error", error => { serverError = error.code; });
+    socket.end();
+  });
   await new Promise(resolveServer => server.listen(0, "0.0.0.0", resolveServer));
   const port = server.address().port;
-  await new Promise((ok, fail) => { const client = net.connect(port, "127.0.0.1"); client.on("connect", () => { client.destroy(); ok(); }); client.on("error", fail); });
+  await new Promise((ok, fail) => { const client = net.connect(port, "127.0.0.1"); client.on("end", ok); client.on("error", fail); client.resume(); });
   const before = connections;
   const bridge = JSON.parse(docker("network", "inspect", "bridge"))[0].IPAM.Config[0].Gateway;
   const assets = join(root, "trusted");
@@ -163,6 +168,7 @@ try {
     persist();
   }
   assert.equal(connections, before);
+  assert.equal(serverError, undefined);
   assert.ok(summary.containers.length >= 1, "Actual positive grade container must be observed");
   for (const original of originals) assert.deepEqual(readFileSync(original.file), original.bytes);
   assert.equal(readFileSync(hostFile, "utf8"), "SYNTHETIC-HOST-CANARY");
@@ -173,6 +179,11 @@ try {
 } catch (error) {
   summary.status = "failed";
   summary.failure = { stage: summary.stage, name: error.name, code: error.code ?? null, exitCode: error.exitCode ?? null };
+  const diagnostic = ["native-last.log", "last-command.log"].filter(name => existsSync(join(root, name)))
+    .map(name => readFileSync(join(root, name), "utf8").slice(-2048)).join("\n");
+  summary.failure.detail = (error.message + "\n" + diagnostic).slice(-3072)
+    .replace(/(?:[a-z][a-z0-9+.-]*:\/\/|\/)[^\s"'<>]*/gi, "[path]")
+    .replace(/(?:token|secret|password|authorization|api[_-]?key)\s*[:=]\s*\S+/gi, "[redacted]");
   console.error("Containment failed at " + summary.stage + ": " + error.name + " " + (error.code ?? ""));
   process.exitCode = 1;
 } finally {
