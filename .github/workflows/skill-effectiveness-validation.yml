@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
-name: Temporary restricted SDK model-free verification
+name: Temporary offered-tool SDK model-free verification
 on:
   push:
     branches: [automation/skill-effectiveness-validation-20261017]
@@ -36,21 +36,21 @@ jobs:
           set -euo pipefail
           node ../../../validation/skill-effectiveness/containment-identity.mjs
           npm ci --ignore-scripts --include=dev --no-audit --no-fund --fetch-retries=0 --fetch-timeout=60000
-      - name: Test actual restricted SDK without prompts
+      - name: Verify actual offered-tool denial with positive control
         timeout-minutes: 5
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/restricted-sdk-d66/home" "$RUNNER_TEMP/restricted-sdk-d66/tmp"
+          mkdir -p "$RUNNER_TEMP/offered-sdk-d68/home" "$RUNNER_TEMP/offered-sdk-d68/tmp"
           timeout --signal=TERM --kill-after=10s 180s env -i \
-            PATH="$PATH" HOME="$RUNNER_TEMP/restricted-sdk-d66/home" TMPDIR="$RUNNER_TEMP/restricted-sdk-d66/tmp" \
+            PATH="$PATH" HOME="$RUNNER_TEMP/offered-sdk-d68/home" TMPDIR="$RUNNER_TEMP/offered-sdk-d68/tmp" \
             RUNNER_TEMP="$RUNNER_TEMP" CI=1 DO_NOT_TRACK=1 VALLY_TELEMETRY_OPTOUT=1 \
-            node ../../../validation/skill-effectiveness/restricted-sdk-run.mjs
+            node ../../../validation/skill-effectiveness/offered-sdk-run.mjs
           git diff --exit-code -- .
-      - name: Upload only structural SDK results
+      - name: Upload structural offered-tool results
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: skill-effectiveness-restricted-sdk-d66
-          path: ${{ runner.temp }}/restricted-sdk-d66/safe/summary.json
+          name: skill-effectiveness-offered-sdk-d68
+          path: ${{ runner.temp }}/offered-sdk-d68/safe/summary.json
           if-no-files-found: error
           retention-days: 14
