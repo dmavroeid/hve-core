@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
-name: Temporary managed-rule SDK model-free verification
+name: Temporary combined native SDK containment execution
 on:
   push:
     branches: [automation/skill-effectiveness-validation-20261017]
@@ -20,6 +20,9 @@ jobs:
       run:
         shell: bash
         working-directory: .github/skills/hve-core/skill-effectiveness
+    env:
+      DO_NOT_TRACK: '1'
+      VALLY_TELEMETRY_OPTOUT: '1'
     steps:
       - name: Checkout exact snapshot
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
@@ -30,27 +33,24 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: '24.14.0'
-      - name: Restore frozen SDK stack
+      - name: Restore frozen host tooling
         timeout-minutes: 4
         run: |
           set -euo pipefail
           node ../../../validation/skill-effectiveness/containment-identity.mjs
           npm ci --ignore-scripts --include=dev --no-audit --no-fund --fetch-retries=0 --fetch-timeout=60000
-      - name: Verify actual managed-rule allow deny and precedence
-        timeout-minutes: 5
+      - name: Execute actual SDK inside native task-role containment
+        timeout-minutes: 20
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/managed-sdk-d69/home" "$RUNNER_TEMP/managed-sdk-d69/tmp"
-          timeout --signal=TERM --kill-after=10s 180s env -i \
-            PATH="$PATH" HOME="$RUNNER_TEMP/managed-sdk-d69/home" TMPDIR="$RUNNER_TEMP/managed-sdk-d69/tmp" \
-            RUNNER_TEMP="$RUNNER_TEMP" CI=1 DO_NOT_TRACK=1 VALLY_TELEMETRY_OPTOUT=1 \
-            node ../../../validation/skill-effectiveness/managed-sdk-run.mjs
+          unset SKILL_EFFECTIVENESS_NATIVE_PREFLIGHT SKILL_EVAL_INVENTORY_DIR NODE_OPTIONS NODE_TEST_CONTEXT
+          node ../../../validation/skill-effectiveness/combined-run.mjs
           git diff --exit-code -- .
-      - name: Upload structural managed-rule results
+      - name: Upload only synthetic structural results
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: skill-effectiveness-managed-sdk-d69
-          path: ${{ runner.temp }}/managed-sdk-d69/safe/summary.json
+          name: skill-effectiveness-combined-d70
+          path: ${{ runner.temp }}/combined-d70/safe/summary.json
           if-no-files-found: error
           retention-days: 14
