@@ -100,6 +100,7 @@ jobs:
             "unresolved parameter placeholder define them params provide inline defaults reason --param " +
             "no such object container volume response daemon inspect stat lstat realpath bind canonicalization validation type function listener format " +
             "template parsing executing map has entry key tmpfs hostconfig config labels mounts " +
+            "invalid-container invalid-mounts foreign-source invalid-volume invalid-check invalid-project invalid-user invalid-tmpfs foreign-volume " +
             "not found is a an the of for to in at and or must be provided specified available directory file path permission denied access " +
             "docker backend task grade image network workspace assets artifact eval spec validation stdin input output json jsonl " +
             "enoent eacces eperm einval err_module_not_found err_require_esm err_unknown_file_extension err_invalid_arg_value " +
@@ -135,7 +136,7 @@ jobs:
             if (!(typeof input === "string" || Buffer.isBuffer(input)) || Buffer.byteLength(input) > 65536) return unavailableError();
             const text = Buffer.isBuffer(input) ? input.toString("utf8") : input;
             if (Buffer.byteLength(text) > 65536) return unavailableError();
-            return captureNativeError(text, 256);
+            return captureNativeError(error?.code === "protected-input-check" && errorWords.has(text) ? "error: " + text : text, 256);
           }
           const freshDiagnostic = name => ({ name, phase: "not-started", nativeCliExit: null, failure: null, observerFailure: null, observerError: unavailableError(), nativeOutput: { stdout: "unavailable", stderr: "unavailable" }, nativeError: unavailableError(), cleanup: { status: "not-started", reason: "not-started" } });
           const cleanFailure = value => {
