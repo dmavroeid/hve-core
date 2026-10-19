@@ -96,6 +96,7 @@ jobs:
           const unavailableError = () => ({ status: "unavailable", excerpt: null, truncated: false });
           const errorWords = new Set(("error typeerror syntaxerror referenceerror rangeerror cause code cannot find module package imported from require stack " +
             "failed failure invalid unknown unrecognized unexpected unsupported missing required argument option command value expected received " +
+            "unresolved parameter placeholder define them params provide inline defaults reason --param " +
             "not found is a an the of for to in at and or must be provided specified available directory file path permission denied access " +
             "docker backend task grade image network workspace assets artifact eval spec validation stdin input output json jsonl " +
             "enoent eacces eperm einval err_module_not_found err_require_esm err_unknown_file_extension err_invalid_arg_value " +
@@ -755,7 +756,7 @@ jobs:
               cd "$case"
               timeout --signal=TERM --kill-after=15s 120s env -i PATH="$PATH" HOME="$case/home" TMPDIR="$case/tmp" \
                 CI=1 DO_NOT_TRACK=1 VALLY_TELEMETRY_OPTOUT=1 \
-                "$cli" grade --eval-spec "$case/eval.yaml" --output jsonl --require-pass \
+                "$cli" grade --eval-spec "$case/eval.yaml" --output jsonl --require-pass --param 'reason=${reason}' \
                 --backend docker --backend-args "task-image=$image" --backend-args "grade-image=$image" \
                 --backend-args task-network=none --backend-args grade-network=none \
                 --workspace "$case/workspace" --assets-dir "$case/assets" --artifact-dir "$case/artifact" \
