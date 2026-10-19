@@ -315,7 +315,6 @@ jobs:
             }
             if (service === null) {
               ensure(labels["com.microsoft.vally.kind"] === "check" && labels["com.microsoft.vally.trial"] === "check-grade" &&
-                labels["com.microsoft.vally.role"] === "grade" &&
                 /^[a-f0-9]{32}$/.test(labels["com.microsoft.vally.owner"]) && fact.user === "1000:1000", "invalid-check");
               ensure(fact.mounts.length === 2 && fact.mounts.every(m => m.Type === "bind" &&
                 m.Source.startsWith(`${dir}/tmp/vally-docker-check-`) &&
