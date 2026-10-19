@@ -98,7 +98,7 @@ try {
   const gateway = JSON.parse(docker("network", "inspect", "bridge"))[0].IPAM.Config[0].Gateway;
   writeFileSync(join(publicRoot, "public-controls.json"), JSON.stringify({ hostFile, inventoryFile, privateChecker, port, gateway }));
   writeFileSync(join(publicRoot, "public-input.txt"), "SYNTHETIC-PUBLIC-INPUT");
-  writeFileSync(join(publicRoot, ".mock-executor", "candidate.json"), JSON.stringify({ output: "Synthetic completed candidate canaries", events: [] }));
+  writeFileSync(join(publicRoot, ".mock-executor", "candidate.json"), JSON.stringify({ output: "Synthetic completed candidate canaries", events: [{ type: "turn_end", data: {} }] }));
   const plugin = join(root, "candidate-executor");
   cpSync(join(own, "candidate-executor"), plugin, { recursive: true });
   const spec = { name: "candidate", description: "Synthetic task-role containment only", version: "1.0.0", type: "capability",
@@ -129,14 +129,15 @@ try {
   for (const record of records) {
     assert.equal(record.status, "success");
     assert.ok(record.trajectory);
-    assert.equal(record.gradeResult.passed, true);
     const workspace = record.workspacePath ?? record.trajectory.workDir;
     const facts = JSON.parse(readFileSync(join(workspace, "candidate-facts.json"), "utf8"));
     assert.equal(facts.facts.length, 18);
     assert.equal(new Set(facts.facts).size, 18);
     assert.equal(facts.modelCalls, 0);
     assert.equal(readFileSync(join(workspace, "candidate-output.txt"), "utf8"), "SYNTHETIC-CANDIDATE-OUTPUT");
-    summary.cases.push({ status: record.status, canaryAssertions: facts.facts, modelCalls: 0, nativeGradingPassed: true });
+    summary.cases.push({ status: record.status, canaryAssertions: facts.facts, modelCalls: 0, nativeGradingPassed: record.gradeResult.passed });
+    persist();
+    assert.equal(record.gradeResult.passed, true);
   }
   assert.ok(summary.containers.length >= 2, "Both actual task containers must be observed");
   assert.equal(connections, before);
