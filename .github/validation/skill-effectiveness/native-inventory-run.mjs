@@ -8,12 +8,12 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import net from "node:net";
 import { createHash } from "node:crypto";
-import { captureNativeInventory } from "./native-inventory-capture.mjs";
+import { captureNativeInventory, taskReadinessAction } from "./native-inventory-capture.mjs";
 
 const skill = process.cwd(), own = dirname(fileURLToPath(import.meta.url));
 const root = join(process.env.RUNNER_TEMP, "native-inventory-d72"), safe = join(root, "safe");
 mkdirSync(safe, { recursive: true });
-const summary = { status: "running", stage: "initializing", scope: "Test-only protected SDK inventory bridge in actual native task lifecycles; no model prompts", cases: [], captures: [], containers: [], cleanup: "pending" };
+const summary = { status: "running", stage: "initializing", scope: "Test-only protected SDK inventory bridge in actual native task lifecycles; no model prompts", cases: [], captures: [], containers: [], readiness: [], cleanup: "pending" };
 const persist = () => writeFileSync(join(safe, "summary.json"), JSON.stringify(summary, null, 2));
 persist();
 const clean = { PATH: process.env.PATH, HOME: join(root, "home"), DO_NOT_TRACK: "1", VALLY_TELEMETRY_OPTOUT: "1" };
@@ -71,23 +71,37 @@ const observe = () => {
       assert.equal(container.HostConfig.NanoCpus, 1000000000);
       assert.ok(container.Mounts.every(mount => mount.Destination !== "/var/run/docker.sock" && !mount.Source.includes("host-private")));
       summary.containers.push({ role, nonRoot: true, readonlyRoot: true, networkNone: true, capabilitiesDropped: true, noNewPrivileges: true, pids: 128, memoryBytes: 536870912, cpus: 1 });
-      pending.set(container.Id, { container, arm: activeArm });
+      const readiness = { containerId: container.Id, arm: activeArm, states: [container.State.Status], probes: 0, ready: false };
+      summary.readiness.push(readiness);
+      pending.set(container.Id, { container, arm: activeArm, readiness });
       persist();
     }
     inspected.add(id);
   }
-  for (const [id, { container, arm }] of pending) {
+  for (const [id, { container, arm, readiness }] of pending) {
     if (attached.has(id)) continue;
+    const [current] = JSON.parse(docker("inspect", id));
+    if (readiness.states.at(-1) !== current.State.Status) {
+      readiness.states.push(current.State.Status);
+      persist();
+    }
+    if (taskReadinessAction(current.State) === "wait") continue;
+    readiness.probes++;
     const ready = spawnSync("docker", ["exec", "--user", "1000:1000", id, "test", "-f", "/tmp/native-capture-ready"],
       { env: clean, encoding: "utf8", timeout: 5000 });
     if (ready.error) throw ready.error;
     if (ready.status !== 0) {
+      readiness.lastExit = ready.status;
+      readiness.lastDiagnostic = ready.stderr.slice(-512)
+        .replace(/(?:[a-z][a-z0-9+.-]*:\/\/|\/)[^\s"'<>]*/gi, "[path]");
+      persist();
       if (/No such container|not running|OCI runtime exec failed/i.test(ready.stderr)) throw new Error("Native task exited before trusted capture readiness");
       assert.equal(ready.status, 1, "Unexpected native barrier readiness failure");
       continue;
     }
     assert.ok(["baseline", "treatment"].includes(arm));
     assert.equal(summary.captures.some(c => c.arm === arm), false, "One actual native task per parent-selected arm");
+    readiness.ready = true;
     attached.add(id);
     captureTasks.push(captureNativeInventory({ container, arm, image, safe, env: clean, docker,
       publish(record) { if (record) summary.captures.push(record); persist(); },

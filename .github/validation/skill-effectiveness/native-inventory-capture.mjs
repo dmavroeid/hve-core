@@ -7,6 +7,12 @@ import { createInterface } from "node:readline";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+export function taskReadinessAction(state) {
+  if (state?.Status === "created" && state.Running === false) return "wait";
+  if (state?.Status === "running" && state.Running === true) return "probe";
+  throw new Error(`Native task has non-starting/non-running state: ${state?.Status ?? "missing"}`);
+}
+
 export async function captureNativeInventory({ container, arm, image, safe, env, docker, publish }) {
   const originalDir = join(safe, "originals");
   mkdirSync(originalDir, { recursive: true });
