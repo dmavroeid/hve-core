@@ -11,6 +11,7 @@ export function registerExecutors(registry) {
     name: "containment-canary",
     supportsPreparedWorkspace: true,
     supportsMultiTurn: true,
+    async shutdown() {},
     async execute(stimulus, options) {
       const facts = [];
       const check = (name, fn) => { fn(); facts.push(name); };
