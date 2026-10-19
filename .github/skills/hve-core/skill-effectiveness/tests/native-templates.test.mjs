@@ -543,12 +543,12 @@ test("restricted registration checks the exact target stack without starting an 
   }
 });
 
-test("native execution command needs no process-wide preload and preserves CLI errors", t => {
+test("generated dry-run needs no process-wide preload and preserves CLI errors", t => {
   const f = fixture(t);
-  const help = f.script("study:run", ["--help"]);
+  const help = f.script("study:dry-run", ["--help"]);
   assert.equal(help.status, 0, help.stdout + help.stderr);
   const inventories = join(f.temporary, "inventories");
-  const invalid = f.script("study:run", ["--not-a-native-option"], { SKILL_EVAL_INVENTORY_DIR: inventories });
+  const invalid = f.script("study:dry-run", ["--not-a-native-option"], { SKILL_EVAL_INVENTORY_DIR: inventories });
   assert.notEqual(invalid.status, 0);
   assert.match(invalid.stderr, /unknown option/i);
   assert.equal(existsSync(inventories), false);
@@ -608,7 +608,7 @@ test("native mock runs preserve identities, task failures and operational errors
   const originals = new Map();
   const execute = (name, expectedExit) => {
     const output = join(f.temporary, name);
-    const result = f.script("study:run", ["experiments/task.experiment.yaml", "--param", "AGENT_MODEL=mock",
+    const result = f.script("vally", ["experiment", "run", "experiments/task.experiment.yaml", "--param", "AGENT_MODEL=mock",
       "--output-dir", output, "--workspace", join(f.temporary, "workspaces", name), "--workers", "1"],
     { SKILL_EVAL_INVENTORY_DIR: join(f.temporary, "inventories", name) });
     assert.equal(result.status, expectedExit, result.stdout + result.stderr);

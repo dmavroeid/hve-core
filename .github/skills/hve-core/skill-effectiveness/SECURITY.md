@@ -35,16 +35,20 @@ both copies against an in-memory digest after native execution. This is a
 supervised consistency check, not candidate-resistant host attestation.
 
 The templates do not establish verified candidate/grader containment. The
-[restricted execution profile](references/experiment-method.md#restricted-execution-profile-not-yet-runtime-verified)
+[restricted execution profile](references/experiment-method.md#restricted-execution-profile)
 targets released Vally 0.19.0, SDK 1.0.15 and CLI baseline 1.0.89 through a thin
 public-factory adapter. Its source validates policy, injects explicit tools and
 managed permissions, denies host approval requests and checks tool metadata
 before returning a session. Only fresh environment-scoped sessions are supported;
 default-mode and resume requests reject. Registration rejects older installed
 package versions. Model-free Ubuntu restore, copied-package checks and actual
-image decoding passed, as did no-prompt SDK startup. Docker trials stopped at
-the released image's core-version mismatch. Permission enforcement, containment
-and Windows compatibility remain unverified.
+image decoding passed. Later actual SDK policy and synthetic task/grader
+containment checks passed on separately built pinned public-stack Linux images.
+Actual no-prompt production sessions passed startup backup, completion comparison
+and native workspace retention. The incompatible default-image attempt is not
+the latest result. These checks do not qualify arbitrary images, native Windows,
+successful model-driven execution or every subsequent source revision; see the
+execution guide's evidence links and limitations.
 Tool-using intake, candidate tools, executable graders and no-tools review have
 different authority; a reviewer restriction does not protect the other roles.
 Untrusted execution remains blocked until required boundaries are implemented
@@ -97,6 +101,8 @@ and observed. Financial approval cannot waive those prerequisites.
    writable scratch. The optional review spec has only a prompt grader and receives an
    approved saved-evidence workspace, not that private grading view. Templates
    do not enforce role containment, retries or spending.
+   Generated paid convenience aliases are omitted; the raw native CLI and
+   image helper remain manually invocable. This is not financial enforcement.
 5. Repository intake occurs in the tool-using authoring session. The candidate
    adapter does not change that session's authority. Intake requires reading and
    applying the public commit-pinned canonical instruction before target-source
@@ -418,30 +424,30 @@ shell/interpreter access is not safe merely because a session is fresh.
 
 ### Risk Rating
 
-| Threat                                                | Likelihood | Impact | Residual Risk | Status                                                                                         |
-|-------------------------------------------------------|------------|--------|---------------|------------------------------------------------------------------------------------------------|
-| Unauthorized content sent to model                    | Med        | High   | Med           | Partially mitigated; supervised input selection                                                |
-| Ambient context invalidates comparison                | Med        | High   | High          | Detection only; no enforced isolation                                                          |
-| Imported instructions reach authoring/candidate tools | Med        | High   | High          | Open; adapter wiring is not verified native enforcement and does not restrict intake           |
-| Runtime credentials exposed to untrusted execution    | Med        | High   | High          | Open; separate candidate/grader credential boundary not demonstrated                           |
-| Calls exceed approved budget                          | Med        | High   | High          | Operator-approved scope; no financial enforcement; block if a required hard cap is unavailable |
-| Dependency integrity inadequate                       | Low        | High   | Med           | Mitigated; canonical URLs and SHA-512 integrity                                                |
+| Threat                                                | Likelihood | Impact | Residual Risk | Status                                                                                                     |
+|-------------------------------------------------------|------------|--------|---------------|------------------------------------------------------------------------------------------------------------|
+| Unauthorized content sent to model                    | Med        | High   | Med           | Partially mitigated; supervised input selection                                                            |
+| Ambient context invalidates comparison                | Med        | High   | High          | Detection only; no enforced isolation                                                                      |
+| Imported instructions reach authoring/candidate tools | Med        | High   | High          | Open; actual SDK policy tested on the hardened profile, not arbitrary useful task policies or intake       |
+| Runtime credentials exposed to untrusted execution    | Med        | High   | High          | Open; synthetic role canaries passed, but authenticated model-task credential boundaries remain unverified |
+| Calls exceed approved budget                          | Med        | High   | High          | Operator-approved scope; no financial enforcement; block if a required hard cap is unavailable             |
+| Dependency integrity inadequate                       | Low        | High   | Med           | Mitigated; canonical URLs and SHA-512 integrity                                                            |
 
 ## Enterprise Readiness Gaps
 
 Ratings are qualitative project assessments, not CVSS scores.
 
-| Id      | Gap                                                                                                | Severity         | Status                                                                                                                                                 |
-|---------|----------------------------------------------------------------------------------------------------|------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------|
-| G-INF-1 | Prompt, image, and inventory evidence has no redaction or custom access control                    | InfoDisc-Med     | Operator must protect inputs and outputs and review before sharing                                                                                     |
-| G-TAM-1 | Startup capture does not enforce candidate isolation or cover later context                        | Tampering-High   | Supervised inspection and symmetric exclusions required                                                                                                |
-| G-DOS-1 | Pinned native execution and review paths lack an enforced credit cap                               | DoS-High         | Supervise approved targets; stop before the next invocation; block if a required enforced maximum is unavailable                                       |
-| G-DOS-2 | Media decoder and review lifecycle still need actual-codec/exact-stack verification                | DoS-Med          | Partially mitigated; fixed preflight limits and bounded waits pass model-free tests; actual decode/runtime cleanup remain unverified                   |
-| G-EOP-1 | Tool-using intake and current candidate permissions lack an enforced least-authority boundary      | EoP-High         | Open; fresh environment-scoped adapter source exists, but native enforcement is unverified; intake remains separate                                    |
-| G-TAM-2 | Writable checker/dependencies or incorrect original-record/snapshot binding can invalidate grading | Tampering-High   | Open; separate authored entry authentication exists, but readonly inputs, dependency provenance and manual arm binding still require verification      |
-| G-INF-2 | Executable grading and candidate access are not verified credential-isolated or egress-restricted  | InfoDisc-High    | Open; no claim that fresh homes, variable deletion or no-tools image review solve this                                                                 |
-| G-TAM-3 | Supervised startup backups are not independent host attestation                                    | Tampering-High   | Open for stronger assurance; independent bytes and in-memory-digest comparison detect changes but cannot protect runtime memory or every retained copy |
-| G-SUP-1 | Imported lockfile previously contained SHA-1 entries                                               | SupplyChain-High | Resolved; regenerated from public npm with canonical URLs and SHA-512 integrity                                                                        |
+| Id      | Gap                                                                                                   | Severity         | Status                                                                                                                                                 |
+|---------|-------------------------------------------------------------------------------------------------------|------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------|
+| G-INF-1 | Prompt, image, and inventory evidence has no redaction or custom access control                       | InfoDisc-Med     | Operator must protect inputs and outputs and review before sharing                                                                                     |
+| G-TAM-1 | Startup capture does not enforce candidate isolation or cover later context                           | Tampering-High   | Supervised inspection and symmetric exclusions required                                                                                                |
+| G-DOS-1 | Pinned native execution and review paths lack an enforced credit cap                                  | DoS-High         | Supervise approved targets; stop before the next invocation; block if a required enforced maximum is unavailable                                       |
+| G-DOS-2 | Actual model-driven image review and platform lifecycle still need verification                       | DoS-Med          | Partially mitigated; actual Ubuntu decoding and model-free bounded lifecycle tests passed; real model review and native Windows remain unverified      |
+| G-EOP-1 | Tool-using intake and useful task-specific candidate authority need separate qualification            | EoP-High         | Open; actual SDK policy tests passed on the tested hardened profile, not arbitrary task policies; intake remains separate                              |
+| G-TAM-2 | Writable checker/dependencies or incorrect original-record/snapshot binding can invalidate grading    | Tampering-High   | Open; separate authored entry authentication exists, but readonly inputs, dependency provenance and manual arm binding still require verification      |
+| G-INF-2 | Real model-task authentication and credential/egress boundaries require profile-specific verification | InfoDisc-High    | Open; synthetic native role canaries passed; no universal or authenticated model-task isolation claim                                                  |
+| G-TAM-3 | Supervised startup backups are not independent host attestation                                       | Tampering-High   | Open for stronger assurance; independent bytes and in-memory-digest comparison detect changes but cannot protect runtime memory or every retained copy |
+| G-SUP-1 | Imported lockfile previously contained SHA-1 entries                                                  | SupplyChain-High | Resolved; regenerated from public npm with canonical URLs and SHA-512 integrity                                                                        |
 
 ## References
 

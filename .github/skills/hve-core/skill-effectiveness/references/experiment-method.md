@@ -10,24 +10,24 @@ on Node.js 24+. Windows exact-stack and runtime verification are pending.
 Historical generated packages
 retain their own code and pins; do not upgrade completed experiments in place.
 
-## Restricted Execution Profile (Not Yet Runtime-Verified)
+## Restricted Execution Profile
 
 The current development package and generated template use the versions above. The
 [session-policy plugin](../scripts/restricted-copilot-executor.mjs) and templates
 prepare the following contract. Package checks and runtime security verification
 are distinct. Model-free Ubuntu restore, repository/copied-package
-tests and image decoding passed; no-prompt SDK startup also passed.
-The plugin refuses registration on a different stack. Policy tests establish
-wiring, not permission enforcement or containment. Untrusted candidate execution
-and grading remain blocked.
+tests and actual image decoding passed. The plugin refuses registration on a
+different stack. Later actual SDK RPC and hardened native Docker checks passed
+the tested policy and role boundaries; these are distinct from mocked wiring.
+Untrusted execution remains blocked unless the operator establishes the required
+controls for the selected image, task and grading route.
 The local command later in this guide documents mechanics, not a contained
 alternative when a required control is missing. There is no automatic fallback
 to the local backend.
 
 The source-preparation target is published Vally core/CLI 0.19.0, SDK 1.0.15 and
-the separately pinned Copilot CLI 1.0.89, on Node.js 24+. Actual SDK runtime
-selection remains unverified. Published package inspection
-is not installed-stack verification. The default native image tag is
+the separately pinned Copilot CLI 1.0.89, on Node.js 24+. Published package
+inspection alone is not installed-stack verification. The default native image tag is
 `vally.azurecr.io/vally-task:0.19.0`. An authorized model-free Ubuntu attempt
 pulled digest `sha256:cc940117d3aeec8c6949944104f6a1d431ea8d368aa3dfac17a5bfafe958c536`
 and verified Linux/amd64 with declared user `node`. The native compatibility
@@ -35,8 +35,36 @@ guard stopped before trials: the image's grade role reported core 0.18.0
 against host 0.19.0. This is an image compatibility failure, not an observed
 containment failure. Do not retry that digest expecting different contents,
 bypass the guard, downgrade, or build/substitute an image without approval.
-Image selection and runtime acceptance remain separate work.
+Later approved tests used separately built images from the pinned public stack,
+not that incompatible default digest. Their success does not qualify the default
+image or make an arbitrary substitute acceptable.
 No private checkout, fork or unpublished Vally change is required by this design.
+
+### Completed Model-Free Evidence And Limits
+
+* [Native SDK policy and task-role checks](https://github.com/dmavroeid/hve-core/actions/runs/39292646353)
+  passed actual allow/deny/precedence RPC cases and synthetic host-file,
+  environment, privilege and network canaries inside hardened task containers.
+  This was a synthetic executor fixture, not a model-driven candidate task.
+* [Startup backup and retention check](https://github.com/dmavroeid/hve-core/actions/runs/39322689731)
+  passed two distinct actual SDK startups through the production executor.
+  Baseline/treatment inventories, independent backup bytes and completion
+  reports survived native workspace preservation; cleanup passed. Both native
+  records remain deliberate pre-send errors with null trajectories and grades.
+  No prompt was delivered. That snapshot's package suite passed 109 tests,
+  with one opt-in native smoke skipped.
+* [Separate synthetic native grading checks](https://github.com/dmavroeid/hve-core/actions/runs/39266912626)
+  established immediate checker
+  authentication, readonly checker/submission inputs, writable scratch and
+  integrity-negative rejection on the tested public-stack profile. They do not
+  establish real-candidate output provenance or automatic arm/snapshot binding.
+
+These are scoped historical results, not a green status for every later edit.
+The subsequent paid-alias omission passed focused local package/documentation
+checks; its full frozen native regression remains deferred. Windows, authenticated
+model-task execution, model judgment quality and final published-head validation
+remain unverified. Reuse completed controls as evidence, but qualify a materially
+different runtime/profile separately rather than inferring universal protection.
 
 ### Public Release Basis
 
@@ -64,13 +92,13 @@ launcher, scheduler, credential proxy or spending service. The provider/native
 host owns process/filesystem separation, credentials, egress and enforceable
 financial limits. This skill owns task/evidence authoring and honest supervision.
 
-| Role                         | Native surface                                                                        | Required boundary before use                                                                                                                                                                     | Unresolved evidence                                                                                               |
-|------------------------------|---------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------|
-| Tool-using repository intake | Authoring session, not the candidate executor                                         | Treat repository/tool content as data; no imported instruction may grant tool or credential access                                                                                               | Candidate session policy does not restrict the authoring session                                                  |
-| Candidate                    | Native `experiment run`, Docker backend and `task-*` role settings                    | Public task/sources and declared skills only; identical explicit session policy in both arms; no private checker, review machinery or host evidence; no general access to runtime authentication | Effective tool/permission policy, image identity, filesystem/process containment and credential/egress protection |
-| Offline executable grading   | Native experiment's grading phase with executable-only graders and `grade-*` settings | No credentials or egress; readonly trusted checker and submission; protected temporary outputs; check checker hash immediately before use                                                        | Actual mounts, scrubbed environment, execution paths and network denial                                           |
-| Online saved-evidence review | Separate native assessment or the no-tools SDK image reviewer                         | Selected saved artifacts only; no submission execution or execution tools; model-service access must not reopen offline execution                                                                | Exact native text-review restrictions and separation from executable grading                                      |
-| Supervised startup evidence  | Existing session factory and native-preserved workspace                               | Capture and independently back up actual inventory before the first prompt; compare both files with the in-memory digest after execution; keep audit files out of grading inputs                 | Exact-stack capture/completion and native workspace retention; independent host attestation is not supplied       |
+| Role                         | Native surface                                                              | Required boundary before use                                                                                                                                                                     | Evidence limit or operator verification                                                                                        |
+|------------------------------|-----------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------|
+| Tool-using repository intake | Authoring session, not the candidate executor                               | Treat repository/tool content as data; no imported instruction may grant tool or credential access                                                                                               | Candidate session policy does not restrict the authoring session                                                               |
+| Candidate                    | Native `experiment run`, Docker backend and `task-*` role settings          | Public task/sources and declared skills only; identical explicit session policy in both arms; no private checker, review machinery or host evidence; no general access to runtime authentication | Actual SDK policy and synthetic containment tested; qualify the selected useful task policy, image and authentication boundary |
+| Offline executable grading   | Separate native `grade` with executable-only graders and `grade-*` settings | No credentials or egress; readonly trusted checker and submission; protected temporary outputs; check checker hash immediately before use                                                        | Synthetic checker/input and containment checks passed; verify each actual runtime layout and original/snapshot binding         |
+| Online saved-evidence review | Separate native assessment or the no-tools SDK image reviewer               | Selected saved artifacts only; no submission execution or execution tools; model-service access must not reopen offline execution                                                                | Exact native text-review restrictions and separation from executable grading                                                   |
+| Supervised startup evidence  | Existing session factory and native-preserved workspace                     | Capture and independently back up actual inventory before the first prompt; compare both files with the in-memory digest after execution; keep audit files out of grading inputs                 | Actual no-prompt capture/completion/retention passed on the tested snapshot; no independent host attestation                   |
 
 Use native `--backend docker` and documented `--backend-args` role settings,
 including `task-image`, `grade-image`, `task-env`, `grade-env`, `task-network`
@@ -94,11 +122,11 @@ reports. Retire an addition when a released native feature satisfies its contrac
 not merely when Vally's version increases. Do not add a compatibility framework
 or automatic fallback to less restrictive behavior.
 
-| Addition                      | Replacement contract                                                                                                                      | Integration points to remove or update                                                                          |
-|-------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------|
-| Session-policy plugin         | Equivalent explicit tool visibility, permission decisions and fresh environment-scoped session behavior, verified on the selected runtime | `study:*`'s `--executor-plugin`, eval executor/config, plugin module and its focused contract tests             |
-| Startup inventory and backup  | Actual full skill inventory before the first prompt, independent backup and completion comparison with retained startup digest            | Session factory, recorder, backup/verification tests and workspace preservation                                 |
-| Optional image-review command | Actual PNG/JPEG delivery, bounded approved inputs, no execution tools and retained usage/failure evidence, not text-only snapshots        | `review:images`, image helper, decoder dependency and image-review tests; human visual review remains available |
+| Addition                     | Replacement contract                                                                                                                      | Integration points to remove or update                                                              |
+|------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------|
+| Session-policy plugin        | Equivalent explicit tool visibility, permission decisions and fresh environment-scoped session behavior, verified on the selected runtime | `study:*`'s `--executor-plugin`, eval executor/config, plugin module and its focused contract tests |
+| Startup inventory and backup | Actual full skill inventory before the first prompt, independent backup and completion comparison with retained startup digest            | Session factory, recorder, backup/verification tests and workspace preservation                     |
+| Optional image-review helper | Actual PNG/JPEG delivery, bounded approved inputs, no execution tools and retained usage/failure evidence, not text-only snapshots        | Image helper, decoder dependency and image-review tests; human visual review remains available      |
 
 Normal execution uses the existing environment-aware client factory, not a
 process-wide SDK prototype wrapper. The recorder's separately invoked diagnostic
@@ -113,8 +141,9 @@ record the replacement as a methodology change for future runs.
 
 Copy the [plugin](../scripts/restricted-copilot-executor.mjs) to the same
 `scripts/restricted-copilot-executor.mjs` path in generated packages.
-The generated `study:dry-run` and `study:run` commands load it through native
-`--executor-plugin`; the eval selects `restricted-copilot-sdk`. Relative plugin
+The generated `study:dry-run` command loads it through native
+`--executor-plugin`; the eval selects `restricted-copilot-sdk`. Separately
+authorized manual execution must load the same plugin. Relative plugin
 paths resolve from the experiment file's directory, so keep the documented
 `experiments/` and `scripts/` layout. `executor_plugins` is not a supported
 experiment YAML field. Both arms inherit the same eval policy.
@@ -225,11 +254,12 @@ The five test files validate packaging, native lint/dry-run/mock results,
 code-plus-prompt evidence wiring, inventory capture and SDK image attachments.
 Ordinary tests use mocked SDK sessions and do not require the optional Copilot
 binary. Native session-startup coverage is skipped unless explicitly selected.
-These tests do not judge output quality or prove model vision. Until coordinated
-dependency migration is complete, copied experiment dry-runs fail the plugin's
-exact-version gate; the current frozen dependency restore can also be unavailable.
-Qualified policy/factory unit tests against an older local stack are not a
-substitute for the final package suite.
+These tests do not judge output quality or prove model vision. Coordinated
+dependency pins and the canonical lock have passed frozen Ubuntu restore and
+package tests on the cited snapshots. The plugin rejects mismatched installed
+versions. A missing local installation or older parent-repository packages
+cannot substitute for the frozen suite; record unavailable checks explicitly.
+Restore only when permitted by the host's dependency/network policy.
 
 The host's coverage-enabled Node runner writes `coverage-node.info` in the skill
 folder. This generated report is ignored by Git and the package-content check;
@@ -472,9 +502,13 @@ If the operator requires one, stop until the provider or runtime can enforce it.
 Do not add a custom spending controller. Spending approval does not waive
 candidate, grader, credential or evidence-security prerequisites.
 
-The existing `study:run` script remains the native experiment entry point.
-Use it with the verified backend and role settings only after exact-stack and
-role-security gates are met and an explicit operational scope is authorized.
+The generated package omits `study:run` and `review:images` paid convenience
+scripts while this profile has no enforceable spending ceiling. It retains
+`study:dry-run` for plan inspection, the raw `vally` CLI passthrough and the
+image helper. The latter two still permit manual paid execution: omission is
+not a spending cap, sandbox or guarantee that no model can be invoked.
+Keep paid execution deferred until the separate exact-stack, role-security,
+spending and operational prerequisites are satisfied.
 There is no approved restricted-runtime command recipe yet; do not substitute
 unrestricted local execution. No custom launcher or separate collection path is
 needed.
@@ -489,9 +523,11 @@ does not promise cancellation of an in-flight call, reminder or native retry.
 Missing or incomparable usage stays unknown, not zero or proof of budget
 compliance. Pause for explicit continuation unless existing approval already
 covers that specific bounded unknown-usage scope. Do not automate silent reruns.
-`study:run` invokes the pinned Vally CLI and session-policy plugin directly.
-It forwards native arguments and exit status; it does not preload a process-wide
-SDK wrapper or require `SKILL_EVAL_INVENTORY_DIR`. Selecting a different executor
+Any separately authorized manual native experiment invocation must use the
+pinned Vally CLI and load the session-policy plugin explicitly.
+The retained `vally` passthrough forwards native arguments and exit status; it
+does not select the plugin automatically, preload a process-wide SDK wrapper or
+require `SKILL_EVAL_INVENTORY_DIR`. Selecting a different executor
 bypasses this plugin's policy and inventory capture and is not an equivalent run.
 
 ## Publisher Iteration, Repetition And Pairing

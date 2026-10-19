@@ -14,15 +14,28 @@ const skillRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const assets = join(skillRoot, "assets");
 const read = name => readFileSync(join(assets, name), "utf8");
 
-test("generated commands invoke native Vally directly through the session-policy and inventory plugin", () => {
+test("generated commands retain native dry-run and CLI access without paid convenience aliases", () => {
   const pkg = JSON.parse(read("package.template.json"));
   const cli = "node_modules/@microsoft/vally-cli/dist/index.js";
   assert.equal(pkg.engines.node, ">=24");
   assert.equal(pkg.scripts.vally, `node ${cli}`);
   const plugin = "--executor-plugin ../scripts/restricted-copilot-executor.mjs";
   assert.equal(pkg.scripts["study:dry-run"], `node ${cli} experiment run --dry-run ${plugin}`);
-  assert.equal(pkg.scripts["study:run"], `node ${cli} experiment run ${plugin}`);
-  assert.equal(pkg.scripts["review:images"], "node scripts/review-images.mjs");
+  assert.deepEqual(Object.keys(pkg.scripts).sort(), ["study:dry-run", "vally"]);
+  assert.equal(Object.hasOwn(pkg.scripts, "study:run"), false);
+  assert.equal(Object.hasOwn(pkg.scripts, "review:images"), false);
+});
+
+test("shipped instructions disclose paid-alias omission without claiming spending enforcement", () => {
+  for (const file of ["SKILL.md", "references/experiment-method.md", "references/visual-review.md"]) {
+    const text = readFileSync(join(skillRoot, file), "utf8");
+    assert.doesNotMatch(text, /npm run (?:study:run|review:images)\b/);
+    assert.match(text, /omit/);
+    assert.match(text, /manual/);
+    assert.match(text, /(?:does not|not a).*spending (?:ceiling|cap)/);
+  }
+  assert.ok(existsSync(join(skillRoot, "scripts", "review-images.mjs")));
+  assert.ok(existsSync(join(skillRoot, "scripts", "restricted-copilot-executor.mjs")));
 });
 
 test("local pins, generated pins and lockfile agree without direct server duplication", () => {

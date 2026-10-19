@@ -48,8 +48,10 @@ artifacts. A later capture is valid if its timing/provenance are recorded.
 ## Run One Image Review
 
 Copy the image-review helper to `scripts/review-images.mjs` using the
-[package copy map](../SKILL.md#assemble-and-validate). The package's
-`review:images` command calls the pinned Copilot SDK directly.
+[package copy map](../SKILL.md#assemble-and-validate). The generated package
+omits the `review:images` paid convenience script. The helper remains available
+for separately authorized manual use and calls the pinned Copilot SDK directly;
+removing the alias does not disable it or enforce a spending ceiling.
 
 Prepare a UTF-8 prompt file containing the public task, relevant source facts,
 completed execution results if needed, and a short assessment request. For example:
@@ -64,13 +66,13 @@ submission's images. The reviewer has no tools, so material absent from the
 prompt/images cannot be inspected. Avoid identifying condition labels in the
 prompt or pixels. Attachment display names are neutral; keep role mapping outside.
 
-After approving the model, prompt/images, invocation count and budget under the
-[supervised run policy](experiment-method.md#execute-an-approved-run-plan):
-
-```powershell
-$review = Join-Path $HOME ("skill-eval-runs\" + [guid]::NewGuid())
-npm run review:images -- <judge-model> approved-copy review-input.md "$review" rendered/diagram.png
-```
+Paid image review remains deferred until the separate security, spending and
+operational prerequisites in the
+[supervised run policy](experiment-method.md#execute-an-approved-run-plan)
+are satisfied. Human visual inspection remains available without a model call.
+For separately authorized manual use, the helper takes the judge model,
+approved-copy root, relative prompt path, fresh output directory and relative
+image paths as positional arguments. It does not supply financial enforcement.
 
 Prompt/image paths resolve beneath `approved-copy`, an explicitly approved,
 evaluator-owned copy made after candidates have stopped. Do not use a live

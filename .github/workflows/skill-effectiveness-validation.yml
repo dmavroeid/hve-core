@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
-name: Temporary supervised native startup backup check
+name: Temporary skill-effectiveness frozen package regression
 on:
   push:
     branches: [automation/skill-effectiveness-validation-20261017]
@@ -37,28 +37,11 @@ jobs:
         timeout-minutes: 4
         run: |
           set -euo pipefail
-          node ../../../validation/skill-effectiveness/startup-backup-identity.mjs
           npm ci --ignore-scripts --include=dev --no-audit --no-fund --fetch-retries=0 --fetch-timeout=60000
       - name: Run the ordinary model-free package suite
-        timeout-minutes: 2
+        timeout-minutes: 8
         run: |
           set -euo pipefail
           unset SKILL_EFFECTIVENESS_NATIVE_PREFLIGHT SKILL_EVAL_INVENTORY_DIR NODE_OPTIONS NODE_TEST_CONTEXT
           npm test
-          node --test ../../../validation/skill-effectiveness/startup-backup-fence.test.mjs
-      - name: Verify native startup backups and preserved completion reports without model delivery
-        timeout-minutes: 10
-        run: |
-          set -euo pipefail
-          unset SKILL_EFFECTIVENESS_NATIVE_PREFLIGHT SKILL_EVAL_INVENTORY_DIR NODE_OPTIONS NODE_TEST_CONTEXT
-          node ../../../validation/skill-effectiveness/startup-backup-run.mjs
-          node ../../../validation/skill-effectiveness/startup-backup-identity.mjs
           git diff --exit-code -- .
-      - name: Upload only synthetic structural results
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: skill-effectiveness-native-startup-backup
-          path: ${{ runner.temp }}/native-startup-backup/safe
-          if-no-files-found: error
-          retention-days: 14

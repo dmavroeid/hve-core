@@ -21,15 +21,19 @@ benefit, not obtain a universal one-shot verdict.
 **Execution status:** the current templates do not enforce candidate or grader
 containment. Authoring and model-free validation remain available; do not start
 untrusted execution through the current local path. The
-[restricted execution profile](references/experiment-method.md#restricted-execution-profile-not-yet-runtime-verified)
+[restricted execution profile](references/experiment-method.md#restricted-execution-profile)
 includes a released-API session-policy plugin for fresh environment-scoped
 sessions only. Default-mode and resume requests reject. Development/generated
 pins and the canonical lockfile match the target stack. Model-free Ubuntu
 checks passed frozen restore, copied-package tests and image decoding.
-No-prompt SDK startup also passed. A separate Docker attempt stopped
-before trials because the released image's grade role reported core 0.18.0
-against host 0.19.0. These results do not establish permission enforcement,
-containment or Windows compatibility. This is not a verified execution profile.
+Later model-free checks on a separately built pinned public-stack image passed
+SDK tool/permission enforcement and synthetic task/grader containment for the
+tested hardened Linux Docker profile. Actual no-prompt sessions also retained
+startup inventories, independent backups and completion verification through
+native workspace preservation. See the execution guide for evidence and limits.
+These results do not validate arbitrary images, native Windows, successful
+model-driven tasks or the current revision's full native regression. Generated
+YAML alone does not establish the required backend controls.
 
 ## Success Criteria
 
@@ -220,9 +224,12 @@ Missing or incomparable usage requires explicit continuation unless existing
 approval already covers that specific bounded unknown-usage scope. Spending
 approval never waives the separate security prerequisites.
 
-The generated `study:dry-run` and `study:run` scripts call native Vally directly.
-They take an experiment path and native arguments, including `--param AGENT_MODEL=...`;
-use the environment setup and full commands in the execution guide.
+The generated `study:dry-run` script inspects the native experiment plan.
+The package omits `study:run` and `review:images` paid convenience scripts.
+The retained `vally` passthrough and image helper can still be invoked manually;
+omitting aliases does not enforce a spending ceiling or disable paid execution.
+Paid execution remains deferred until its separate security, spending and
+operational prerequisites are satisfied; see the execution guide.
 
 Inspect inventories, session identities and access traces before interpreting
 results. Pair by native task/trial identity and declared experiment pairing,
