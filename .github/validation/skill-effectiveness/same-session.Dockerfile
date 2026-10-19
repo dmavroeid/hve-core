@@ -18,6 +18,7 @@ COPY --chown=0:0 package.json package-lock.json ./
 COPY --chown=0:0 restricted-copilot-executor.mjs ./scripts/restricted-copilot-executor.mjs
 COPY --chown=0:0 native-inventory.mjs ./scripts/native-inventory.mjs
 COPY --chown=0:0 same-session-relay.mjs ./
+COPY --chown=0:0 same-session-hook.mjs ./
 
 RUN npm ci --ignore-scripts --include=dev --registry=https://registry.npmjs.org/ \
         --fetch-retries=0 --fetch-timeout=60000 --no-audit --no-fund \

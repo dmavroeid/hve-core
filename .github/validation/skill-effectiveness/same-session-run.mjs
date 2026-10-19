@@ -118,6 +118,7 @@ try {
   writeFileSync(join(context, "restricted-copilot-executor.mjs"), readFileSync(join(skill, "scripts", "restricted-copilot-executor.mjs")));
   writeFileSync(join(context, "native-inventory.mjs"), readFileSync(join(skill, "scripts", "native-inventory.mjs")));
   writeFileSync(join(context, "same-session-relay.mjs"), readFileSync(join(own, "same-session-relay.mjs")));
+  writeFileSync(join(context, "same-session-hook.mjs"), readFileSync(join(own, "same-session-hook.mjs")));
   run("docker", ["build", "--platform", "linux/amd64", "--pull", "--iidfile", join(root, "image-id"), "-t", imageTag, context], { timeout: 600000 });
   image = readFileSync(join(root, "image-id"), "utf8").trim();
   assert.match(image, /^sha256:[a-f0-9]{64}$/);
