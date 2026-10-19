@@ -33,6 +33,7 @@ try {
   const { restrictedFactories, validateSessionPolicy, registerExecutors } = await import(pathToFileURL(join(process.cwd(), "scripts", "restricted-copilot-executor.mjs")));
   registerExecutors({ register(executor) { assert.equal(executor.name, "restricted-copilot-sdk"); } });
   const cliPath = createRequire(require.resolve("@github/copilot/package.json")).resolve("@github/copilot-" + process.platform + "-" + process.arch);
+  summary.stage = "restricted-sessions";
   for (const arm of ["baseline", "treatment"]) {
     const work = join(root, arm), configDirectory = join(work, "config");
     mkdirSync(configDirectory, { recursive: true });
@@ -74,6 +75,8 @@ try {
       await assert.rejects(client.resumeSession("synthetic-forbidden-resume"), /does not support session resume/);
       record.resumeRejected = true;
       const marker = join(work, "forbidden-write.txt");
+      const notOffered = text => /(?:unknown|unavailable|unrecognized) tool|tool[\s\S]{0,180}(?:not (?:found|available|offered|enabled)|does not exist)|no tool[\s\S]{0,80}(?:named|with name)|not in[\s\S]{0,80}tool/i.test(text);
+      const permissionDenied = text => /permission[\s\S]{0,100}denied|denied[\s\S]{0,100}permission|denied-no-approval/i.test(text);
       for (const probe of [
         { name: "bash", arguments: { command: "printf SYNTHETIC > forbidden-write.txt" } },
         { name: "view", arguments: { path: join(work, "assigned", "SKILL.md") } },
@@ -83,16 +86,25 @@ try {
         try {
           result = await bounded(() => session.rpc.tools.execute(probe), "Native excluded tool invocation");
         } catch (error) {
-          assert.notEqual(error.message, "Native excluded tool invocation timed out");
-          assert.match(error.message, /not (?:found|available|offered)|unknown tool|not in|not enabled|not permitted|denied|disallowed/i);
-          record.attempts.push({ tool: probe.name, outcome: "rpc-rejection", rejectionCode: Number.isSafeInteger(error.code) ? error.code : null });
+          const observation = { tool: probe.name, outcome: "rpc-error", rejectionCode: Number.isSafeInteger(error.code) ? error.code : null,
+            notOffered: notOffered(error.message), permissionDenied: permissionDenied(error.message), markerPresent: existsSync(marker) };
+          record.attempts.push(observation);
           persist();
+          assert.notEqual(error.message, "Native excluded tool invocation timed out");
+          assert.equal(observation.markerPresent, false);
+          assert.ok(observation.notOffered || observation.permissionDenied, "Recognized runtime rejection required");
           continue;
         }
-        assert.ok(result && typeof result === "object", "Typed rejection required");
-        assert.ok(["rejected", "denied"].includes(result.resultType), "Not a successful invocation or generic task failure");
-        record.attempts.push({ tool: probe.name, outcome: result.resultType });
+        const text = typeof result === "string" ? result : [result?.error, result?.textResultForLlm].filter(value => typeof value === "string").join("\n");
+        const observation = { tool: probe.name, outcome: typeof result?.resultType === "string" ? result.resultType : "untyped-result",
+          notOffered: notOffered(text), permissionDenied: permissionDenied(text), markerPresent: existsSync(marker) };
+        record.attempts.push(observation);
         persist();
+        assert.ok(result && typeof result === "object", "Typed rejection required");
+        assert.equal(observation.markerPresent, false, "Excluded shell must not write");
+        assert.ok(["rejected", "denied"].includes(result.resultType)
+          || (result.resultType === "failure" && (observation.notOffered || observation.permissionDenied)),
+        "Explicit runtime exclusion or permission rejection required; generic failure is not denial");
       }
       assert.equal(existsSync(marker), false);
       assert.equal(record.attempts.length, 2);
@@ -102,8 +114,13 @@ try {
       await bounded(() => client.stop(), "Restricted client stop");
       clients.splice(clients.indexOf(client), 1);
       record.stage = "passed"; persist();
+    }).catch(error => {
+      record.stage = "failed";
+      record.failure = { name: error.name, detail: String(error.message).slice(0, 512).replace(/(?:[a-z][a-z0-9+.-]*:\/\/|\/)[^\s"'<>]*/gi, "[path]") };
+      persist();
     });
   }
+  assert.ok(summary.arms.every(arm => arm.stage === "passed"), "Both restricted arms must pass");
   assert.equal(summary.promptMethodsCalled, 0);
   assert.equal(summary.modelEvents, 0);
   summary.status = "passed"; summary.stage = "complete";
