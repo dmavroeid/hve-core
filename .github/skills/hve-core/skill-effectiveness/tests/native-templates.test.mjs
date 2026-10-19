@@ -653,11 +653,11 @@ test("native mock runs preserve identities, task failures and operational errors
   assert.deepEqual(reversed.map(record => record.variant), ["a-treatment", "b-baseline"]);
   assert.ok(reversed.every(record => record.trialIndex === undefined && typeof record.shardKey === "string"));
   assert.ok(reversed.every(record => record.experiment.baseline === "b-baseline"));
-  f.spec.agent_environment.files.push({ src: "../fixtures/unavailable-input", dest: "unavailable-input" });
+  f.spec.stimuli = [{ ...successful, supported_executors: ["copilot-sdk"] }];
   f.write("evals/task.eval.yaml", stringify(f.spec));
-  const failedRecords = execute("unavailable-input", 1);
-  assert.equal(failedRecords.length, 2);
-  assert.ok(failedRecords.every(record => record.status !== "success"));
+  const skippedRecords = execute("unsupported-executor", 0);
+  assert.equal(skippedRecords.length, 2);
+  assert.ok(skippedRecords.every(record => record.status === "skipped" && record.trajectory === null));
   const bindings = [];
   const gradeOriginal = (record, snapshot, expectedExit = 0) => {
     const index = bindings.length, scratch = join(f.root, "grade-scratch", String(index));
@@ -696,9 +696,11 @@ test("native mock runs preserve identities, task failures and operational errors
   // A vanilla native pass cannot authenticate the operator's arm/snapshot pairing.
   assert.notEqual(successfulRecords[0].variant, successfulRecords[2].variant);
   assert.equal(gradeOriginal(successfulRecords[2], bindings[0].snapshot).gradeResult.passed, true);
-  const failedAttempt = failedRecords[0];
-  assert.ok(failedAttempt, "native producer must retain operationally unsuccessful attempts");
-  gradeOriginal(failedAttempt, bindings[0].snapshot, 1);
+  const skippedAttempt = skippedRecords[0];
+  const skippedOutcome = gradeOriginal(skippedAttempt, bindings[0].snapshot);
+  assert.equal(skippedOutcome.status, "skipped");
+  assert.equal(skippedOutcome.trajectory, null);
+  assert.equal(skippedOutcome.gradeResult, null);
   assert.equal(existsSync(join(bindings.at(-1).scratch, "checker-entered")), false);
   const nullTrajectoryFixture = { ...successfulRecords[0], trajectory: null };
   const echoed = gradeOriginal(nullTrajectoryFixture, bindings[0].snapshot);

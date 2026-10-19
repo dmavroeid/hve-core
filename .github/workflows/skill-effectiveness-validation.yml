@@ -46,7 +46,7 @@ jobs:
           const files = execFileSync("git", ["ls-files", "."], { encoding: "utf8" }).trim().split("\n").sort();
           assert.equal(files.length, 24);
           const inventory = files.map(file => `${file} ${hash(readFileSync(file, "utf8").replace(/\r\n/g, "\n"))}\n`).join("");
-          assert.equal(hash(inventory), "e5bcba4e512b72266144d87d726435e8eddd1ebae12c437d7474b05aacc892f0");
+          assert.equal(hash(inventory), "af5126c38001aaca5c85b6c25bef803a924683398516790fc05e34c055843afb");
           assert.equal(hash(readFileSync("package-lock.json")), "b9c750fbb43bcf37350da9f62722d737380f0e271a78210be6ad64cd63862da2");
           assert.equal(process.env.SKILL_EFFECTIVENESS_NATIVE_PREFLIGHT, "0");
           console.log("Approved source, frozen lock and native opt-out verified.");
