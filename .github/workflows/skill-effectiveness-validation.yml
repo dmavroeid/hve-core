@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
-name: Temporary protected inventory prototype
+name: Temporary native protected inventory integration
 on:
   push:
     branches: [automation/skill-effectiveness-validation-20261017]
@@ -39,18 +39,18 @@ jobs:
           set -euo pipefail
           node ../../../validation/skill-effectiveness/containment-identity.mjs
           npm ci --ignore-scripts --include=dev --no-audit --no-fund --fetch-retries=0 --fetch-timeout=60000
-      - name: Test parent-owned inventory capture and task tampering
+      - name: Bind protected inventory to actual native task lifecycles
         timeout-minutes: 20
         run: |
           set -euo pipefail
           unset SKILL_EFFECTIVENESS_NATIVE_PREFLIGHT SKILL_EVAL_INVENTORY_DIR NODE_OPTIONS NODE_TEST_CONTEXT
-          node ../../../validation/skill-effectiveness/inventory-parent.mjs
+          node ../../../validation/skill-effectiveness/native-inventory-run.mjs
           git diff --exit-code -- .
       - name: Upload only synthetic structural results
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: skill-effectiveness-inventory-d71
-          path: ${{ runner.temp }}/inventory-d71/safe
+          name: skill-effectiveness-native-inventory-d72
+          path: ${{ runner.temp }}/native-inventory-d72/safe
           if-no-files-found: error
           retention-days: 14
