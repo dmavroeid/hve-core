@@ -99,3 +99,16 @@ test("actual hook rejects non-isolated networking before even starting SDK", asy
   assert.equal(state.delivered, 0);
   assert.equal(state.facts, null);
 });
+
+test("task overlay inherits native singleton security options instead of duplicating them", () => {
+  const source = readFileSync(join(own, "startup-backup-run.mjs"), "utf8");
+  const match = source.match(/const hardening = (\{[\s\S]*?\n  \});/);
+  assert.ok(match);
+  const overlay = vm.runInNewContext(`(${match[1]})`, { tag: "synthetic-test-image" });
+  assert.equal(Object.hasOwn(overlay, "security_opt"), false);
+  assert.equal(Object.hasOwn(overlay, "cap_drop"), false);
+  assert.equal(overlay.read_only, true);
+  assert.equal(overlay.pids_limit, 128);
+  assert.equal(overlay.mem_limit, "512m");
+  assert.equal(overlay.cpus, 1);
+});

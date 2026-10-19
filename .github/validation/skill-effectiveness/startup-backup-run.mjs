@@ -93,7 +93,6 @@ try {
   writeFileSync(join(canary, "SKILL.md"), "---\nname: canary-skill\ndescription: Synthetic startup control\n---\nSynthetic fixture only.\n");
   const hardening = {
     image: tag, read_only: true, pids_limit: 128, mem_limit: "512m", cpus: 1,
-    cap_drop: ["ALL"], security_opt: ["no-new-privileges:true"],
     tmpfs: ["/tmp:rw,nosuid,nodev,noexec,size=67108864"],
   };
   const overlay = join(root, "hardened.compose.yaml");
