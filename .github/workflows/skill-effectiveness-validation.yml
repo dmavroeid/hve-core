@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
-name: Temporary native candidate containment execution
+name: Temporary restricted SDK model-free verification
 on:
   push:
     branches: [automation/skill-effectiveness-validation-20261017]
@@ -20,9 +20,6 @@ jobs:
       run:
         shell: bash
         working-directory: .github/skills/hve-core/skill-effectiveness
-    env:
-      DO_NOT_TRACK: '1'
-      VALLY_TELEMETRY_OPTOUT: '1'
     steps:
       - name: Checkout exact snapshot
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
@@ -33,24 +30,27 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: '24.14.0'
-      - name: Restore frozen host tooling
+      - name: Restore frozen SDK stack
         timeout-minutes: 4
         run: |
           set -euo pipefail
           node ../../../validation/skill-effectiveness/containment-identity.mjs
           npm ci --ignore-scripts --include=dev --no-audit --no-fund --fetch-retries=0 --fetch-timeout=60000
-      - name: Execute actual native candidate-role containment
-        timeout-minutes: 20
+      - name: Test actual restricted SDK without prompts
+        timeout-minutes: 5
         run: |
           set -euo pipefail
-          unset SKILL_EFFECTIVENESS_NATIVE_PREFLIGHT SKILL_EVAL_INVENTORY_DIR NODE_OPTIONS NODE_TEST_CONTEXT
-          node ../../../validation/skill-effectiveness/candidate-run.mjs
+          mkdir -p "$RUNNER_TEMP/restricted-sdk-d66/home" "$RUNNER_TEMP/restricted-sdk-d66/tmp"
+          timeout --signal=TERM --kill-after=10s 180s env -i \
+            PATH="$PATH" HOME="$RUNNER_TEMP/restricted-sdk-d66/home" TMPDIR="$RUNNER_TEMP/restricted-sdk-d66/tmp" \
+            RUNNER_TEMP="$RUNNER_TEMP" CI=1 DO_NOT_TRACK=1 VALLY_TELEMETRY_OPTOUT=1 \
+            node ../../../validation/skill-effectiveness/restricted-sdk-run.mjs
           git diff --exit-code -- .
-      - name: Upload only synthetic structural results
+      - name: Upload only structural SDK results
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: skill-effectiveness-containment-d64
-          path: ${{ runner.temp }}/containment-d64/safe/summary.json
+          name: skill-effectiveness-restricted-sdk-d66
+          path: ${{ runner.temp }}/restricted-sdk-d66/safe/summary.json
           if-no-files-found: error
           retention-days: 14
