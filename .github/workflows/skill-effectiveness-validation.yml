@@ -10,6 +10,51 @@ concurrency:
 permissions:
   contents: read
 jobs:
+  integration:
+    if: github.repository == 'dmavroeid/hve-core' && github.ref == 'refs/heads/automation/skill-effectiveness-validation-20261017'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact integration snapshot
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Set up exact Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.14.0'
+      - name: Restore frozen public repository tooling
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Set up repository PowerShell modules
+        uses: ./.github/actions/setup-ps-modules
+      - name: Synchronize and check contribution projections
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run plugin:sync
+          npm run docs:generate
+          npm run extension:prepare
+          npm run plugin:validate
+          npm run docs:generate:check
+          npm run lint:public-dependency-feeds
+          npm run validate:skills
+          npm exec --no -- markdown-table-formatter ".github/skills/hve-core/skill-effectiveness/references/experiment-method.md"
+          npm exec --no -- markdownlint-cli2 ".github/skills/hve-core/skill-effectiveness/references/experiment-method.md"
+          git -c core.whitespace=cr-at-eol diff --check
+          git diff --binary -- plugin.json extension/package.json extension/README.md docs/reference .github/skills/hve-core/skill-effectiveness/references/experiment-method.md > integration-projections.patch
+      - name: Retain integration projection evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: integration-projections
+          path: |
+            integration-projections.patch
+            logs/
+          retention-days: 7
+          if-no-files-found: error
   validate:
     if: github.repository == 'dmavroeid/hve-core' && github.ref == 'refs/heads/automation/skill-effectiveness-validation-20261017'
     runs-on: ubuntu-24.04
@@ -45,14 +90,14 @@ jobs:
           unset SKILL_EFFECTIVENESS_NATIVE_PREFLIGHT SKILL_EVAL_INVENTORY_DIR NODE_OPTIONS NODE_TEST_CONTEXT
           npm test
           git diff --exit-code -- .
-      - name: Prepare current-code evidence lock without new resolution
+      - name: Restore committed current-code evidence lock
         working-directory: .evidence-preflight
         timeout-minutes: 2
         run: |
           set -euo pipefail
-          npm install --package-lock-only --ignore-scripts --offline --no-audit --no-fund
           node --input-type=module -e 'import fs from "node:fs"; import assert from "node:assert/strict"; const a=JSON.parse(fs.readFileSync("package.json")); const b=JSON.parse(fs.readFileSync("../.github/skills/hve-core/skill-effectiveness/package.json")); assert.deepEqual(a.devDependencies,b.devDependencies); assert.deepEqual(a.overrides,b.overrides);'
           npm ci --ignore-scripts --include=dev --no-audit --no-fund --fetch-retries=0 --fetch-timeout=60000
+          git diff --exit-code -- package-lock.json
       - name: Validate preserved task packages without model calls
         working-directory: .evidence-preflight
         timeout-minutes: 6

@@ -6,7 +6,8 @@ description: "Native Vally execution, safe validation, spending boundaries, and 
 # Native Execution And Evidence
 
 The current authoring/test package targets Vally 0.19.0, Copilot CLI 1.0.89 and SDK 1.0.15,
-on Node.js 24+. Windows exact-stack and runtime verification are pending.
+on Node.js 24+. Windows model-free package checks passed; runtime isolation
+verification remains pending.
 Keep completed evaluation packages and their pins unchanged for reproducibility.
 
 ## Restricted Execution Profile
@@ -36,14 +37,14 @@ public-stack Linux images, not that default digest or arbitrary substitutes.
 
 | Check                                              | Established scope                                                                                                             | Not established                                                |
 |----------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------|
-| Frozen restore and ordinary package tests          | Ubuntu package mechanics, native mock/lint/dry-run paths and local image decoding                                             | Actual model calls, native Windows or judgment quality         |
+| Frozen restore and ordinary package tests          | Ubuntu and Windows package mechanics, native mock/lint/dry-run paths and local image decoding                                 | Actual model calls, Windows runtime isolation or judgment quality |
 | Actual SDK policy and synthetic native-role checks | Tool/permission RPC behavior and host-file, environment, privilege and network canaries on the tested hardened Linux profiles | Arbitrary task policies or authenticated model-task boundaries |
 | No-prompt production startups                      | Actual session inventories, independent backup bytes, completion comparison and native workspace retention                    | Successful candidate tasks or independent host attestation     |
 | Synthetic protected grading                        | Immediate checker authentication, readonly executed inputs, writable scratch and integrity-negative rejection                 | Real-candidate provenance or automatic arm/snapshot binding    |
 
 These scopes are not universal protection. Preserve validation evidence with the
 exact package/runtime revision and selected profile; qualify materially changed
-code, images or native preservation layouts separately. Windows, authenticated
+code, images or native preservation layouts separately. Windows runtime isolation, authenticated
 model-task execution and model judgment quality remain unverified.
 
 ### Public Release Basis
@@ -216,11 +217,14 @@ the adapter makes evaluation evidence isolated.
 
 Copy `SKILL.md`, `SECURITY.md`, `LICENSE`, `NOTICE`, `assets/`, `references/`, `scripts/`, `tests/`, `package.json`,
 `package-lock.json`, `.npmrc` and `.gitignore` as one folder.
-No parent-repository helpers are needed.
+No parent-repository runtime helpers are needed. To run the package regression
+suite, preserve the `.github/skills/hve-core/skill-effectiveness` directory
+layout and the repository-root `LICENSE`: the packaging test compares the
+skill's license with that canonical file.
 Exclude node_modules, temporary test directories, logs, generated coverage
 reports and previous outputs.
 
-From the copied skill folder:
+From the skill folder in that repository layout:
 
 ```powershell
 npm ci
@@ -232,15 +236,44 @@ code-plus-prompt evidence wiring, inventory capture and SDK image attachments.
 Ordinary tests use mocked SDK sessions and do not require the optional Copilot
 binary. Native session-startup coverage is skipped unless explicitly selected.
 These tests do not judge output quality or prove model vision. Coordinated
-dependency pins and the canonical lock have passed frozen Ubuntu restore and
-package tests on the pinned stack. The plugin rejects mismatched installed
+dependency pins and the canonical lock have passed frozen Ubuntu and Windows
+restore and package tests on the pinned stack. Windows file-symlink coverage
+requires host privileges and can be skipped. The plugin rejects mismatched installed
 versions. A missing local installation or older parent-repository packages
 cannot substitute for the frozen suite; record unavailable checks explicitly.
 Restore only when permitted by the host's dependency/network policy.
 
+### Restore Through An Approved Registry
+
+If your organization requires a registry proxy, supply its approved address
+through your environment, not a tracked file. A CLI flag or
+`npm_config_registry` overrides the package's public `.npmrc`; user-level npm
+configuration alone does not. From the skill or generated experiment folder,
+with `npm_config_registry` already set to your approved registry:
+
+```powershell
+npm ci --replace-registry-host=always --ignore-scripts --include=dev --no-audit --no-fund
+```
+
+For intermittent connection resets, retry the same frozen restore sequentially
+with `--maxsockets=3 --fetch-retries=1 --fetch-timeout=120000`. Stop on an
+unavailable pinned version and ask your registry administrator; do not switch
+registries, disable TLS checks or substitute versions automatically.
+Keep the canonical public lockfile and its SHA512 hashes unchanged. Do not
+generate locks through a proxy or run `npm install` as a restore workaround.
+
+The development package and generated template explicitly override `qs` to
+6.16.0. This compatible pin passed public and approved-registry frozen restores
+and model-free checks; it does not include the functional and robustness fixes
+in [6.16.1](https://github.com/ljharb/qs/blob/v6.16.1/CHANGELOG.md).
+Reassess the pin when updating dependencies. This recipe does not approve
+packages, guarantee registry availability or authorize runtime startup.
+
 The host's coverage-enabled Node runner writes `coverage-node.info` in the skill
 folder. This generated report is ignored by Git and the package-content check;
 other undeclared package files remain errors.
+
+### Optional Runtime Startup
 
 After separately authorizing local runtime startup and installing optional
 dependencies, select the model-free native smoke test:

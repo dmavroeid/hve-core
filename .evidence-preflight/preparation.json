@@ -1,6 +1,12 @@
 {
   "archiveManifestSha256": "e35394a62b73a45acbccd4be6f9a3a4a8ea179c78f851749712b1da519b56a54",
   "paidExecutionApproved": false,
+  "dependencyUpdate": {
+    "qs": "6.16.0",
+    "lockSource": "Canonical public npm registry",
+    "reason": "User-approved compatible pin following public and approved-registry model-free qualification",
+    "limit": "Does not include qs 6.16.1 functional and robustness fixes; reassess during dependency updates"
+  },
   "runtimePolicy": "No grants: useful-task policy and runtime preflight pending",
   "cases": [
     {
