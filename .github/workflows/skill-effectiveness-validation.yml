@@ -87,3 +87,42 @@ jobs:
             .evidence-preflight/catalog-controls.log
           retention-days: 7
           if-no-files-found: error
+      - name: Set up exact uv for isolated notebook controls
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: '0.10.9'
+          enable-cache: false
+      - name: Lock and restore isolated public notebook prerequisites
+        working-directory: .evidence-preflight/validation/python-runtime
+        timeout-minutes: 4
+        env:
+          UV_PYTHON_DOWNLOADS: never
+        run: |
+          set -euo pipefail
+          uv lock --python "$(command -v python3)"
+          uv sync --frozen --python "$(command -v python3)"
+          uv run --frozen python -m ipykernel install --prefix "$PWD/.venv" --name hve-simplified-pilot --display-name "Trusted notebook control"
+          uv run --frozen python -c 'import importlib.metadata as m, json, platform; print(json.dumps({"python":platform.python_version(),"packages":{p:m.version(p) for p in ["nbformat","nbconvert","ipykernel","Pillow","matplotlib","pandas","numpy","seaborn"]}},indent=2))' | tee notebook-runtime.json
+      - name: Qualify notebook execution through original checkers and native graders
+        working-directory: .evidence-preflight
+        timeout-minutes: 6
+        run: |
+          set -euo pipefail
+          unset SKILL_EFFECTIVENESS_NATIVE_PREFLIGHT SKILL_EVAL_INVENTORY_DIR NODE_OPTIONS NODE_TEST_CONTEXT
+          source validation/python-runtime/.venv/bin/activate
+          export QUEUE_DELAY_NOTEBOOK_PYTHON="$PWD/validation/python-runtime/.venv/bin/python"
+          export QUEUE_DELAY_NOTEBOOK_KERNEL=hve-simplified-pilot
+          export MPLBACKEND=Agg
+          node --test validation/notebook-controls.mjs 2>&1 | tee notebook-controls.log
+      - name: Retain isolated notebook lock and control evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: notebook-controls
+          path: |
+            .evidence-preflight/validation/python-runtime/pyproject.toml
+            .evidence-preflight/validation/python-runtime/uv.lock
+            .evidence-preflight/validation/python-runtime/notebook-runtime.json
+            .evidence-preflight/notebook-controls.log
+          retention-days: 7
+          if-no-files-found: error
