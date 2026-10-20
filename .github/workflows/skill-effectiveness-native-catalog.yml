@@ -7,6 +7,8 @@ on:
     paths:
       - .github/validation/skill-effectiveness/native-catalog/**
       - .github/workflows/skill-effectiveness-native-catalog.yml
+      - .evidence-preflight/grading/detailed-data-catalog/**
+      - .evidence-preflight/evals/detailed-data-catalog.grade.eval.yaml
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
@@ -32,6 +34,12 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: '24.14.0'
+      - name: Check trusted catalog adapter startup classification
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/native-catalog-qualification/safe"
+          node --test .github/validation/skill-effectiveness/native-catalog/catalog-adapter.test.mjs \
+            2>&1 | tee "$RUNNER_TEMP/native-catalog-qualification/safe/adapter-tests.log"
       - name: Restore frozen native CLI
         working-directory: .github/skills/hve-core/skill-effectiveness
         run: npm ci --ignore-scripts --include=dev --no-audit --no-fund
@@ -52,7 +60,7 @@ jobs:
             -f .github/validation/skill-effectiveness/native-catalog/Dockerfile . \
             2>&1 | tee "$RUNNER_TEMP/native-catalog-qualification/safe/grade-image-build.log"
           echo "TASK_RUNTIME_IMAGE=$(cat "$RUNNER_TEMP/native-catalog-qualification/safe/image-id")" >> "$GITHUB_ENV"
-      - name: Exercise native records, actual Docker grading and retained outputs
+      - name: Exercise native catalog grades, startup errors and preserved raw records
         working-directory: .github/skills/hve-core/skill-effectiveness
         run: |
           set -euo pipefail

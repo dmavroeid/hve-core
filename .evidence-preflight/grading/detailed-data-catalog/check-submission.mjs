@@ -25,6 +25,15 @@ if (task === "c4-architecture") {
 }
 const args = ["task-fixture/check.mjs","deliverable/northlake-ds-catalog.md"];
 args[0] = resolve(assets, args[0]);
+if (task === "data-catalog") {
+  args.unshift("--input-type=module", "-e", [
+    'import { pathToFileURL } from "node:url";',
+    'const checker = process.argv[1];',
+    'process.argv = [process.execPath, checker, ...process.argv.slice(2)];',
+    'try { await import(pathToFileURL(checker).href); }',
+    'catch (error) { console.error(error); process.exit(2); }',
+  ].join("\n"));
+}
 if (task === "p-map") {
   const tests = readdirSync(join(assets, "task-fixture", "checks"))
     .filter(name => name.endsWith(".test.mjs")).sort()

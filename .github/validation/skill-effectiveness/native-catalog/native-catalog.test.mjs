@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { spawn, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { after, before, test } from "node:test";
 
@@ -33,7 +33,8 @@ mkdirSync(env.HOME);
 const hash = value => createHash("sha256").update(value).digest("hex");
 const summary = {
   status: "running", image, baseImage, scope: "Native CLI Docker grading of trusted catalog controls; mock producer only",
-  cases: [], containers: [], nativeGradeOutputRetained: false, originalsPreserved: false, cleanup: "pending",
+  cases: [], containers: [], nativeGradeRecordRetained: false, originalsPreserved: false, cleanup: "pending",
+  catalogEvidence: "Original preserved submission and raw native grade record; duplicate scratch export is not required",
   automaticSnapshotBinding: "Not supplied by native grade; operator-owned selection remains required",
 };
 const persist = () => writeFileSync(join(safe, "summary.json"), JSON.stringify(summary, null, 2) + "\n");
@@ -253,17 +254,20 @@ test("grade-image ancestor dependency link resolves YAML without modifying trust
     verified.add("grade-module-resolution");
   });
 
-test("original valid catalog is graded through the native CLI Docker path and its execution output survives",
+test("original valid catalog passes native Docker grading with original input and raw report preserved",
   { timeout: 300000 }, async t => {
     const result = await grade("valid", valid, valid.snapshot, t);
     assert.equal(result.code, 0, result.stderr + result.stdout);
     assert.equal(result.outcome.passed, true);
     assert.notEqual(result.outcome.status, "error");
-    const output = join(result.scratch, "execution", "deliverable", "northlake-ds-catalog.md");
-    assert.ok(existsSync(output), "Native preserved grade workspace must retain actual checker execution output");
-    assert.equal(hash(readFileSync(output)), snapshots.get(valid.snapshot));
-    cpSync(join(result.scratch, "execution"), join(result.directory, "native-execution-output"), { recursive: true });
-    summary.nativeGradeOutputRetained = true;
+    const report = readFileSync(join(result.directory, "native.stdout.jsonl"), "utf8");
+    assert.equal(report, result.stdout);
+    assert.equal(JSON.parse(report).trajectory.id, valid.record.trajectory.id);
+    assert.equal(JSON.parse(report).gradeResult.passed, true);
+    assert.equal(readFileSync(join(result.directory, "selected-original-trial.jsonl"), "utf8"), valid.line);
+    assert.equal(hash(readFileSync(join(safe, "input-snapshots", "valid", "deliverable",
+      "northlake-ds-catalog.md"))), snapshots.get(valid.snapshot));
+    summary.nativeGradeRecordRetained = true;
     verified.add("valid");
     persist();
   });
@@ -291,7 +295,20 @@ test("missing Python is an operational error through native grade",
     const result = await grade("missing-python", valid, valid.snapshot, t, { missingPython: true });
     assert.equal(result.code, 1);
     assert.equal(result.outcome.status, "error");
+    assert.match(JSON.stringify(result.outcome), /spawnSync \/missing-catalog-python ENOENT/);
     verified.add("missing-python");
+  });
+
+test("missing Node dependency is an operational error through the original protected catalog grade",
+  { timeout: 300000 }, async t => {
+    const result = await grade("missing-node-dependency", valid, valid.snapshot, t,
+      { selectedImage: baseImage });
+    assert.equal(result.code, 1);
+    assert.equal(result.outcome.passed, false);
+    assert.equal(result.outcome.status, "error");
+    assert.match(JSON.stringify(result.outcome), /Checker operational failure/);
+    assert.match(JSON.stringify(result.outcome), /ERR_MODULE_NOT_FOUND/);
+    verified.add("missing-node-dependency");
   });
 
 test("native grade accepts an explicitly supplied different snapshot, exposing the supervised binding limit",
@@ -314,9 +331,9 @@ after(() => {
     assert.deepEqual(readFileSync(gradeSpec), gradeBytes);
     summary.originalsPreserved = true;
     assert.ok(summary.containers.length > 0, "At least one actual native grade container must be inspected");
-    assert.equal(summary.cases.length, 7);
-    assert.equal(verified.size, 7);
-    assert.equal(summary.nativeGradeOutputRetained, true);
+    assert.equal(summary.cases.length, 8);
+    assert.equal(verified.size, 8);
+    assert.equal(summary.nativeGradeRecordRetained, true);
     assert.equal(summary.mismatchedSnapshotAccepted, true);
     checksPassed = true;
   } finally {
