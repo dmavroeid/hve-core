@@ -8,7 +8,7 @@ ENV DO_NOT_TRACK=1 VALLY_TELEMETRY_OPTOUT=1 \
 # Debian packages are recorded during the build, not resolved from a frozen snapshot.
 RUN apt-get -o Acquire::Retries=0 update \
     && apt-get -o Acquire::Retries=0 install -y --no-install-recommends \
-        git ca-certificates python3 python3-venv \
+        git ca-certificates python3 python3-venv unzip \
         libasound2 libatk-bridge2.0-0 libatk1.0-0 libcups2 libdbus-1-3 \
         libdrm2 libgbm1 libgtk-3-0 libnspr4 libnss3 libx11-xcb1 \
         libxcomposite1 libxdamage1 libxfixes3 libxkbcommon0 libxrandr2 \

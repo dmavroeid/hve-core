@@ -22,7 +22,6 @@ const clean = { PATH: process.env.PATH, HOME: join(root, "home"), DO_NOT_TRACK: 
 mkdirSync(clean.HOME, { recursive: true });
 const hash = bytes => createHash("sha256").update(bytes).digest("hex");
 const { parse, stringify } = createRequire(join(skill, "package.json"))("yaml");
-const imageTag = "containment-d63:" + process.env.GITHUB_SHA;
 let image, server, poll;
 const projects = new Set(), volumes = new Set(), inspected = new Set();
 const run = (program, args, options = {}) => {
