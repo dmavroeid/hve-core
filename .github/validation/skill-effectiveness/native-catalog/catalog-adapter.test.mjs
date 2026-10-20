@@ -18,6 +18,21 @@ test("embedded output probe contains no native eval parameter placeholders", () 
   assert.ok(!source.includes("${"), "Embedded JavaScript must use concatenation, not eval parameters");
 });
 
+for (const id of ["detailed-analysis-authoring", "generic-analysis-authoring",
+  "detailed-c4-architecture", "generic-c4-architecture"]) {
+  test(id + " rejects an output-root override outside the dedicated mount", () => {
+    const file = fileURLToPath(new URL(
+      "../../../../.evidence-preflight/grading/" + id + "/check-submission.mjs", import.meta.url));
+    const result = spawnSync(process.execPath, [file], {
+      env: { ...process.env, HVE_GRADE_OUTPUT_ROOT: "/unexpected-host-path" },
+      encoding: "utf8", timeout: 10000,
+    });
+    assert.ifError(result.error);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Invalid dedicated grade-output root/);
+  });
+}
+
 function runChecker(t, script) {
   const root = mkdtempSync(join(tmpdir(), "catalog adapter "));
   t.after(() => rmSync(root, { recursive: true, force: true }));

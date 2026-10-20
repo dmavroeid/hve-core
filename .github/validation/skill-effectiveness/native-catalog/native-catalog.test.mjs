@@ -50,6 +50,10 @@ const volumes = new Set();
 const inspected = new Set();
 const verified = new Set();
 const outputCases = new Map();
+const taskOutputOnly = process.env.NATIVE_TASK_OUTPUT_ONLY === "1";
+const taskOutputs = [];
+if (taskOutputOnly) summary.scope =
+  "Actual notebook/C4 native grade-output retention; trusted mock submissions only";
 let valid;
 let wrong;
 
@@ -144,7 +148,13 @@ function observe(name, selectedImage) {
     assert.deepEqual(host.CapDrop, ["ALL"]);
     assert.equal(host.CapAdd?.length ?? 0, 0);
     assert.ok(host.SecurityOpt.includes("no-new-privileges:true"));
-    assert.equal(host.SecurityOpt.some(value => value.startsWith("seccomp=")), false);
+    const renderer = outputCases.get(name)?.renderer;
+    const seccomp = host.SecurityOpt.filter(value => value.startsWith("seccomp="));
+    if (renderer) {
+      assert.equal(seccomp.length, 1);
+      assert.deepEqual(JSON.parse(seccomp[0].slice("seccomp=".length)),
+        JSON.parse(readFileSync(join(safe, "renderer-profile", "renderer-seccomp.json"), "utf8")));
+    } else assert.equal(seccomp.length, 0);
     assert.equal(host.PidsLimit, 128);
     assert.equal(host.Memory, 536870912);
     assert.equal(host.NanoCpus, 1000000000);
@@ -189,12 +199,21 @@ function observe(name, selectedImage) {
 
 async function grade(name, selected, snapshot, t,
   { badDigest = false, missingPython = false, probe = false, selectedImage = image,
-    outputMode } = {}) {
+    outputMode, taskId } = {}) {
   const directory = join(safe, "grades", name);
   mkdirSync(directory, { recursive: true });
   const scratch = join(root, "scratch", name);
   mkdirSync(scratch, { recursive: true });
   let spec = gradeSpec;
+  let selectedAssets = assets;
+  if (taskId) {
+    selectedAssets = join(packageRoot, "grading", taskId);
+    const changed = parse(readFileSync(join(packageRoot, "evals", taskId + ".grade.eval.yaml"), "utf8"));
+    changed.stimuli[0].graders[0].config.args[3] =
+      hash(readFileSync(join(selectedAssets, "check-submission.mjs")));
+    spec = join(directory, "task.grade.eval.yaml");
+    writeFileSync(spec, stringify(changed));
+  }
   if (badDigest) {
     const changed = structuredClone(definition);
     changed.stimuli[0].graders[0].config.args[3] = "0".repeat(64);
@@ -213,6 +232,9 @@ async function grade(name, selected, snapshot, t,
     const sibling = join(parent, "unmounted-sibling.txt");
     writeFileSync(sibling, "host-only boundary canary\n");
     const compose = parse(readFileSync(composeFile, "utf8"));
+    const renderer = taskId?.endsWith("c4-architecture") ?? false;
+    if (renderer) compose.services.grade.security_opt =
+      ["seccomp=" + join(safe, "renderer-profile", "renderer-seccomp.json")];
     if (outputMode !== "absent") {
       compose.services.grade.volumes = [{
         type: "bind", source: outputDirectory, target: "/grade-output",
@@ -221,15 +243,17 @@ async function grade(name, selected, snapshot, t,
     }
     composeFile = join(directory, "output-compose.yml");
     writeFileSync(composeFile, stringify(compose));
-    const outputSpec = structuredClone(definition);
-    outputSpec.stimuli[0].graders[0].config.args = [
-      "--input-type=module", "-e",
-      readFileSync(new URL("./output-probe.mjs", import.meta.url), "utf8"), sibling,
-    ];
-    spec = join(directory, "output.eval.yaml");
-    writeFileSync(spec, stringify(outputSpec));
+    if (!taskId) {
+      const outputSpec = structuredClone(definition);
+      outputSpec.stimuli[0].graders[0].config.args = [
+        "--input-type=module", "-e",
+        readFileSync(new URL("./output-probe.mjs", import.meta.url), "utf8"), sibling,
+      ];
+      spec = join(directory, "output.eval.yaml");
+      writeFileSync(spec, stringify(outputSpec));
+    }
     outputCases.set(name, { mode: outputMode, directory: outputDirectory,
-      sibling, siblingBytes: readFileSync(sibling) });
+      sibling, siblingBytes: readFileSync(sibling), renderer });
   }
   const lint = await native(["lint", "--eval-spec", spec, "--strict"],
     join(directory, "lint"), undefined, t.signal);
@@ -239,8 +263,10 @@ async function grade(name, selected, snapshot, t,
     "--backend", "docker", "--backend-args", `task-image=${baseImage}`, "--backend-args", `grade-image=${selectedImage}`,
     "--backend-args", "task-network=none", "--backend-args", "grade-network=none",
     "--backend-args", `compose-file=${composeFile}`,
-    "--workspace", scratch, "--assets-dir", probe || outputMode ? join(root, "module-probe-assets") : assets,
+    "--workspace", scratch, "--assets-dir", taskId ? selectedAssets :
+      probe || outputMode ? join(root, "module-probe-assets") : assets,
     "--artifact-dir", snapshot];
+  if (taskId) args.push("--backend-args", "grade-env=HVE_GRADE_OUTPUT_ROOT");
   if (missingPython) args.push("--backend-args", "grade-env=CATALOG_PYTHON");
   writeFileSync(join(directory, "selected-original-trial.jsonl"), selected.line);
   let observationError;
@@ -250,7 +276,8 @@ async function grade(name, selected, snapshot, t,
   let result;
   try {
     result = await native(args, directory, selected.line, t.signal,
-      missingPython ? { CATALOG_PYTHON: "/missing-catalog-python" } : {});
+      taskId ? { HVE_GRADE_OUTPUT_ROOT: "/grade-output" } :
+        missingPython ? { CATALOG_PYTHON: "/missing-catalog-python" } : {});
   } finally {
     clearInterval(poll);
   }
@@ -263,6 +290,7 @@ async function grade(name, selected, snapshot, t,
   const outputs = result.stdout.trim().split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line));
   assert.equal(outputs.length, 1, result.stdout + result.stderr);
   assert.ok(outputs[0].gradeResult, result.stdout + result.stderr);
+  summary.nativeGradeRecordRetained = true;
   summary.cases.push({
     name, image: selectedImage, exitCode: result.code,
     passed: outputs[0].gradeResult.passed, status: outputs[0].gradeResult.status ?? null,
@@ -418,6 +446,109 @@ for (const mode of ["readonly", "absent"]) {
     });
 }
 
+for (const framing of ["detailed", "generic"]) {
+  for (const task of ["analysis-authoring", "c4-architecture"]) {
+    const id = framing + "-" + task;
+    test(id + ": actual task output retention after native cleanup",
+      { timeout: 600000 }, async t => {
+        const notebook = task === "analysis-authoring";
+        const control = join(root, "task-controls", id);
+        const snapshot = join(control, "snapshot");
+        mkdirSync(join(snapshot, "deliverable"), { recursive: true });
+        let primary;
+        if (notebook) {
+          const { notebookControl } = await import(
+            new URL("../../../../.evidence-preflight/validation/notebook-control.mjs", import.meta.url));
+          primary = "queue-delay-analysis.ipynb";
+          writeFileSync(join(snapshot, "deliverable", primary), JSON.stringify(notebookControl()));
+          writeFileSync(join(snapshot, "deliverable", "summary.md"),
+            "Investigate station medians and long waits; synthetic observational data cannot establish maintenance effects.");
+        } else {
+          primary = "architecture-pack.md";
+          writeFileSync(join(snapshot, "deliverable", primary),
+            ["legend", "system-context", "container", "component", "deployment"]
+              .map(name => "## " + name + "\n\n```mermaid\nflowchart LR\n  a[Client] --> b[Service]\n```\n")
+              .join("\n"));
+        }
+        const before = new Map(files(snapshot).map(file => [file, hash(readFileSync(file))]));
+        // The native mock producer supplies the original task identity, not a synthesized result.
+        const taskDefinition = parse(readFileSync(join(packageRoot, "evals", id + ".grade.eval.yaml"), "utf8"));
+        const producerSpec = {
+          name: taskDefinition.name, version: "1.0.0", type: "capability",
+          defaults: { executor: "mock", model: "mock", runs: 1 },
+          agent_environment: { files: [{ src: snapshot, dest: "." }] },
+          stimuli: [{ name: taskDefinition.stimuli[0].name, prompt: "Trusted model-free task control.",
+            graders: [{ type: "completed" }] }],
+        };
+        const mock = join(snapshot, ".mock-executor");
+        mkdirSync(mock);
+        writeFileSync(join(mock, taskDefinition.stimuli[0].name + ".json"),
+          JSON.stringify({ output: "Trusted model-free task control.", events: [] }));
+        const spec = join(control, "producer.eval.yaml");
+        writeFileSync(spec, stringify(producerSpec));
+        const produced = join(control, "producer-results");
+        const generation = await native(["eval", "--eval-spec", spec, "--output-dir", produced,
+          "--workspace", join(control, "preserved"), "--workers", "1"],
+          join(safe, "producer", id), undefined, t.signal);
+        assert.equal(generation.code, 0, generation.stderr + generation.stdout);
+        const records = files(produced).filter(file => file.endsWith(".jsonl"));
+        const candidates = [];
+        for (const file of records) {
+          const bytes = readFileSync(file);
+          originalFiles.set(file, bytes);
+          const saved = join(safe, "originals", id, relative(produced, file));
+          mkdirSync(dirname(saved), { recursive: true });
+          writeFileSync(saved, bytes);
+          for (const line of bytes.toString("utf8").split(/(?<=\n)/).filter(line => line.trim())) {
+            const record = JSON.parse(line);
+            if (record.status === "success" && record.trajectory) candidates.push({ line, record });
+          }
+        }
+        assert.equal(candidates.length, 1);
+        const selected = candidates[0];
+        const nativeSnapshot = selected.record.workspacePath ?? selected.record.trajectory.workDir;
+        const snapshotBytes = new Map(files(join(nativeSnapshot, "deliverable"))
+          .map(file => [file, readFileSync(file)]));
+        cpSync(join(nativeSnapshot, "deliverable"),
+          join(safe, "input-snapshots", id, "deliverable"), { recursive: true });
+        for (const file of files(join(packageRoot, "grading", id))) {
+          originalFiles.set(file, readFileSync(file));
+        }
+        const result = await grade(id, selected, nativeSnapshot, t,
+          { outputMode: "writable", taskId: id });
+        assert.equal(result.code, 0, result.stderr + result.stdout);
+        assert.equal(result.outcome.passed, true, JSON.stringify(result.outcome));
+        const directory = join(outputCases.get(id).directory, "execution", "deliverable");
+        const images = files(directory).filter(file => file.endsWith(".png"));
+        assert.equal(images.length, notebook ? 8 : 5);
+        const { default: sharp } = await import(
+          new URL("../../../../.evidence-preflight/node_modules/sharp/lib/index.js", import.meta.url));
+        for (const file of images) {
+          const metadata = await sharp(readFileSync(file)).metadata();
+          assert.equal(metadata.format, "png");
+          assert.ok(metadata.width > 0 && metadata.height > 0);
+        }
+        if (notebook) {
+          const executed = JSON.parse(readFileSync(join(directory, "queue-delay-analysis.executed.ipynb"), "utf8"));
+          const cells = executed.cells.filter(cell => cell.cell_type === "code");
+          assert.ok(cells.length > 0 && cells.every(cell => cell.execution_count > 0));
+          assert.match(JSON.stringify(cells.flatMap(cell => cell.outputs)), /CONTROL_EXECUTED rows=60000 stations=80/);
+          assert.ok(cells.every(cell => cell.outputs.every(output => output.output_type !== "error")));
+        }
+        for (const [file, digest] of before) assert.equal(hash(readFileSync(file)), digest);
+        for (const [file, bytes] of snapshotBytes) assert.deepEqual(readFileSync(file), bytes);
+        const generated = files(directory).filter(file =>
+          file.endsWith(".png") || file.endsWith(".executed.ipynb"));
+        taskOutputs.push({ id, images: images.length, generated: generated.map(file => ({
+          path: relative(safe, file), sha256: hash(readFileSync(file)), bytes: readFileSync(file).length,
+        })) });
+        summary.taskOutputs = taskOutputs;
+        verified.add(id);
+        persist();
+      });
+  }
+}
+
 after(() => {
   let checksPassed = false;
   try {
@@ -434,10 +565,10 @@ after(() => {
     }
     summary.originalsPreserved = true;
     assert.ok(summary.containers.length > 0, "At least one actual native grade container must be inspected");
-    assert.equal(summary.cases.length, 11);
-    assert.equal(verified.size, 11);
+    assert.equal(summary.cases.length, taskOutputOnly ? 4 : 15);
+    assert.equal(verified.size, taskOutputOnly ? 4 : 15);
     assert.equal(summary.nativeGradeRecordRetained, true);
-    assert.equal(summary.mismatchedSnapshotAccepted, true);
+    if (!taskOutputOnly) assert.equal(summary.mismatchedSnapshotAccepted, true);
     checksPassed = true;
   } finally {
     summary.status = "failed";

@@ -43,6 +43,12 @@ jobs:
       - name: Restore frozen native CLI
         working-directory: .github/skills/hve-core/skill-effectiveness
         run: npm ci --ignore-scripts --include=dev --no-audit --no-fund
+      - name: Reuse qualified renderer-only namespace profile
+        run: |
+          set -euo pipefail
+          node --test .github/validation/skill-effectiveness/task-runtime/namespace-profile.test.mjs
+          node .github/validation/skill-effectiveness/task-runtime/namespace-profile.mjs \
+            "$RUNNER_TEMP/native-catalog-qualification/safe/renderer-profile"
       - name: Build the previously qualified frozen task image
         run: |
           set -euo pipefail
@@ -60,12 +66,15 @@ jobs:
             -f .github/validation/skill-effectiveness/native-catalog/Dockerfile . \
             2>&1 | tee "$RUNNER_TEMP/native-catalog-qualification/safe/grade-image-build.log"
           echo "TASK_RUNTIME_IMAGE=$(cat "$RUNNER_TEMP/native-catalog-qualification/safe/image-id")" >> "$GITHUB_ENV"
-      - name: Exercise native catalog controls and approved synthetic grade-output storage
+      - name: Exercise actual notebook and C4 native output retention
         working-directory: .github/skills/hve-core/skill-effectiveness
+        env:
+          NATIVE_TASK_OUTPUT_ONLY: '1'
         run: |
           set -euo pipefail
           unset NODE_OPTIONS NODE_TEST_CONTEXT SKILL_EVAL_INVENTORY_DIR
-          node --test ../../../validation/skill-effectiveness/native-catalog/native-catalog.test.mjs \
+          node --test --test-name-pattern "actual task output retention" \
+            ../../../validation/skill-effectiveness/native-catalog/native-catalog.test.mjs \
             2>&1 | tee "$RUNNER_TEMP/native-catalog-qualification/safe/tests.log"
       - name: Verify preservation and complete owned resource cleanup
         if: ${{ always() }}

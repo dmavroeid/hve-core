@@ -3,7 +3,9 @@ import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
 const assets = process.env.EVALUATE_ASSETS;
 const snapshot = process.env.EVALUATE_ARTIFACT_DIR;
-const scratch = join(process.env.EVALUATE_WORKSPACE, "execution");
+const outputRoot = process.env.HVE_GRADE_OUTPUT_ROOT;
+if (outputRoot !== undefined && outputRoot !== "/grade-output") throw new Error("Invalid dedicated grade-output root");
+const scratch = join(outputRoot ?? process.env.EVALUATE_WORKSPACE, "execution");
 const regularTree = directory => {
   for (const name of readdirSync(directory)) {
     const file = join(directory, name), stat = lstatSync(file);
