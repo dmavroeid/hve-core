@@ -100,15 +100,6 @@ stimuli:
 
 
       Approved local tool paths are listed in `task-fixture/TOOLS.txt`.
-    rubric:
-      - The pack is useful to a new engineer and accurately explains the
-        CLI-to-runtime configuration path, authenticated REST read path, and
-        evidenced local deployment.
-      - The pack distinguishes current sample configuration from broader runtime
-        capability, especially around authentication, without making unsupported
-        claims.
-      - The diagrams and notes use coherent C4 decomposition and source-grounded
-        naming/boundaries; valid alternative layouts are acceptable.
     graders:
       - type: completed
       - type: file-exists

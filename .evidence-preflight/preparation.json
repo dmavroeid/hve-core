@@ -18,8 +18,8 @@
         "model": "${AGENT_MODEL=MUST-SET-AGENT-MODEL}",
         "judge_model": "${JUDGE_MODEL=MUST-SET-JUDGE-MODEL}"
       },
-      "publicFixture": "fixtures\\detailed-data-catalog\\public",
-      "gradeAssets": "grading\\detailed-data-catalog",
+      "publicFixture": "fixtures/detailed-data-catalog/public",
+      "gradeAssets": "grading/detailed-data-catalog",
       "checkerSha256": "9ba23ab7945c018051f189d110a3d9f8845f91dc924fb96909d511ec306fa29e",
       "executableChecker": {
         "command": "node",
@@ -54,8 +54,8 @@
         "model": "${AGENT_MODEL=MUST-SET-AGENT-MODEL}",
         "judge_model": "${JUDGE_MODEL=MUST-SET-JUDGE-MODEL}"
       },
-      "publicFixture": "fixtures\\detailed-analysis-authoring\\public",
-      "gradeAssets": "grading\\detailed-analysis-authoring",
+      "publicFixture": "fixtures/detailed-analysis-authoring/public",
+      "gradeAssets": "grading/detailed-analysis-authoring",
       "checkerSha256": "38e669f1ac09ba61e697271607e60d8ff6d33bd94cb85b6c72d0eeb0fc59209d",
       "executableChecker": {
         "command": "node",
@@ -91,8 +91,8 @@
         "model": "${AGENT_MODEL=MUST-SET-AGENT-MODEL}",
         "judge_model": "${JUDGE_MODEL=MUST-SET-JUDGE-MODEL}"
       },
-      "publicFixture": "fixtures\\detailed-c4-architecture\\public",
-      "gradeAssets": "grading\\detailed-c4-architecture",
+      "publicFixture": "fixtures/detailed-c4-architecture/public",
+      "gradeAssets": "grading/detailed-c4-architecture",
       "checkerSha256": "4cc12230463b5ff729b60ce1927266dd0c386a1dd3e969c350a99815e1d08804",
       "executableChecker": {
         "command": "node",
@@ -127,8 +127,8 @@
         "executor": "copilot-sdk",
         "model": "${AGENT_MODEL=MUST-SET-AGENT-MODEL}"
       },
-      "publicFixture": "fixtures\\detailed-p-map\\public",
-      "gradeAssets": "grading\\detailed-p-map",
+      "publicFixture": "fixtures/detailed-p-map/public",
+      "gradeAssets": "grading/detailed-p-map",
       "checkerSha256": "ffa10221672b62609c5283773f09751eb0e6067a887a6cde3cda7f07a59e7b2f",
       "executableChecker": {
         "command": "node",
@@ -162,8 +162,8 @@
         "model": "${AGENT_MODEL=MUST-SET-AGENT-MODEL}",
         "judge_model": "${JUDGE_MODEL=MUST-SET-JUDGE-MODEL}"
       },
-      "publicFixture": "fixtures\\generic-data-catalog\\public",
-      "gradeAssets": "grading\\generic-data-catalog",
+      "publicFixture": "fixtures/generic-data-catalog/public",
+      "gradeAssets": "grading/generic-data-catalog",
       "review": true,
       "reviewGradersSha256": "42a2a5dbf54981113753b58168831721ebcd9a1cb1419d5d7f531340b61301b0",
       "rubricSha256": "b9665e51d173d2f4136bd613ca83dab8b7b8e442523144c6f8ba4b67790e3080",
@@ -188,8 +188,8 @@
         "model": "${AGENT_MODEL=MUST-SET-AGENT-MODEL}",
         "judge_model": "${JUDGE_MODEL=MUST-SET-JUDGE-MODEL}"
       },
-      "publicFixture": "fixtures\\generic-analysis-authoring\\public",
-      "gradeAssets": "grading\\generic-analysis-authoring",
+      "publicFixture": "fixtures/generic-analysis-authoring/public",
+      "gradeAssets": "grading/generic-analysis-authoring",
       "checkerSha256": "38e669f1ac09ba61e697271607e60d8ff6d33bd94cb85b6c72d0eeb0fc59209d",
       "executableChecker": {
         "command": "node",
@@ -225,8 +225,8 @@
         "model": "${AGENT_MODEL=MUST-SET-AGENT-MODEL}",
         "judge_model": "${JUDGE_MODEL=MUST-SET-JUDGE-MODEL}"
       },
-      "publicFixture": "fixtures\\generic-c4-architecture\\public",
-      "gradeAssets": "grading\\generic-c4-architecture",
+      "publicFixture": "fixtures/generic-c4-architecture/public",
+      "gradeAssets": "grading/generic-c4-architecture",
       "checkerSha256": "4cc12230463b5ff729b60ce1927266dd0c386a1dd3e969c350a99815e1d08804",
       "executableChecker": {
         "command": "node",
@@ -261,8 +261,8 @@
         "executor": "copilot-sdk",
         "model": "${AGENT_MODEL=MUST-SET-AGENT-MODEL}"
       },
-      "publicFixture": "fixtures\\generic-p-map\\public",
-      "gradeAssets": "grading\\generic-p-map",
+      "publicFixture": "fixtures/generic-p-map/public",
+      "gradeAssets": "grading/generic-p-map",
       "checkerSha256": "ffa10221672b62609c5283773f09751eb0e6067a887a6cde3cda7f07a59e7b2f",
       "executableChecker": {
         "command": "node",

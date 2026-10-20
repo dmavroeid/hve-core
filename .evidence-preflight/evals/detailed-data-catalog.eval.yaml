@@ -88,17 +88,6 @@ stimuli:
       Public checks run:
 
       - node task-fixture/check.mjs deliverable/northlake-ds-catalog.md
-    rubric:
-      - Preserves the authoritative privacy classifications, relationship
-        semantics, profile pointers, access-confirmation state, and uncertainty
-        from the supplied inventory without inventing confirmations or replacing
-        gaps.
-      - Produces a readable catalog whose narrative and relationship table
-        communicate the important access gaps, stale evidence, and valid
-        limitations to a rental-operations data team.
-      - Keeps the catalog durable and contract-faithful by following the
-        required structure, using the canonical disclaimer, and avoiding copied
-        column-level profile detail.
     graders:
       - type: completed
       - type: file-exists

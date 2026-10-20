@@ -85,15 +85,6 @@ stimuli:
 
       `node task-fixture/check-notebook.mjs
       deliverable/queue-delay-analysis.ipynb deliverable/summary.md`
-    rubric:
-      - The notebook and summary identify concrete investigation priorities
-        supported by the supplied data rather than generic observations.
-      - The analysis distinguishes exploratory signals from unsupported
-        maintenance-causality claims and explains why the evidence is
-        insufficient for a maintenance recommendation.
-      - The notebook is organized and interpretable enough for an operations
-        lead to trace findings through quality checks, distributions,
-        relationships, time trends, outliers, conclusions, and next steps.
     graders:
       - type: completed
       - type: file-exists

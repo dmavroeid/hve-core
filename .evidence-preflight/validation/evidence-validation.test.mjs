@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 import { parse } from "yaml";
+import { createDefaultGraderRegistry, hasGraderError } from "@microsoft/vally";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const manifest = JSON.parse(readFileSync(join(root, "preparation.json"), "utf8"));
@@ -66,7 +67,7 @@ for (const entry of manifest.cases) {
       assert.equal(result.status, 0, file + "\n" + result.stdout + result.stderr);
     }
 
-    test("protected p-map checker accepts the original valid control and rejects a wrong implementation", t => {
+    test("protected p-map checker accepts the original valid control and rejects a wrong implementation", async t => {
       const entry = manifest.cases.find(item => item.id === "detailed-p-map");
       const scratch = mkdtempSync(join(tmpdir(), "evidence-behavior-"));
       t.after(() => rmSync(scratch, { recursive: true, force: true }));
@@ -83,13 +84,26 @@ for (const entry of manifest.cases) {
       const good = invoke("good");
       assert.equal(good.status, 0, good.stdout + good.stderr);
       assert.equal(JSON.parse(good.stdout).passed, true);
+      const native = async name => {
+        const workspace = join(scratch, name); mkdirSync(workspace);
+        return createDefaultGraderRegistry().get("program").grade({
+          trajectory: { workDir: workspace, assetsDir: join(root, entry.gradeAssets), artifactDir: artifacts },
+          config: { ...grade, program: process.execPath },
+        });
+      };
+      const validNative = await native("native-good");
+      assert.equal(validNative.passed, true, JSON.stringify(validNative));
+      assert.equal(hasGraderError(validNative), false);
       writeFileSync(candidate, "export async function* orderedConcurrentMap() { yield 'wrong'; }\n");
       const wrong = invoke("wrong");
       assert.equal(wrong.status, 1, wrong.stdout + wrong.stderr);
+      const invalidNative = await native("native-wrong");
+      assert.equal(invalidNative.passed, false);
+      assert.equal(hasGraderError(invalidNative), false, JSON.stringify(invalidNative));
     });
 
     for (const id of ["detailed-data-catalog", "detailed-analysis-authoring", "detailed-c4-architecture"]) {
-      test(`${id}: real missing prerequisite remains an operational error`, t => {
+      test(`${id}: real missing prerequisite remains an operational error`, async t => {
         const entry = manifest.cases.find(item => item.id === id);
         const scratch = mkdtempSync(join(tmpdir(), "evidence-startup-"));
         t.after(() => rmSync(scratch, { recursive: true, force: true }));
@@ -109,6 +123,14 @@ for (const entry of manifest.cases) {
         const report = JSON.parse(result.stdout);
         assert.equal(report.passed, false);
         assert.equal(report.status, "error");
+        const nativeWorkspace = join(scratch, "native-workspace"); mkdirSync(nativeWorkspace);
+        const native = await createDefaultGraderRegistry().get("program").grade({
+          trajectory: { workDir: nativeWorkspace, assetsDir: join(root, entry.gradeAssets), artifactDir: artifacts },
+          config: { ...grade, program: process.execPath, env: { CATALOG_PYTHON: missing,
+            QUEUE_DELAY_NOTEBOOK_PYTHON: missing, MERMAID_CLI: missing, MERMAID_BROWSER_CONFIG: missing } },
+        });
+        assert.equal(native.passed, false);
+        assert.equal(hasGraderError(native), true, JSON.stringify(native));
       });
     }
   });
