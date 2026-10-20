@@ -40,10 +40,17 @@ jobs:
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/native-catalog-qualification/safe"
           docker build --platform linux/amd64 --pull --progress plain \
-            --iidfile "$RUNNER_TEMP/native-catalog-qualification/safe/image-id" \
-            -t "native-catalog:$GITHUB_SHA" \
+            --iidfile "$RUNNER_TEMP/native-catalog-qualification/safe/base-image-id" \
+            -t "native-catalog-base:$GITHUB_SHA" \
             -f .github/validation/skill-effectiveness/task-runtime/Dockerfile . \
             2>&1 | tee "$RUNNER_TEMP/native-catalog-qualification/safe/build.log"
+          echo "CATALOG_BASE_IMAGE=$(cat "$RUNNER_TEMP/native-catalog-qualification/safe/base-image-id")" >> "$GITHUB_ENV"
+          docker build --platform linux/amd64 --progress plain \
+            --build-arg "TASK_BASE_IMAGE=native-catalog-base:$GITHUB_SHA" \
+            --iidfile "$RUNNER_TEMP/native-catalog-qualification/safe/image-id" \
+            -t "native-catalog:$GITHUB_SHA" \
+            -f .github/validation/skill-effectiveness/native-catalog/Dockerfile . \
+            2>&1 | tee "$RUNNER_TEMP/native-catalog-qualification/safe/grade-image-build.log"
           echo "TASK_RUNTIME_IMAGE=$(cat "$RUNNER_TEMP/native-catalog-qualification/safe/image-id")" >> "$GITHUB_ENV"
       - name: Exercise native records, actual Docker grading and retained outputs
         working-directory: .github/skills/hve-core/skill-effectiveness
@@ -68,6 +75,16 @@ jobs:
               failed=1
             fi
             docker image rm "native-catalog:$GITHUB_SHA" || failed=1
+          fi
+          if [[ -n "${CATALOG_BASE_IMAGE:-}" ]]; then
+            ids=$(docker ps -aq --filter "ancestor=$CATALOG_BASE_IMAGE")
+            if [[ -n "$ids" ]]; then
+              readarray -t containers <<< "$ids"
+              docker rm -f "${containers[@]}" || failed=1
+              echo "Base-image probe required fallback container cleanup"
+              failed=1
+            fi
+            docker image rm "native-catalog-base:$GITHUB_SHA" || failed=1
           fi
           exit "$failed"
       - name: Preserve raw native records and test evidence
