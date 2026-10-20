@@ -6,6 +6,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createConnection } from "node:net";
 import { createRequire } from "node:module";
 import test from "node:test";
+import { assertSandboxStatus } from "./browser-sandbox-status.mjs";
 
 test("renderer container keeps non-root, privilege, readonly and network denials",
   { timeout: 10000 }, async () => {
@@ -56,7 +57,5 @@ test("actual Chromium reports namespace and seccomp sandboxes enabled",
     writeFileSync("/tmp/browser-sandbox.json", JSON.stringify({
       version: await browser.version(), args, sandbox,
     }, null, 2) + "\n");
-    assert.match(sandbox, /Namespace\s+sandbox\s+Yes/i);
-    assert.match(sandbox, /Seccomp-BPF\s+sandbox\s+Yes/i);
-    assert.match(sandbox, /adequately sandboxed/i);
+    assertSandboxStatus(sandbox);
   });

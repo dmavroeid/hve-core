@@ -63,6 +63,9 @@ async function main() {
     break;
   }
   assert.equal(typeof original, "string", "No matching engine-owned default profile found");
+  const digest = createHash("sha256").update(original).digest("hex");
+  assert.equal(digest, "9c1025c88ccaa517b648da571961838744ea2137f176bfe6a48b21294cae9c76",
+    "The tested Docker default policy changed; do not silently change the approved profile");
   const base = JSON.parse(original);
   const profile = rendererProfile(base);
   writeFileSync(resolve(directory, "docker-version.json"), JSON.stringify(version, null, 2) + "\n");
@@ -74,7 +77,7 @@ async function main() {
     engineCommit: commit,
     engineSecurityOptions: security,
     source: url,
-    sha256: createHash("sha256").update(original).digest("hex"),
+    sha256: digest,
     addedRule: profile.syscalls.at(-1),
     otherChanges: false,
     scope: "Renderer-only test; not the native candidate or general grader profile",

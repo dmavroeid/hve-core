@@ -25,6 +25,7 @@ WORKDIR /opt/vally-runtime
 COPY --chown=0:0 .evidence-preflight/ ./
 COPY --chown=0:0 .github/validation/skill-effectiveness/task-runtime/catalog-runtime/ /opt/catalog-runtime/
 COPY --chown=0:0 .github/validation/skill-effectiveness/task-runtime/browser-sandbox.test.mjs validation/browser-sandbox.test.mjs
+COPY --chown=0:0 .github/validation/skill-effectiveness/task-runtime/browser-sandbox-status.mjs validation/browser-sandbox-status.mjs
 RUN npm ci --ignore-scripts --include=dev --no-audit --no-fund \
     && node -e 'const fs=require("node:fs"); for(const [name,version] of [["@microsoft/vally","0.19.0"],["@microsoft/vally-cli","0.19.0"],["@github/copilot-sdk","1.0.15"],["@github/copilot","1.0.89"]]) { if(JSON.parse(fs.readFileSync(`node_modules/${name}/package.json`)).version!==version) throw Error(name); }' \
     && ln -s /opt/vally-runtime/node_modules/.bin/vally-docker-runner /usr/local/bin/vally-docker-runner \

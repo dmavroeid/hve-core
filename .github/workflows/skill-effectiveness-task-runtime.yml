@@ -57,7 +57,9 @@ jobs:
       - name: Derive renderer exception from this engine's default policy
         run: |
           set -euo pipefail
-          node --test .github/validation/skill-effectiveness/task-runtime/namespace-profile.test.mjs
+          node --test \
+            .github/validation/skill-effectiveness/task-runtime/namespace-profile.test.mjs \
+            .github/validation/skill-effectiveness/task-runtime/browser-sandbox-status.test.mjs
           node .github/validation/skill-effectiveness/task-runtime/namespace-profile.mjs \
             "$RUNNER_TEMP/task-runtime-evidence"
       - name: Validate portable dependency metadata
