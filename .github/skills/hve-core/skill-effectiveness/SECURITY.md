@@ -451,7 +451,7 @@ Ratings are qualitative project assessments, not CVSS scores.
 | G-TAM-2 | Writable checker/dependencies or incorrect original-record/snapshot binding can invalidate grading    | Tampering-High   | Open; separate authored entry authentication exists, but readonly inputs, dependency provenance and manual arm binding still require verification      |
 | G-INF-2 | Real model-task authentication and credential/egress boundaries require profile-specific verification | InfoDisc-High    | Open; synthetic native role canaries passed; no universal or authenticated model-task isolation claim                                                  |
 | G-TAM-3 | Supervised startup backups are not independent host attestation                                       | Tampering-High   | Open for stronger assurance; independent bytes and in-memory-digest comparison detect changes but cannot protect runtime memory or every retained copy |
-| G-SUP-1 | Imported lockfile previously contained SHA-1 entries                                                  | SupplyChain-High | Resolved; regenerated from public npm with canonical URLs and SHA-512 integrity                                                                        |
+| G-SUP-1 | Dependency provenance requires canonical registry URLs and strong integrity                           | SupplyChain-High | Mitigated by the frozen public npm lockfile with canonical URLs and SHA-512 integrity                                                                  |
 
 ## References
 

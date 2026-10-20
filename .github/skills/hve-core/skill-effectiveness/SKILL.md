@@ -64,9 +64,8 @@ reasoned assessment of outputs, measured effort, or a combination.
 
 ## Keep The Comparison Fair
 
-Ground runtime capability claims in the pinned, publicly distributed Vally
-and SDK packages. Do not include or rely on private runtime-repository material
-or unreleased implementations in the redistributable evaluation package.
+Ground runtime capability claims in the pinned public Vally and SDK
+distributions and their supported interfaces.
 Public API declarations and package inspection do not prove runtime enforcement.
 
 - Use the same task, original inputs, model, tools, limits and checks in both
@@ -147,6 +146,7 @@ execution, workspaces, graders, native records and reports.
 | [Package](assets/package.template.json)                           | `package.json`; generate an exact lockfile     |
 | [Registry configuration](.npmrc)                                  | `.npmrc`; retain the canonical public registry |
 | [MIT notice](LICENSE)                                             | `LICENSE`; retain with redistributed helpers   |
+| [License allocation and attribution](NOTICE)                      | `NOTICE`; retain with copied materials         |
 | [Native eval](assets/native-eval.template.yaml)                   | `evals/<task>.eval.yaml`                       |
 | [Protected offline grade](assets/native-grade-eval.template.yaml) | `evals/<task>.grade.eval.yaml`                 |
 | [Saved-evidence review](assets/native-review-eval.template.yaml)  | `evals/<task>.review.eval.yaml`; optional      |
@@ -235,7 +235,7 @@ favorable examples, and distinguish a curated demonstration from broader evidenc
 
 ## Licensing
 
-Historical experiments and review attachments are not shipped in this package.
+The package contains reusable authoring materials, not evaluation results.
 
 | Material                                                                     | License   |
 |------------------------------------------------------------------------------|-----------|
@@ -246,5 +246,9 @@ License terms: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) and
 [MIT](https://github.com/microsoft/hve-core/blob/main/LICENSE).
 
 Dependencies retain their own licenses; no dependency source is vendored.
+Retain [NOTICE](NOTICE) and `LICENSE` in generated packages, including attribution
+and change notices for adapted evaluation notes. These terms cover copied HVE
+materials, not automatically user-authored content or the complete generated
+work. The generated manifest leaves that work's license to its author.
 Read [the security model](SECURITY.md) before changing executable helpers or
 authorizing their use with external content.

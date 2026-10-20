@@ -4,6 +4,12 @@ description: "Publisher notes template for one supervised baseline-versus-with-s
 
 # <Task>: Evaluation
 
+Notes adapted from the [Microsoft HVE Core evaluation-notes template](https://github.com/microsoft/hve-core/blob/main/.github/skills/hve-core/skill-effectiveness/assets/EVALS.template.md),
+licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+Retain the accompanying `NOTICE` and record changes to copied template material.
+This attribution does not assign a license to independently authored findings
+or other evaluation inputs and outputs.
+
 ## Task And Skill Fit
 
 <Who needs this work, what is requested, and why might the skill help?

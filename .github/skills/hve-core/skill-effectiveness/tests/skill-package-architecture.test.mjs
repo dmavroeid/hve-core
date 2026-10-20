@@ -70,6 +70,29 @@ test("standalone license matches the canonical notice and tests use the supporte
     "node --test tests/*.test.mjs");
 });
 
+test("copied materials retain scoped licensing without licensing independently authored outputs", t => {
+  const notice = readFileSync(join(skillRoot, "NOTICE"), "utf8");
+  assert.match(notice, /Copyright \(c\) Microsoft Corporation/);
+  assert.match(notice, /https:\/\/github\.com\/microsoft\/hve-core\/tree\/main\/\.github\/skills\/hve-core\/skill-effectiveness/);
+  assert.match(notice, /https:\/\/creativecommons\.org\/licenses\/by\/4\.0\//);
+  assert.match(notice, /LICENSE contains the MIT terms/);
+  assert.match(notice, /Indicate changes/);
+  assert.match(notice, /not automatically to\s+operator-authored/);
+  assert.equal(JSON.parse(read("package.template.json")).license, undefined);
+  const notes = read("EVALS.template.md");
+  assert.match(notes, /Microsoft HVE Core evaluation-notes template/);
+  assert.match(notes, /CC BY 4\.0/);
+  assert.match(notes, /record changes to copied template material/);
+  const skill = readFileSync(join(skillRoot, "SKILL.md"), "utf8");
+  assert.match(skill, /\[License allocation and attribution\]\(NOTICE\)\s*\|\s*`NOTICE`/);
+  const generated = mkdtempSync(join(tmpdir(), "skill-effectiveness-licenses-"));
+  t.after(() => rmSync(generated, { recursive: true, force: true }));
+  for (const file of ["LICENSE", "NOTICE"]) cpSync(join(skillRoot, file), join(generated, file));
+  writeFileSync(join(generated, "EVALS.md"), notes);
+  assert.equal(readFileSync(join(generated, "NOTICE"), "utf8"), notice);
+  assert.match(readFileSync(join(generated, "EVALS.md"), "utf8"), /CC BY 4\.0/);
+});
+
 test("locked MCP and OpenTelemetry dependencies include the advisory fixes", () => {
   const lock = JSON.parse(readFileSync(join(skillRoot, "package-lock.json"), "utf8"));
   for (const [name, major, minor] of [
@@ -109,7 +132,7 @@ test("the transferable package has only declared content, two runtime helpers an
     ...readdirSync(join(skillRoot, "tests")).map(name => `tests/${name}`),
     ...readdirSync(join(skillRoot, "references")).map(name => `references/${name}`));
   assert.deepEqual(files.sort(), [
-    ".gitignore", ".npmrc", "LICENSE", "SKILL.md", "SECURITY.md", "package.json", "package-lock.json",
+    ".gitignore", ".npmrc", "LICENSE", "NOTICE", "SKILL.md", "SECURITY.md", "package.json", "package-lock.json",
     "assets/EVALS.template.md", "assets/native-eval.template.yaml", "assets/native-experiment.template.yaml",
     "assets/native-grade-eval.template.yaml", "assets/native-review-eval.template.yaml",
     "assets/package.template.json",
@@ -167,12 +190,13 @@ test("skill metadata and shipped documentation links remain valid in a standalon
 
   const standalone = mkdtempSync(join(tmpdir(), "skill-effectiveness-docs-"));
   t.after(() => rmSync(standalone, { recursive: true, force: true }));
-  for (const name of [".gitignore", ".npmrc", "LICENSE", "SKILL.md", "SECURITY.md", "package.json", "package-lock.json",
+  for (const name of [".gitignore", ".npmrc", "LICENSE", "NOTICE", "SKILL.md", "SECURITY.md", "package.json", "package-lock.json",
     "assets", "references", "scripts", "tests"]) {
     cpSync(join(skillRoot, name), join(standalone, name), { recursive: true });
   }
   checkLinks(standalone);
   assert.deepEqual(readFileSync(join(standalone, "LICENSE")), readFileSync(join(skillRoot, "LICENSE")));
+  assert.deepEqual(readFileSync(join(standalone, "NOTICE")), readFileSync(join(skillRoot, "NOTICE")));
   const standaloneIntake = readFileSync(join(standalone, "references", "repository-intake.md"), "utf8");
   const canonicalPolicy = checkPolicyActivation(standaloneIntake);
   assert.throws(() => checkPolicyActivation(standaloneIntake.replace(canonicalPolicy, "https://example.invalid/policy")));

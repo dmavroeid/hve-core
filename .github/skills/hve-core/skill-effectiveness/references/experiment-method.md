@@ -7,8 +7,7 @@ description: "Native Vally execution, safe validation, spending boundaries, and 
 
 The current authoring/test package targets Vally 0.19.0, Copilot CLI 1.0.89 and SDK 1.0.15,
 on Node.js 24+. Windows exact-stack and runtime verification are pending.
-Historical generated packages
-retain their own code and pins; do not upgrade completed experiments in place.
+Keep completed evaluation packages and their pins unchanged for reproducibility.
 
 ## Restricted Execution Profile
 
@@ -17,7 +16,7 @@ The current development package and generated template use the versions above. T
 prepare the following contract. Package checks and runtime security verification
 are distinct. Model-free Ubuntu restore, repository/copied-package
 tests and actual image decoding passed. The plugin refuses registration on a
-different stack. Later actual SDK RPC and hardened native Docker checks passed
+different stack. Actual SDK RPC and hardened native Docker checks passed
 the tested policy and role boundaries; these are distinct from mocked wiring.
 Untrusted execution remains blocked unless the operator establishes the required
 controls for the selected image, task and grading route.
@@ -25,50 +24,27 @@ The local command later in this guide documents mechanics, not a contained
 alternative when a required control is missing. There is no automatic fallback
 to the local backend.
 
-The source-preparation target is published Vally core/CLI 0.19.0, SDK 1.0.15 and
-the separately pinned Copilot CLI 1.0.89, on Node.js 24+. Published package
-inspection alone is not installed-stack verification. The default native image tag is
-`vally.azurecr.io/vally-task:0.19.0`. An authorized model-free Ubuntu attempt
-pulled digest `sha256:cc940117d3aeec8c6949944104f6a1d431ea8d368aa3dfac17a5bfafe958c536`
-and verified Linux/amd64 with declared user `node`. The native compatibility
-guard stopped before trials: the image's grade role reported core 0.18.0
-against host 0.19.0. This is an image compatibility failure, not an observed
-containment failure. Do not retry that digest expecting different contents,
-bypass the guard, downgrade, or build/substitute an image without approval.
-Later approved tests used separately built images from the pinned public stack,
-not that incompatible default digest. Their success does not qualify the default
-image or make an arbitrary substitute acceptable.
-No private checkout, fork or unpublished Vally change is required by this design.
+Published package inspection alone is not installed-stack verification.
+The default image `vally.azurecr.io/vally-task:0.19.0` at digest
+`sha256:cc940117d3aeec8c6949944104f6a1d431ea8d368aa3dfac17a5bfafe958c536`
+reports core 0.18.0 in its grade role, incompatible with host 0.19.0.
+Do not bypass the native compatibility guard, downgrade or substitute an image
+without approval. Model-free profile checks qualify separately built pinned
+public-stack Linux images, not that default digest or arbitrary substitutes.
 
 ### Completed Model-Free Evidence And Limits
 
-* [Native SDK policy and task-role checks](https://github.com/dmavroeid/hve-core/actions/runs/39292646353)
-  passed actual allow/deny/precedence RPC cases and synthetic host-file,
-  environment, privilege and network canaries inside hardened task containers.
-  This was a synthetic executor fixture, not a model-driven candidate task.
-* [Startup backup and retention check](https://github.com/dmavroeid/hve-core/actions/runs/39322689731)
-  passed two distinct actual SDK startups through the production executor.
-  Baseline/treatment inventories, independent backup bytes and completion
-  reports survived native workspace preservation; cleanup passed. Both native
-  records remain deliberate pre-send errors with null trajectories and grades.
-  No prompt was delivered. That snapshot's package suite passed 109 tests,
-  with one opt-in native smoke skipped.
-* [Separate synthetic native grading checks](https://github.com/dmavroeid/hve-core/actions/runs/39266912626)
-  established immediate checker
-  authentication, readonly checker/submission inputs, writable scratch and
-  integrity-negative rejection on the tested public-stack profile. They do not
-  establish real-candidate output provenance or automatic arm/snapshot binding.
-* [Final frozen-package regression](https://github.com/dmavroeid/hve-core/actions/runs/39328258326)
-  passed public frozen restore and the complete ordinary package suite after
-  paid-alias removal: 111 tests, 110 passed, none failed, one explicitly opt-in
-  native startup smoke skipped. It did not run Docker, startup probes or models.
+| Check                                              | Established scope                                                                                                             | Not established                                                |
+|----------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------|
+| Frozen restore and ordinary package tests          | Ubuntu package mechanics, native mock/lint/dry-run paths and local image decoding                                             | Actual model calls, native Windows or judgment quality         |
+| Actual SDK policy and synthetic native-role checks | Tool/permission RPC behavior and host-file, environment, privilege and network canaries on the tested hardened Linux profiles | Arbitrary task policies or authenticated model-task boundaries |
+| No-prompt production startups                      | Actual session inventories, independent backup bytes, completion comparison and native workspace retention                    | Successful candidate tasks or independent host attestation     |
+| Synthetic protected grading                        | Immediate checker authentication, readonly executed inputs, writable scratch and integrity-negative rejection                 | Real-candidate provenance or automatic arm/snapshot binding    |
 
-These are scoped historical results, not a green status for every later edit.
-The final package run qualifies its package snapshot, not new native execution
-routes or the final published PR merge. Windows, authenticated model-task
-execution and model judgment quality remain unverified. Reuse completed controls
-as evidence, but qualify a materially different runtime/profile separately
-rather than inferring universal protection.
+These scopes are not universal protection. Preserve validation evidence with the
+exact package/runtime revision and selected profile; qualify materially changed
+code, images or native preservation layouts separately. Windows, authenticated
+model-task execution and model judgment quality remain unverified.
 
 ### Public Release Basis
 
@@ -81,9 +57,6 @@ uses the exported executor client factories; the recorder and image reviewer
 use SDK session/RPC and attachment interfaces. CLI plugin loading, native
 grading and Docker role settings belong to the released runtime.
 
-Do not copy, cite or rely on private runtime-repository material or unreleased
-implementations when preparing this contribution or redistributable package.
-A public version number does not make its development repository public.
 Keep published API support, inspected package behavior and observed execution
 separate; none alone establishes all required runtime boundaries.
 
@@ -234,14 +207,14 @@ targets. Verify immediate pre-use checker hashes and readonly executed paths,
 not just the original source mount.
 
 Distinguish a Windows host running Linux containers from native Windows candidate
-tooling. Historical PowerShell, Edge, Mermaid, Python and notebook-kernel paths
+tooling. Host-specific PowerShell, Edge, Mermaid, Python and notebook-kernel paths
 are not portable image dependencies. Select and verify a supported host/image
 or stop for a platform decision. Until these gates pass, there is no claim that
-the proposed adapter makes current or historical evidence isolated.
+the adapter makes evaluation evidence isolated.
 
 ## Copy And Test The Reusable Skill
 
-Copy `SKILL.md`, `SECURITY.md`, `assets/`, `references/`, `scripts/`, `tests/`, `package.json`,
+Copy `SKILL.md`, `SECURITY.md`, `LICENSE`, `NOTICE`, `assets/`, `references/`, `scripts/`, `tests/`, `package.json`,
 `package-lock.json`, `.npmrc` and `.gitignore` as one folder.
 No parent-repository helpers are needed.
 Exclude node_modules, temporary test directories, logs, generated coverage
@@ -260,7 +233,7 @@ Ordinary tests use mocked SDK sessions and do not require the optional Copilot
 binary. Native session-startup coverage is skipped unless explicitly selected.
 These tests do not judge output quality or prove model vision. Coordinated
 dependency pins and the canonical lock have passed frozen Ubuntu restore and
-package tests on the cited snapshots. The plugin rejects mismatched installed
+package tests on the pinned stack. The plugin rejects mismatched installed
 versions. A missing local installation or older parent-repository packages
 cannot substitute for the frozen suite; record unavailable checks explicitly.
 Restore only when permitted by the host's dependency/network policy.
