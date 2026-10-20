@@ -1,0 +1,17 @@
+Assess the actual notebook and summary against the task and staged source files, not the candidate's claims of success.
+
+Judge whether the submission helps an operations lead decide where to investigate queue delays next while staying honest about what this synthetic observational dataset cannot justify about maintenance changes.
+
+Focus on:
+- whether investigation priorities are concrete and supported by the source data;
+- whether conclusions distinguish exploratory patterns from unsupported causal or maintenance claims;
+- whether important limitations and open questions are explicit;
+- whether the notebook organization and explanations make the analysis traceable and useful.
+
+Accept valid analytical alternatives. Do not require one exact hotspot list if another concrete, well-supported prioritization is reasonable.
+Do not infer executed behavior or visual legibility beyond what the repo snapshot actually shows.
+Do not favor a submission because it resembles the treatment skill.
+
+
+Runtime fact: the approved notebook interpreter is Python 3.12.10. PEP 701 permits nested f-strings to reuse the enclosing quote character. IPython notebook magics are valid in the approved kernel. Original notebook execution passed; do not invent syntax failures contradicted by that execution. Judge the actual analysis and communication independently. Under the frozen instruction criteria, a clear declarative heading may frame a question, grouped figures may share framing, and existing quality summaries count without a separately titled section.
+

@@ -32,6 +32,18 @@ test("all archived public fixtures, skills and trusted copies remain byte-identi
   }
 });
 
+test("all frozen task-quality, visual and adherence instruction prefixes survive without old submissions", () => {
+  assert.equal(manifest.reviewInstructions.length, 8);
+  for (const entry of manifest.reviewInstructions) {
+    const bytes = readFileSync(join(root, entry.path));
+    assert.equal(digest(bytes), entry.sha256);
+    assert.ok(entry.cases.length > 0);
+    assert.doesNotMatch(bytes.toString(), /ASSESSMENT EVIDENCE|ORIGINAL TASK/);
+  }
+  assert.deepEqual([...new Set(manifest.reviewInstructions.map(entry => entry.category))].sort(),
+    ["instructions", "quality-image", "quality-text"]);
+});
+
 for (const entry of manifest.cases) {
   test(`${entry.id}: unchanged prompt, separated roles and authenticated checker`, () => {
     const candidate = spec(`${entry.id}.eval.yaml`);

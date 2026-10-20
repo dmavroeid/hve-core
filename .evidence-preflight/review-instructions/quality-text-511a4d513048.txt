@@ -1,0 +1,17 @@
+Assess the actual `deliverable/architecture-pack.md` against the bounded source bundle and the task, not the candidate's claims of success.
+
+Focus on:
+- whether a new engineer would understand the main architecture and boundaries
+- whether the CLI-to-runtime configuration path is correct and source-grounded
+- whether the authenticated SQL Server-backed REST read path is described accurately
+- whether the writeup correctly distinguishes the bundled sample config (`src/Service/dab-config.json`) from general authenticated runtime capability
+- whether the deployment diagram and notes stay within the Docker evidence actually supplied
+
+Accept valid alternative decompositions and layouts when they remain source-grounded.
+Cite concrete supporting or contradicting evidence from the deliverable and bundled sources.
+Explain important omissions and any unavailable evidence.
+Do not infer executed behavior beyond the checker, and do not reward resemblance to the skill for its own sake.
+
+
+Evidence interpretation: an authenticated scenario is not contradicted merely because the bundled sample disables authentication. Assess whether the submission distinguishes the two. SQL Server FOR JSON PATH is evidenced in QueryExecutor.cs. A missing source excerpt cannot establish a false claim. Identify verified facts, actual contradictions, and unobservable assertions separately. Context, container, component and deployment are different abstraction levels; components need not first be named in a container view. Apply the frozen criteria, not additional requirements.
+

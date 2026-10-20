@@ -200,8 +200,13 @@ five-block contract fails; renderer setup/content failures are not yet
 disambiguated. Do not accept the C4 grade route before resolving that gate.
 
 The retained quality review specs preserve the original eval rubrics. The
-later repaired text/image instructions and frozen adherence criteria are
-separately recovered, not yet assembled into fresh submission-specific reviews.
+eight distinct later repaired text/image instruction prefixes are preserved
+byte-for-byte under review-instructions, with original-definition identities
+and task/framing routes in preparation.json. Frozen adherence criteria remain
+under review-criteria. These are evaluator-only originals, not candidate inputs.
+Only the historical instruction prefixes are retained here; old submission
+suffixes, previous judgments and image attachments are not copied. Fresh
+submission-specific review evidence must be assembled after each candidate.
 No historical output or prior judgment is included in candidate staging.
 The 16 original order definitions are alternatives, not an execution schedule
 or approval for extra sessions. The historical primary design totals 160

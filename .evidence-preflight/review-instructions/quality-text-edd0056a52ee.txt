@@ -1,0 +1,14 @@
+Assess the actual catalog artifact against the staged task sources, not the candidate's claims of success.
+
+Focus on whether the deliverable would genuinely help the rental-operations data team by accurately preserving authoritative facts while clearly communicating uncertainty, access gaps, and privacy posture. Inspect task-fixture/inventory.json, the contract references, the deliverable, and any staged profile attachments that the deliverable points to.
+
+Score anchors:
+- 5: Strongly useful and faithful. Preserves the authoritative machine facts and communicates composite relationships, access gaps, stale/missing profiles, and uncertainty clearly without inventing confirmation.
+- 3: Valid but weaker. Structurally acceptable and mostly faithful, yet materially less readable, less complete about uncertainty, or less useful to the user.
+- 1: Misleading or poor. Loses important facts, overstates certainty, obscures access gaps, or would mislead a reviewer despite passing structural checks.
+
+Cite concrete supporting or contradicting evidence from the files. Accept valid alternatives in wording, layout, and emphasis. Do not favor an implementation because it resembles the skill. Do not infer executed behavior or visual quality from text alone.
+
+
+Inspect the entire catalog and original contract references, including the actual canonical disclaimer. Preserve the task's disclosed endpoint-minimum requirement. Do not infer missing sections from truncated evidence. Accept valid wording, layout and frontmatter under the frozen rubric; a preferred presentation is not an additional requirement.
+
