@@ -12,6 +12,39 @@ or other evaluation inputs and outputs.
 
 ## Task And Skill Fit
 
+### C4 Renderer Prerequisites
+
+Trusted model-free C4 controls passed with Node 24.14.0, Mermaid CLI 12.0.0,
+Puppeteer 25.15.0 and Chrome for Testing 155.0.8059.84 on Ubuntu 22.04.
+The isolated npm project in `validation/mermaid-runtime` has a public-generated
+lockfile. Restore it with `npm ci --ignore-scripts --include=dev --no-audit --no-fund`.
+Browser installation and startup require separate operator approval.
+Use that project's installed Puppeteer browser installer, await its executable
+path, verify the executable, and configure a headless browser without disabling
+its sandbox. The Ubuntu 24.04 runner used for the first trial blocked sandbox
+startup; that failure is not evidence of invalid candidate diagrams.
+
+Set `MERMAID_CLI` to the installed Mermaid JavaScript CLI and
+`MERMAID_BROWSER_CONFIG` to the reviewed Puppeteer JSON configuration.
+With an explicit `C4_CONTROL_EVIDENCE_DIR` outside candidate staging,
+`node --test validation/c4-controls.mjs` checks both C4 framings through the
+original checker and Vally's native program grader. Direct-check exports are
+removed before native grading; five actual nonblank PNGs are checked per
+successful invocation. These are handwritten rendering controls, not historical
+candidate submissions or examples of verified architecture quality.
+
+Ten controls passed: positive rendering, wrong block count, missing delivery,
+invalid syntax, unavailable browser and a renderable but semantically irrelevant
+counterexample. Wrong block count and absent delivery are measured failures.
+Both syntax errors and browser failures remain operational errors at the
+protected checker interface; they are not measured architecture-quality zeroes.
+The irrelevant counterexample passes because the original checker only checks
+block count and rendering. Preserve the original text/image quality assessment
+and resolve the failure-classification gate before accepting the C4 grade route.
+No original prompt, skill, fixture, checker, criterion or reviewer was changed.
+These runner checks do not qualify the eventual candidate/grader image,
+untrusted execution, blinded review, native record binding or durable exports.
+
 ### Notebook Checker Prerequisites
 
 The original public notebook checker reports a nonexistent Jupyter kernel as

@@ -1,6 +1,21 @@
 {
   "archiveManifestSha256": "e35394a62b73a45acbccd4be6f9a3a4a8ea179c78f851749712b1da519b56a54",
   "paidExecutionApproved": false,
+  "c4RendererQualification": {
+    "referenceRun": "39439413221",
+    "scope": "Trusted model-free controls on Ubuntu 22.04; not candidate/grader image qualification",
+    "mermaidCli": "12.0.0",
+    "puppeteer": "25.15.0",
+    "chromeForTesting": "155.0.8059.84",
+    "testsPassed": 10,
+    "browserSandboxDisabled": false,
+    "checkerChanged": false,
+    "limitations": [
+      "Invalid Mermaid syntax and browser failures remain operational errors at the protected checker interface",
+      "Renderable semantically irrelevant diagrams pass; architecture quality requires the preserved text and image assessment",
+      "Trusted-test PNG copies do not establish original trial binding or production output retention"
+    ]
+  },
   "dependencyUpdate": {
     "qs": "6.16.0",
     "lockSource": "Canonical public npm registry",
