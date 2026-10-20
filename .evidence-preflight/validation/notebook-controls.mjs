@@ -118,12 +118,12 @@ test("notebook missing PNG exports fail task grading after successful kernel exe
     assert.equal(hasGraderError(result), false, JSON.stringify(result));
   });
 
-test("a missing actual Jupyter kernel remains an operational grader error",
+test("protected grading corrects the original checker's missing-kernel misclassification",
   { timeout: 180000 }, async t => {
     const context = prepare(t, "detailed-analysis-authoring");
     const overrides = { QUEUE_DELAY_NOTEBOOK_KERNEL: "missing-control-kernel" };
     const direct = directCheck(context, overrides);
-    assert.equal(direct.status, 2, direct.stdout + direct.stderr);
+    assert.equal(direct.status, 1, direct.stdout + direct.stderr);
     assert.match(direct.stderr, /NoSuchKernel|No such kernel/);
     const result = await nativeGrade(context, overrides);
     assert.equal(result.passed, false, JSON.stringify(result));

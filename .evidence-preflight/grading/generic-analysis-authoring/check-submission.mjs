@@ -35,6 +35,13 @@ if (task === "p-map") {
 const env = { ...process.env };
 delete env.NODE_TEST_CONTEXT;
 delete env.NODE_OPTIONS;
+const notebook = JSON.parse(readFileSync(join(scratch, "deliverable/queue-delay-analysis.ipynb"), "utf8"));
+const kernel = env.QUEUE_DELAY_NOTEBOOK_KERNEL || notebook.metadata?.kernelspec?.name || "hve-simplified-pilot";
+const prerequisite = spawnSync(env.QUEUE_DELAY_NOTEBOOK_PYTHON ?? "python", [
+  "-c", "import sys; from jupyter_client.kernelspec import KernelSpecManager; KernelSpecManager().get_kernel_spec(sys.argv[1])", kernel,
+], { cwd: scratch, env, encoding: "utf8", timeout: 30000, maxBuffer: 1024 * 1024 });
+if (prerequisite.error) throw prerequisite.error;
+if (prerequisite.status !== 0) throw new Error("Notebook kernel prerequisite failed: " + prerequisite.stdout + prerequisite.stderr);
 const result = spawnSync(process.execPath, args, {
   cwd: scratch, env, encoding: "utf8", timeout: 360000, maxBuffer: 16 * 1024 * 1024,
 });

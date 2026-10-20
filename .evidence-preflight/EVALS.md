@@ -12,6 +12,21 @@ or other evaluation inputs and outputs.
 
 ## Task And Skill Fit
 
+### Notebook Checker Prerequisites
+
+The original public notebook checker reports a nonexistent Jupyter kernel as
+exit code 1, indistinguishable from a cell failure at that interface. The
+protected notebook adapters therefore check kernel-spec availability with the
+configured Python interpreter before calling the unchanged original checker.
+An unavailable kernel is an operational grader error, not a measured task zero.
+Kernel-spec lookup alone does not qualify every possible kernel-startup failure.
+
+The trusted execution controls use a separate pinned Python project under
+`validation/python-runtime`; that project and its kernels do not enter candidate
+staging. These controls establish execution and error mechanics, not analytical
+correctness, visual quality or candidate/grader isolation. They do not authorize
+candidate or judge calls.
+
 <Who needs this work, what is requested, and why might the skill help?
 Explain what a capable baseline may already do and which connected capabilities
 could add useful value. State the important untested scope.>

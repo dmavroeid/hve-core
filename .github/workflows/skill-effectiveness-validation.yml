@@ -92,14 +92,13 @@ jobs:
         with:
           version: '0.10.9'
           enable-cache: false
-      - name: Lock and restore isolated public notebook prerequisites
+      - name: Restore frozen isolated public notebook prerequisites
         working-directory: .evidence-preflight/validation/python-runtime
         timeout-minutes: 4
         env:
           UV_PYTHON_DOWNLOADS: never
         run: |
           set -euo pipefail
-          uv lock --python "$(command -v python3)"
           uv sync --frozen --python "$(command -v python3)"
           uv run --frozen python -m ipykernel install --prefix "$PWD/.venv" --name hve-simplified-pilot --display-name "Trusted notebook control"
           uv run --frozen python -c 'import importlib.metadata as m, json, platform; print(json.dumps({"python":platform.python_version(),"packages":{p:m.version(p) for p in ["nbformat","nbconvert","ipykernel","Pillow","matplotlib","pandas","numpy","seaborn"]}},indent=2))' | tee notebook-runtime.json
