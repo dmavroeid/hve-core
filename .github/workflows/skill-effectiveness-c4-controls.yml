@@ -36,6 +36,12 @@ jobs:
           node-version: '24.14.0'
       - name: Restore frozen public evidence dependencies
         run: npm ci --ignore-scripts --include=dev --no-audit --no-fund
+      - name: Inspect canonical renderer dependency metadata
+        working-directory: .evidence-preflight/validation/mermaid-runtime
+        run: |
+          set -euo pipefail
+          npm view puppeteer versions --json | tee puppeteer-versions.json
+          npm view @mermaid-js/mermaid-cli@12.0.0 version dependencies peerDependencies engines --json | tee renderer-dependencies.json
       - name: Generate public renderer lock and restore isolated dependencies
         working-directory: .evidence-preflight/validation/mermaid-runtime
         run: |
@@ -69,5 +75,7 @@ jobs:
             .evidence-preflight/validation/mermaid-runtime/package-lock.json
             .evidence-preflight/validation/mermaid-runtime/browser-config.json
             .evidence-preflight/validation/mermaid-runtime/renderer-runtime.json
+            .evidence-preflight/validation/mermaid-runtime/puppeteer-versions.json
+            .evidence-preflight/validation/mermaid-runtime/renderer-dependencies.json
           retention-days: 7
           if-no-files-found: error
