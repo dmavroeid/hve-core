@@ -42,18 +42,18 @@ jobs:
           set -euo pipefail
           npm view puppeteer versions --json | tee puppeteer-versions.json
           npm view @mermaid-js/mermaid-cli@12.0.0 version dependencies peerDependencies engines --json | tee renderer-dependencies.json
-      - name: Generate public renderer lock and restore isolated dependencies
+      - name: Restore frozen isolated public renderer dependencies
         working-directory: .evidence-preflight/validation/mermaid-runtime
         run: |
           set -euo pipefail
-          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
           npm ci --ignore-scripts --include=dev --no-audit --no-fund
+          git diff --exit-code -- package-lock.json
       - name: Install explicitly approved browser and bind its executable
         working-directory: .evidence-preflight/validation/mermaid-runtime
         run: |
           set -euo pipefail
           npm exec --no -- puppeteer browsers install chrome
-          node --input-type=module -e 'import fs from "node:fs"; import puppeteer from "puppeteer"; fs.writeFileSync("browser-config.json",JSON.stringify({executablePath:puppeteer.executablePath(),headless:true,args:["--disable-dev-shm-usage"]},null,2)+"\n"); console.log(JSON.stringify({node:process.version,cli:JSON.parse(fs.readFileSync("node_modules/@mermaid-js/mermaid-cli/package.json")).version,puppeteer:JSON.parse(fs.readFileSync("node_modules/puppeteer/package.json")).version,browser:puppeteer.executablePath()},null,2));' | tee renderer-runtime.json
+          node --input-type=module -e 'import fs from "node:fs"; import assert from "node:assert/strict"; import {spawnSync} from "node:child_process"; import puppeteer from "puppeteer"; const executablePath=await puppeteer.executablePath(); assert.equal(typeof executablePath,"string"); assert.ok(fs.statSync(executablePath).isFile()); const version=spawnSync(executablePath,["--version"],{encoding:"utf8",timeout:15000}); assert.ifError(version.error); assert.equal(version.status,0,version.stderr); fs.writeFileSync("browser-config.json",JSON.stringify({executablePath,headless:true,args:["--disable-dev-shm-usage"]},null,2)+"\n"); console.log(JSON.stringify({node:process.version,cli:JSON.parse(fs.readFileSync("node_modules/@mermaid-js/mermaid-cli/package.json")).version,puppeteer:JSON.parse(fs.readFileSync("node_modules/puppeteer/package.json")).version,browser:executablePath,browserVersion:version.stdout.trim()},null,2));' | tee renderer-runtime.json
           echo "MERMAID_CLI=$PWD/node_modules/@mermaid-js/mermaid-cli/src/cli.js" >> "$GITHUB_ENV"
           echo "MERMAID_BROWSER_CONFIG=$PWD/browser-config.json" >> "$GITHUB_ENV"
           echo "C4_CONTROL_EVIDENCE_DIR=$GITHUB_WORKSPACE/.evidence-preflight/c4-control-images" >> "$GITHUB_ENV"

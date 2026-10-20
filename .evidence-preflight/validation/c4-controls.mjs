@@ -123,11 +123,12 @@ for (const id of ["detailed-c4-architecture", "generic-c4-architecture"]) {
       const context = prepare(t, id, document(["this is not Mermaid syntax", ...blocks.slice(1)]));
       const result = direct(context);
       assert.equal(result.status, 1, result.stdout + result.stderr);
-      assert.match(result.stderr, /Mermaid render failed/);
+      assert.match(result.stderr, /UnknownDiagramError|No diagram type detected|Parse error/);
       const graded = await native(context);
       assert.equal(graded.passed, false, JSON.stringify(graded));
       assert.equal(hasGraderError(graded), true, JSON.stringify(graded));
       assert.match(JSON.stringify(graded), /ambiguous renderer failure/);
+      assert.match(JSON.stringify(graded), /UnknownDiagramError|No diagram type detected|Parse error/);
     });
 }
 
@@ -139,7 +140,7 @@ test("unavailable browser executable is operational error, not measured architec
     const extraEnv = { MERMAID_BROWSER_CONFIG: config };
     const result = direct(context, extraEnv);
     assert.equal(result.status, 1, result.stdout + result.stderr);
-    assert.match(result.stderr, /Mermaid render failed/);
+    assert.match(result.stderr, /missing-browser/);
     const graded = await native(context, extraEnv);
     assert.equal(graded.passed, false, JSON.stringify(graded));
     assert.equal(hasGraderError(graded), true, JSON.stringify(graded));
