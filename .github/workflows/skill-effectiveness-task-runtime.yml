@@ -98,30 +98,40 @@ jobs:
             fi
             name="task-control-${task}-$GITHUB_RUN_ID"
             security=()
+            export_path=
             spec="validation/$task-controls.mjs"
             if [[ "$task" == sandbox || "$task" == c4 ]]; then
               security=(--security-opt "seccomp=$RUNNER_TEMP/task-runtime-evidence/renderer-seccomp.json")
             fi
             if [[ "$task" == sandbox ]]; then
               spec=validation/browser-sandbox.test.mjs
+              export_path=browser-sandbox.json
+            fi
+            if [[ "$task" == c4 ]]; then
+              export_path=c4-control-images
             fi
             docker create --name "$name" --read-only --network none \
               --cap-drop ALL --security-opt no-new-privileges:true --user 1000:1000 \
               --pids-limit 512 --memory 2g --cpus 2 \
               --tmpfs /tmp:rw,nosuid,nodev,noexec,size=536870912 \
-              "${security[@]}" "$TASK_RUNTIME_IMAGE" node --test "$spec" \
+              "${security[@]}" "$TASK_RUNTIME_IMAGE" sh -ec \
+              'result=0; node --test "$1" >&2 || result=$?; if [ "$result" -eq 0 ] && [ -n "$2" ]; then tar -czf - -C /tmp "$2"; fi; exit "$result"' \
+              sh "$spec" "$export_path" \
               > "$RUNNER_TEMP/task-runtime-evidence/$task-container-id"
             docker inspect "$name" > "$RUNNER_TEMP/task-runtime-evidence/$task-container.json"
-            if docker start -a "$name" 2>&1 | tee "$RUNNER_TEMP/task-runtime-evidence/$task-controls.log"; then
+            archive="$RUNNER_TEMP/task-runtime-evidence/$task-output.tar.gz"
+            log="$RUNNER_TEMP/task-runtime-evidence/$task-controls.log"
+            if docker start -a "$name" > "$archive" 2> "$log"; then
+              cat "$log"
               echo "$task: passed"
+              if [[ -n "$export_path" ]]; then
+                tar -xzf "$archive" -C "$RUNNER_TEMP/task-runtime-evidence"
+              fi
               if [[ "$task" == sandbox ]]; then
                 sandbox_passed=1
-                docker cp "$name:/tmp/browser-sandbox.json" "$RUNNER_TEMP/task-runtime-evidence/"
-              fi
-              if [[ "$task" == c4 ]]; then
-                docker cp "$name:/tmp/c4-control-images" "$RUNNER_TEMP/task-runtime-evidence/"
               fi
             else
+              cat "$log"
               echo "$task: failed"
               failed=1
             fi
@@ -132,18 +142,20 @@ jobs:
         if: ${{ always() }}
         run: |
           set -euo pipefail
-          git diff --exit-code -- .evidence-preflight .github/skills/hve-core/skill-effectiveness
+          failed=0
+          git diff --exit-code -- .evidence-preflight .github/skills/hve-core/skill-effectiveness || failed=1
           for task in catalog notebook sandbox c4; do
             name="task-control-${task}-$GITHUB_RUN_ID"
             if docker container inspect "$name" >/dev/null 2>&1; then
-              docker rm -f "$name"
+              docker rm -f "$name" || failed=1
               echo "A trusted task container required fallback cleanup"
-              exit 1
+              failed=1
             fi
           done
           if [ -n "${TASK_RUNTIME_IMAGE:-}" ]; then
-            docker image rm "task-runtime:$GITHUB_SHA"
+            docker image rm "task-runtime:$GITHUB_SHA" || failed=1
           fi
+          exit "$failed"
       - name: Retain model-free runtime evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
