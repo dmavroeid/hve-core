@@ -1,0 +1,104 @@
+# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# SPDX-License-Identifier: MIT
+name: Temporary current-task native runtime qualification
+on:
+  push:
+    branches: [automation/skill-effectiveness-validation-20261017]
+    paths:
+      - .github/validation/skill-effectiveness/task-runtime/**
+      - .github/workflows/skill-effectiveness-task-runtime.yml
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  runtime:
+    if: github.repository == 'dmavroeid/hve-core' && github.ref == 'refs/heads/automation/skill-effectiveness-validation-20261017'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      DO_NOT_TRACK: '1'
+      VALLY_TELEMETRY_OPTOUT: '1'
+    steps:
+      - name: Checkout exact public validation snapshot
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Set up exact Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.14.0'
+      - name: Restore frozen native host package
+        working-directory: .github/skills/hve-core/skill-effectiveness
+        run: npm ci --ignore-scripts --include=dev --no-audit --no-fund
+      - name: Build ephemeral public-package runtime with frozen task dependencies
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/task-runtime-evidence"
+          docker build --platform linux/amd64 --pull --progress plain \
+            --iidfile "$RUNNER_TEMP/task-runtime-evidence/image-id" \
+            -t "task-runtime:$GITHUB_SHA" \
+            -f .github/validation/skill-effectiveness/task-runtime/Dockerfile . \
+            2>&1 | tee "$RUNNER_TEMP/task-runtime-evidence/build.log"
+          echo "TASK_RUNTIME_IMAGE=$(cat "$RUNNER_TEMP/task-runtime-evidence/image-id")" >> "$GITHUB_ENV"
+      - name: Reuse native Docker role compatibility and containment controls
+        if: ${{ !cancelled() && env.TASK_RUNTIME_IMAGE != '' }}
+        working-directory: .github/skills/hve-core/skill-effectiveness
+        run: |
+          set -euo pipefail
+          unset NODE_OPTIONS NODE_TEST_CONTEXT SKILL_EVAL_INVENTORY_DIR
+          node ../../../validation/skill-effectiveness/task-runtime/containment-run.mjs \
+            2>&1 | tee "$RUNNER_TEMP/task-runtime-evidence/native-role.log"
+      - name: Run trusted task controls in the same protected image
+        if: ${{ !cancelled() && env.TASK_RUNTIME_IMAGE != '' }}
+        run: |
+          set -euo pipefail
+          failed=0
+          for task in catalog notebook c4; do
+            name="task-control-${task}-$GITHUB_RUN_ID"
+            docker create --name "$name" --read-only --network none \
+              --cap-drop ALL --security-opt no-new-privileges:true --user 1000:1000 \
+              --pids-limit 512 --memory 2g --cpus 2 \
+              --tmpfs /tmp:rw,nosuid,nodev,noexec,size=536870912 \
+              "$TASK_RUNTIME_IMAGE" node --test "validation/$task-controls.mjs" \
+              > "$RUNNER_TEMP/task-runtime-evidence/$task-container-id"
+            docker inspect "$name" > "$RUNNER_TEMP/task-runtime-evidence/$task-container.json"
+            if docker start -a "$name" 2>&1 | tee "$RUNNER_TEMP/task-runtime-evidence/$task-controls.log"; then
+              echo "$task: passed"
+            else
+              echo "$task: failed"
+              failed=1
+            fi
+            docker rm "$name"
+          done
+          exit "$failed"
+      - name: Verify preserved inputs and runtime cleanup
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          git diff --exit-code -- .evidence-preflight .github/skills/hve-core/skill-effectiveness
+          for task in catalog notebook c4; do
+            name="task-control-${task}-$GITHUB_RUN_ID"
+            if docker container inspect "$name" >/dev/null 2>&1; then
+              docker rm -f "$name"
+              echo "A trusted task container required fallback cleanup"
+              exit 1
+            fi
+          done
+          if [ -n "${TASK_RUNTIME_IMAGE:-}" ]; then
+            docker image rm "task-runtime:$GITHUB_SHA"
+          fi
+      - name: Retain model-free runtime evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: current-task-runtime
+          path: |
+            ${{ runner.temp }}/task-runtime-evidence/
+            ${{ runner.temp }}/containment-d63/safe/summary.json
+          retention-days: 7
+          if-no-files-found: error
