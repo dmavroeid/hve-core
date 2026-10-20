@@ -12,7 +12,7 @@ export function rendererProfile(base) {
   assert.ok(Array.isArray(base.syscalls));
   const profile = structuredClone(base);
   profile.syscalls.push({
-    names: ["clone", "setns", "unshare"],
+    names: ["clone", "setns", "unshare", "chroot"],
     action: "SCMP_ACT_ALLOW",
     args: [],
   });

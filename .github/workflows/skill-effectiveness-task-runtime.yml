@@ -35,7 +35,7 @@ jobs:
       - name: Restore frozen native host package
         working-directory: .github/skills/hve-core/skill-effectiveness
         run: npm ci --ignore-scripts --include=dev --no-audit --no-fund
-      - name: Freeze explicit catalog dependencies with verified uv
+      - name: Verify frozen catalog dependencies with verified uv
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/task-runtime-evidence/catalog-runtime"
@@ -51,7 +51,7 @@ jobs:
           "$uv" --version
           "$uv" python install 3.12.3
           project=.github/validation/skill-effectiveness/task-runtime/catalog-runtime
-          "$uv" lock --project "$project" --python 3.12.3
+          "$uv" lock --check --project "$project" --python 3.12.3
           cp "$project/pyproject.toml" "$project/uv.lock" \
             "$RUNNER_TEMP/task-runtime-evidence/catalog-runtime/"
       - name: Derive renderer exception from this engine's default policy

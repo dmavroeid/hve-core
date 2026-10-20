@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 // SPDX-License-Identifier: MIT
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createConnection } from "node:net";
 import { createRequire } from "node:module";
@@ -19,6 +20,14 @@ test("renderer container keeps non-root, privilege, readonly and network denials
       /^(GITHUB_TOKEN|GH_TOKEN|COPILOT_GITHUB_TOKEN|AZURE_OPENAI_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY)$/.test(key)), false);
     assert.throws(() => writeFileSync("/opt/vally-runtime/readonly-probe", "unexpected"),
       error => ["EROFS", "EACCES"].includes(error.code));
+    const privilegeProbe = execFileSync(process.env.CATALOG_PYTHON, ["-c", [
+      "import ctypes, errno",
+      "libc = ctypes.CDLL(None, use_errno=True)",
+      "assert libc.chroot(b'/') == -1 and ctypes.get_errno() == errno.EPERM",
+      "assert libc.mount(b'none', b'/tmp', b'tmpfs', 0, None) == -1 and ctypes.get_errno() == errno.EPERM",
+      "print('outer chroot and mount remain denied')",
+    ].join("\n")], { encoding: "utf8", timeout: 5000 });
+    assert.match(privilegeProbe, /outer chroot and mount remain denied/);
     await assert.rejects(new Promise((resolve, reject) => {
       const socket = createConnection({ host: "1.1.1.1", port: 80 });
       socket.once("connect", () => { socket.destroy(); resolve(); });
