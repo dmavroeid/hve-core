@@ -231,6 +231,10 @@ async function grade(name, selected, snapshot, t,
     outputCases.set(name, { mode: outputMode, directory: outputDirectory,
       sibling, siblingBytes: readFileSync(sibling) });
   }
+  const lint = await native(["lint", "--eval-spec", spec, "--strict"],
+    join(directory, "lint"), undefined, t.signal);
+  assert.equal(lint.terminated, null);
+  assert.equal(lint.code, 0, "Exact grade spec must pass strict native lint: " + lint.stderr + lint.stdout);
   const args = ["grade", "--eval-spec", spec, "--output", "jsonl", "--require-pass",
     "--backend", "docker", "--backend-args", `task-image=${baseImage}`, "--backend-args", `grade-image=${selectedImage}`,
     "--backend-args", "task-network=none", "--backend-args", "grade-network=none",

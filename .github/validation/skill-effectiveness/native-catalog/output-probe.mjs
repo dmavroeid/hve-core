@@ -35,5 +35,5 @@ try {
   }, null, 2) + "\n", { flag: "wx", mode: 0o644 });
   report(true, "Generated derived.json in the dedicated output mount; original inputs rejected writes");
 } catch (error) {
-  report(false, `${error.name}: ${error.code ?? ""} ${error.message}`, "error");
+  report(false, error.name + ": " + (error.code ?? "") + " " + error.message, "error");
 }

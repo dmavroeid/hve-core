@@ -13,6 +13,11 @@ const adapter = fileURLToPath(new URL(
   import.meta.url,
 ));
 
+test("embedded output probe contains no native eval parameter placeholders", () => {
+  const source = readFileSync(new URL("./output-probe.mjs", import.meta.url), "utf8");
+  assert.ok(!source.includes("${"), "Embedded JavaScript must use concatenation, not eval parameters");
+});
+
 function runChecker(t, script) {
   const root = mkdtempSync(join(tmpdir(), "catalog adapter "));
   t.after(() => rmSync(root, { recursive: true, force: true }));
