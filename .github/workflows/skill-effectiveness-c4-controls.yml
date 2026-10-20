@@ -11,7 +11,7 @@ permissions:
   contents: read
 jobs:
   c4:
-    if: github.repository == 'dmavroeid/hve-core' && github.ref == 'refs/heads/automation/skill-effectiveness-validation-20261017'
+    if: github.repository == 'dmavroeid/hve-core' && github.ref == 'refs/heads/automation/skill-effectiveness-validation-20261017' && !contains(github.event.head_commit.message, '[runtime-only]')
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     permissions:
