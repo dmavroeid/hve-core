@@ -1,0 +1,87 @@
+name: queue-delay-notebook
+description: "Saved task-quality assessment: Exploratory notebook and summary
+  for investigating fleet-charging queue delays without overclaiming maintenance
+  causality"
+version: 1.0.0
+type: capability
+defaults:
+  timeout: 3m
+  judge_model: ${JUDGE_MODEL=MUST-SET-JUDGE-MODEL}
+scoring: {}
+stimuli:
+  - name: queue-delay-notebook
+    prompt: >
+      Please investigate queue delays for our fleet-charging operations team.
+      Where should we investigate first, and what can this data tell us about
+      whether a maintenance change is justified?
+
+
+      Use the supplied synthetic observational data in
+      task-fixture/sessions.csv, with its profile, brief and provenance. Produce
+      an executable notebook at deliverable/queue-delay-analysis.ipynb and a
+      concise recommendation for the operations lead at deliverable/summary.md.
+      Choose the analysis and charts that best answer the question, and be clear
+      about important limitations.
+
+
+      Export every substantive chart as a PNG under deliverable/figures/ for
+      visual review. Use relative notebook paths. Installed tools, the Jupyter
+      kernel and execution directory are described in task-fixture/TOOLS.txt.
+      Public checks: node task-fixture/check-notebook.mjs
+      deliverable/queue-delay-analysis.ipynb deliverable/summary.md.
+
+
+      Do not modify task inputs, start nested agents or paid model sessions, use
+      the network, or inspect enclosing directories, external implementations or
+      other runs.
+    rubric:
+      - The notebook and summary identify concrete investigation priorities
+        supported by the supplied data rather than generic observations.
+      - The analysis distinguishes exploratory signals from unsupported
+        maintenance-causality claims and explains why the evidence is
+        insufficient for a maintenance recommendation.
+      - The notebook and summary make findings traceable to the supplied
+        evidence and communicate important limitations; accept valid analytical
+        approaches without requiring a fixed checklist, heading sequence or
+        chart count.
+    graders:
+      - type: prompt
+        name: task-quality
+        config:
+          evidence:
+            - repo
+          scoring: scale_1_5
+          threshold: 0.5
+          prompt: >
+            Assess the actual notebook and summary against the task and staged
+            source files, not the candidate's claims of success.
+
+
+            Judge whether the submission helps an operations lead decide where
+            to investigate queue delays next while staying honest about what
+            this synthetic observational dataset cannot justify about
+            maintenance changes.
+
+
+            Focus on:
+
+            - whether investigation priorities are concrete and supported by the
+            source data;
+
+            - whether conclusions distinguish exploratory patterns from
+            unsupported causal or maintenance claims;
+
+            - whether important limitations and open questions are explicit;
+
+            - whether the notebook organization and explanations make the
+            analysis traceable and useful.
+
+
+            Accept valid analytical alternatives. Do not require one exact
+            hotspot list if another concrete, well-supported prioritization is
+            reasonable.
+
+            Do not infer executed behavior or visual legibility beyond what the
+            repo snapshot actually shows.
+
+            Do not favor a submission because it resembles the treatment skill.

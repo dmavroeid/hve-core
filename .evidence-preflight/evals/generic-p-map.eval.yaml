@@ -1,0 +1,53 @@
+name: ordered-concurrent-map
+description: Implement a built-ins-only ordered concurrent enrichment helper for
+  lazy sync or async inputs.
+version: 2.0.0
+type: capability
+defaults:
+  runs: 1
+  timeout: 45m
+  executor:
+    name: restricted-copilot-sdk
+    config:
+      sessionPolicy:
+        availableTools: []
+        permissions:
+          allow: []
+          deny: []
+  model: ${AGENT_MODEL=MUST-SET-AGENT-MODEL}
+agent_environment:
+  env:
+    DO_NOT_TRACK: "1"
+  skills: []
+  files:
+    - src: ../fixtures/generic-p-map/public
+      dest: task-fixture
+scoring: {}
+stimuli:
+  - name: ordered-concurrent-map
+    constraints:
+      max_agent_duration: 20m
+      max_duration: 45m
+    artifacts:
+      include:
+        - deliverable/**
+    prompt: >
+      I need a Node.js helper for enriching a lazy stream concurrently while
+      keeping the results in input order and limiting read-ahead. Please
+      implement the public API in task-fixture/REQUEST.md and save it as
+      deliverable/ordered-concurrent-map.mjs.
+
+
+      Use only Node built-ins and your own code. Public checks: node
+      task-fixture/check.mjs.
+
+
+      Do not modify task inputs, start nested agents or paid model sessions, use
+      the network, or inspect enclosing directories, external implementations or
+      other runs.
+    graders:
+      - type: completed
+      - type: file-exists
+        name: delivery
+        config:
+          path: deliverable/ordered-concurrent-map.mjs

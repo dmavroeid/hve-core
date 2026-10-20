@@ -1,0 +1,18 @@
+name: detailed-data-catalog-northlake-ds-catalog-treatment-first
+evals:
+  - ../evals/detailed-data-catalog.eval.yaml
+vary:
+  - /environment/skills
+baseline: b-baseline
+variants:
+  a-treatment:
+    environment:
+      skills:
+        - ../skills/detailed-data-catalog/data-catalog
+  b-baseline:
+    environment:
+      skills: []
+execution:
+  workers: 1
+overrides:
+  runs: 1

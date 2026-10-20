@@ -1,0 +1,4 @@
+Use installed Node.js 24+ and the Python interpreter configured in CATALOG_PYTHON (also available on PATH).
+Python provides PyYAML and jsonschema for the supplied unmodified public catalog validator.
+Run node task-fixture/check.mjs deliverable/northlake-ds-catalog.md from the workspace root.
+No network, paid model calls, nested agents, shared-installation modifications or browsing enclosing directories and other runs.

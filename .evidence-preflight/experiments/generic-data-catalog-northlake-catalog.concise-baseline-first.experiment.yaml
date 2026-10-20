@@ -1,0 +1,18 @@
+name: generic-data-catalog-northlake-catalog.concise-baseline-first
+evals:
+  - ../evals/generic-data-catalog.eval.yaml
+vary:
+  - /environment/skills
+baseline: a-baseline
+variants:
+  a-baseline:
+    environment:
+      skills: []
+  b-treatment:
+    environment:
+      skills:
+        - ../skills/generic-data-catalog/data-catalog
+execution:
+  workers: 1
+overrides:
+  runs: 1

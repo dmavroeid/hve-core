@@ -1,0 +1,8 @@
+Node.js 24 is available as node.
+The public checker uses Mermaid CLI 12.0.0 and Chromium for rendering.
+MERMAID_CLI identifies the approved renderer's JavaScript CLI file.
+MERMAID_BROWSER_CONFIG identifies its Puppeteer browser configuration.
+Use those installed tools read-only; do not modify their installations.
+No network, live services or deployment. Do not browse enclosing directories,
+other runs, other workspaces, private checks, author notes or previous results.
+Rendering verifies syntax, not substantive correctness or visual quality.

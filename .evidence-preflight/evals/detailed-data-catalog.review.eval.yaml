@@ -1,0 +1,121 @@
+name: northlake-ds-catalog
+description: "Saved task-quality assessment: Create a durable, readable
+  DS_CATALOG_V1 catalog from the supplied Northlake rental-operations
+  inventory."
+version: 1.0.0
+type: capability
+defaults:
+  timeout: 3m
+  judge_model: ${JUDGE_MODEL=MUST-SET-JUDGE-MODEL}
+scoring: {}
+stimuli:
+  - name: northlake-ds-catalog
+    prompt: >
+      Create a durable, customer-readable DS_CATALOG_V1 catalog for the
+      rental-operations data team.
+
+
+      Use only the public task inputs staged under task-fixture:
+
+      - task-fixture/BRIEF.txt for the publisher's need
+
+      - task-fixture/inventory.json as the authoritative inventory facts to
+      preserve
+
+      - task-fixture/profiles/*.json as profile attachments
+
+      - task-fixture/contract/** for the public contract, disclaimer source,
+      validator, and provenance
+
+      - task-fixture/TOOLS.txt for approved installed tools
+
+      - task-fixture/PROVENANCE.json for source provenance
+
+
+      Save the final catalog to deliverable/northlake-ds-catalog.md.
+
+
+      Requirements disclosed to both candidates:
+
+      - Use `engagement: northlake-equipment-rentals` in the DS_CATALOG_V1
+      frontmatter.
+
+      - The catalog must be a valid DS_CATALOG_V1 Markdown artifact whose YAML
+      frontmatter preserves the authoritative entity, relationship,
+      classification, profile_ref, access-confirmed, and uncertainty facts from
+      task-fixture/inventory.json.
+
+      - Preserve composite join-key pairings, relationship confidence, endpoint
+      minimums, stale or missing profile pointers, access gaps, and open
+      questions rather than smoothing them away.
+
+      - Keep column-level profile detail in the profile attachments; do not copy
+      it into the catalog.
+
+      - Include the contract-required human-readable sections, a text
+      relationship table covering every declared relationship, and the canonical
+      Data Science and Engineering Coaching disclaimer footer.
+
+      - You may use the supplied validator and references, but do not modify
+      task-fixture inputs.
+
+      - Do not start other agents or paid model sessions, access external
+      implementations, or inspect enclosing directories or other runs. Use only
+      the staged inputs and approved tools.
+
+
+      Public checks run:
+
+      - node task-fixture/check.mjs deliverable/northlake-ds-catalog.md
+    rubric:
+      - Preserves the authoritative privacy classifications, relationship
+        semantics, profile pointers, access-confirmation state, and uncertainty
+        from the supplied inventory without inventing confirmations or replacing
+        gaps.
+      - Produces a readable catalog whose narrative and relationship table
+        communicate the important access gaps, stale evidence, and valid
+        limitations to a rental-operations data team.
+      - Keeps the catalog durable and contract-faithful by following the
+        required structure, using the canonical disclaimer, and avoiding copied
+        column-level profile detail.
+    graders:
+      - type: prompt
+        name: task-quality
+        config:
+          evidence:
+            - repo
+          scoring: scale_1_5
+          threshold: 0.5
+          prompt: >
+            Assess the actual catalog artifact against the staged task sources,
+            not the candidate's claims of success.
+
+
+            Focus on whether the deliverable would genuinely help the
+            rental-operations data team by accurately preserving authoritative
+            facts while clearly communicating uncertainty, access gaps, and
+            privacy posture. Inspect task-fixture/inventory.json, the contract
+            references, the deliverable, and any staged profile attachments that
+            the deliverable points to.
+
+
+            Score anchors:
+
+            - 5: Strongly useful and faithful. Preserves the authoritative
+            machine facts and communicates composite relationships, access gaps,
+            stale/missing profiles, and uncertainty clearly without inventing
+            confirmation.
+
+            - 3: Valid but weaker. Structurally acceptable and mostly faithful,
+            yet materially less readable, less complete about uncertainty, or
+            less useful to the user.
+
+            - 1: Misleading or poor. Loses important facts, overstates
+            certainty, obscures access gaps, or would mislead a reviewer despite
+            passing structural checks.
+
+
+            Cite concrete supporting or contradicting evidence from the files.
+            Accept valid alternatives in wording, layout, and emphasis. Do not
+            favor an implementation because it resembles the skill. Do not infer
+            executed behavior or visual quality from text alone.

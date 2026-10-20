@@ -1,0 +1,1868 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+using System;
+using System.IO.Abstractions;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Security.Cryptography;
+using System.Text;
+using System.Threading.Tasks;
+using Azure.DataApiBuilder.Auth;
+using Azure.DataApiBuilder.Config;
+using Azure.DataApiBuilder.Config.Converters;
+using Azure.DataApiBuilder.Config.ObjectModel;
+using Azure.DataApiBuilder.Config.ObjectModel.Embeddings;
+using Azure.DataApiBuilder.Config.Utilities;
+using Azure.DataApiBuilder.Core.AuthenticationHelpers;
+using Azure.DataApiBuilder.Core.AuthenticationHelpers.AuthenticationSimulator;
+using Azure.DataApiBuilder.Core.AuthenticationHelpers.UnauthenticatedAuthentication;
+using Azure.DataApiBuilder.Core.Authorization;
+using Azure.DataApiBuilder.Core.Configurations;
+using Azure.DataApiBuilder.Core.Models;
+using Azure.DataApiBuilder.Core.Parsers;
+using Azure.DataApiBuilder.Core.Resolvers;
+using Azure.DataApiBuilder.Core.Resolvers.Factories;
+using Azure.DataApiBuilder.Core.Services;
+using Azure.DataApiBuilder.Core.Services.Cache;
+using Azure.DataApiBuilder.Core.Services.Embeddings;
+using Azure.DataApiBuilder.Core.Services.MetadataProviders;
+using Azure.DataApiBuilder.Core.Services.OpenAPI;
+using Azure.DataApiBuilder.Core.Telemetry;
+using Azure.DataApiBuilder.Mcp.Core;
+using Azure.DataApiBuilder.Service.Controllers;
+using Azure.DataApiBuilder.Service.Exceptions;
+using Azure.DataApiBuilder.Service.HealthCheck;
+using Azure.DataApiBuilder.Service.Telemetry;
+using Azure.DataApiBuilder.Service.Utilities;
+using Azure.Identity;
+using Azure.Monitor.Ingestion;
+using HotChocolate;
+using HotChocolate.AspNetCore;
+using HotChocolate.Execution;
+using HotChocolate.Execution.Configuration;
+using HotChocolate.Types;
+using Microsoft.ApplicationInsights;
+using Microsoft.ApplicationInsights.Channel;
+using Microsoft.ApplicationInsights.Extensibility;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Cors.Infrastructure;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.StackExchangeRedis;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Microsoft.Identity.Client;
+using NodaTime;
+using OpenTelemetry.Exporter;
+using OpenTelemetry.Logs;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
+using Serilog;
+using Serilog.Core;
+using StackExchange.Redis;
+using ZiggyCreatures.Caching.Fusion;
+using ZiggyCreatures.Caching.Fusion.Backplane.StackExchangeRedis;
+using ZiggyCreatures.Caching.Fusion.Serialization.SystemTextJson;
+using CorsOptions = Azure.DataApiBuilder.Config.ObjectModel.CorsOptions;
+using LogLevel = Microsoft.Extensions.Logging.LogLevel;
+
+namespace Azure.DataApiBuilder.Service
+{
+    public class Startup(IConfiguration configuration, ILogger<Startup> logger)
+    {
+        public static LogLevel MinimumLogLevel = LogLevel.Error;
+
+        public static bool IsCliOverriding;
+
+        public static AzureLogAnalyticsCustomLogCollector CustomLogCollector = new();
+        public static ApplicationInsightsOptions AppInsightsOptions = new();
+        public static OpenTelemetryOptions OpenTelemetryOptions = new();
+        public static AzureLogAnalyticsOptions AzureLogAnalyticsOptions = new();
+        public static FileSinkOptions FileSinkOptions = new();
+        public const string NO_HTTPS_REDIRECT_FLAG = "--no-https-redirect";
+
+        /// <summary>
+        /// Environment variable name for the optional bootstrap token that gates access to the
+        /// POST /configuration endpoint in late-configured (hosted) mode. When set, the request
+        /// must include an X-DAB-CONFIG-AUTH header whose value matches this token.
+        /// </summary>
+        internal const string CONFIG_AUTH_TOKEN_ENV_VAR = "DAB_CONFIG_AUTH_TOKEN";
+
+        /// <summary>
+        /// Header name used to supply the configuration bootstrap token.
+        /// </summary>
+        internal const string CONFIG_AUTH_HEADER = "X-DAB-CONFIG-AUTH";
+
+        private readonly HotReloadEventHandler<HotReloadEventArgs> _hotReloadEventHandler = new();
+        private RuntimeConfigProvider? _configProvider;
+        private ILogger<Startup> _logger = logger;
+        private LogBuffer _logBuffer = new();
+
+        public IConfiguration Configuration { get; } = configuration;
+
+        /// <summary>
+        /// Useful in cases where we need to:
+        /// Send telemetry data to a custom endpoint that is not supported by the default telemetry channel.
+        /// Modify the telemetry data before it is sent, such as adding custom properties or filtering out sensitive data.
+        /// Implement custom retry logic or error handling for telemetry data that fails to send.
+        /// For testing purposes.
+        /// </summary>
+        public static ITelemetryChannel? CustomTelemetryChannel { get; set; }
+
+        // This method gets called by the runtime. Use this method to add services to the container.
+        public void ConfigureServices(IServiceCollection services)
+        {
+            Startup.AddValidFilters();
+            services.AddSingleton(Program.LogLevelProvider);
+            services.AddSingleton(_hotReloadEventHandler);
+            string configFileName = Configuration.GetValue<string>("ConfigFileName") ?? FileSystemRuntimeConfigLoader.DEFAULT_CONFIG_FILE_NAME;
+            string? connectionString = Configuration.GetValue<string?>(
+                FileSystemRuntimeConfigLoader.RUNTIME_ENV_CONNECTION_STRING.Replace(FileSystemRuntimeConfigLoader.ENVIRONMENT_PREFIX, ""),
+                null);
+            IFileSystem fileSystem = new FileSystem();
+            FileSystemRuntimeConfigLoader configLoader = new(fileSystem, _hotReloadEventHandler, configFileName, connectionString);
+            RuntimeConfigProvider configProvider = new(configLoader);
+            _configProvider = configProvider;
+
+            services.AddSingleton(fileSystem);
+            services.AddSingleton<FileSystemRuntimeConfigLoader>(sp => configLoader);
+            services.AddSingleton<RuntimeConfigProvider>(sp => configProvider);
+            services.AddSingleton<RuntimeConfigLoaderShutdownService>();
+
+            bool runtimeConfigAvailable = configProvider.TryGetConfig(out RuntimeConfig? runtimeConfig);
+
+            if (runtimeConfigAvailable
+                && runtimeConfig?.Runtime?.Telemetry?.ApplicationInsights is not null
+                && runtimeConfig.Runtime.Telemetry.ApplicationInsights.Enabled)
+            {
+                // Add ApplicationTelemetry service and register
+                // custom ITelemetryInitializer implementation with the dependency injection
+                services.AddApplicationInsightsTelemetry();
+                services.AddSingleton<ITelemetryInitializer, AppInsightsTelemetryInitializer>();
+            }
+
+            if (runtimeConfigAvailable
+                && runtimeConfig?.Runtime?.Telemetry?.OpenTelemetry is not null
+                && runtimeConfig.Runtime.Telemetry.OpenTelemetry.Enabled
+                && Uri.TryCreate(runtimeConfig.Runtime.Telemetry.OpenTelemetry.Endpoint, UriKind.Absolute, out Uri? otlpEndpoint))
+            {
+                services.Configure<OpenTelemetryLoggerOptions>(options =>
+                {
+                    options.IncludeScopes = true;
+                    options.ParseStateValues = true;
+                    options.IncludeFormattedMessage = true;
+                });
+                services.AddOpenTelemetry()
+                .WithLogging(logging =>
+                {
+                    logging.SetResourceBuilder(ResourceBuilder.CreateDefault().AddService(runtimeConfig.Runtime.Telemetry.OpenTelemetry.ServiceName!))
+                    .AddOtlpExporter(configure =>
+                    {
+                        configure.Endpoint = otlpEndpoint;
+                        configure.Headers = runtimeConfig.Runtime.Telemetry.OpenTelemetry.Headers;
+                        configure.Protocol = OtlpExportProtocol.Grpc;
+                    });
+
+                })
+                .WithMetrics(metrics =>
+                {
+                    metrics.SetResourceBuilder(ResourceBuilder.CreateDefault().AddService(runtimeConfig.Runtime.Telemetry.OpenTelemetry.ServiceName!))
+                        // TODO: should we also add FusionCache metrics?
+                        // To do so we just need to add the package ZiggyCreatures.FusionCache.OpenTelemetry and call
+                        // .AddFusionCacheInstrumentation()
+                        .AddOtlpExporter(configure =>
+                        {
+                            configure.Endpoint = otlpEndpoint;
+                            configure.Headers = runtimeConfig.Runtime.Telemetry.OpenTelemetry.Headers;
+                            configure.Protocol = OtlpExportProtocol.Grpc;
+                        })
+                        .AddMeter(TelemetryMetricsHelper.MeterName)
+                        .AddMeter(EmbeddingTelemetryHelper.MeterName);
+                })
+                .WithTracing(tracing =>
+                {
+                    tracing.SetResourceBuilder(ResourceBuilder.CreateDefault().AddService(runtimeConfig.Runtime.Telemetry.OpenTelemetry.ServiceName!))
+                    .AddHttpClientInstrumentation()
+                    // TODO: should we also add FusionCache traces?
+                    // To do so we just need to add the package ZiggyCreatures.FusionCache.OpenTelemetry and call
+                    // .AddFusionCacheInstrumentation()
+                    .AddHotChocolateInstrumentation()
+                    .AddOtlpExporter(configure =>
+                    {
+                        configure.Endpoint = otlpEndpoint;
+                        configure.Headers = runtimeConfig.Runtime.Telemetry.OpenTelemetry.Headers;
+                        configure.Protocol = OtlpExportProtocol.Grpc;
+                    })
+                    .AddSource(TelemetryTracesHelper.DABActivitySource.Name);
+                });
+            }
+
+            if (runtimeConfigAvailable
+                && runtimeConfig?.Runtime?.Telemetry?.AzureLogAnalytics is not null
+                && IsAzureLogAnalyticsAvailable(runtimeConfig.Runtime.Telemetry.AzureLogAnalytics))
+            {
+                services.AddSingleton<ICustomLogCollector, AzureLogAnalyticsCustomLogCollector>();
+                services.AddSingleton<ILoggerProvider, AzureLogAnalyticsLoggerProvider>();
+                services.AddSingleton(sp =>
+                {
+                    AzureLogAnalyticsOptions options = runtimeConfig.Runtime.Telemetry.AzureLogAnalytics;
+                    ManagedIdentityCredential credential = new();
+                    LogsIngestionClient logsIngestionClient = new(new Uri(options.Auth!.DceEndpoint!), credential);
+                    return new AzureLogAnalyticsFlusherService(options, CustomLogCollector, logsIngestionClient, _logger);
+                });
+                services.AddHostedService(sp => sp.GetRequiredService<AzureLogAnalyticsFlusherService>());
+            }
+
+            if (runtimeConfigAvailable
+                && runtimeConfig?.Runtime?.Telemetry?.File is not null
+                && runtimeConfig.Runtime.Telemetry.File.Enabled)
+            {
+                services.AddSingleton(sp =>
+                {
+                    FileSinkOptions options = runtimeConfig.Runtime.Telemetry.File;
+                    return new LoggerConfiguration().WriteTo.File(
+                        path: options.Path,
+                        rollingInterval: (RollingInterval)Enum.Parse(typeof(RollingInterval), options.RollingInterval),
+                        retainedFileCountLimit: options.RetainedFileCountLimit,
+                        fileSizeLimitBytes: options.FileSizeLimitBytes,
+                        rollOnFileSizeLimit: true);
+                });
+                services.AddSingleton(sp => sp.GetRequiredService<LoggerConfiguration>().MinimumLevel.Verbose().CreateLogger());
+            }
+
+            services.AddSingleton(implementationFactory: serviceProvider =>
+            {
+                LogLevelInitializer logLevelInit = new(MinimumLogLevel, typeof(RuntimeConfigValidator).FullName, _configProvider, _hotReloadEventHandler);
+                ILoggerFactory? loggerFactory = CreateLoggerFactoryForHostedAndNonHostedScenario(serviceProvider, logLevelInit);
+                return loggerFactory.CreateLogger<RuntimeConfigValidator>();
+            });
+            services.AddSingleton<RuntimeConfigValidator>();
+
+            services.AddSingleton<CosmosClientProvider>();
+            services.AddHealthChecks()
+                .AddCheck<BasicHealthCheck>(nameof(BasicHealthCheck));
+
+            services.AddSingleton<ILogger<FileSystemRuntimeConfigLoader>>(implementationFactory: (serviceProvider) =>
+            {
+                LogLevelInitializer logLevelInit = new(MinimumLogLevel, typeof(FileSystemRuntimeConfigLoader).FullName, _configProvider, _hotReloadEventHandler);
+                ILoggerFactory? loggerFactory = CreateLoggerFactoryForHostedAndNonHostedScenario(serviceProvider, logLevelInit);
+                return loggerFactory.CreateLogger<FileSystemRuntimeConfigLoader>();
+            });
+
+            services.AddSingleton<ILogger<SqlQueryEngine>>(implementationFactory: (serviceProvider) =>
+            {
+                LogLevelInitializer logLevelInit = new(MinimumLogLevel, typeof(SqlQueryEngine).FullName, _configProvider, _hotReloadEventHandler);
+                ILoggerFactory? loggerFactory = CreateLoggerFactoryForHostedAndNonHostedScenario(serviceProvider, logLevelInit);
+                return loggerFactory.CreateLogger<SqlQueryEngine>();
+            });
+
+            services.AddSingleton<ILogger<IQueryExecutor>>(implementationFactory: (serviceProvider) =>
+            {
+                LogLevelInitializer logLevelInit = new(MinimumLogLevel, typeof(IQueryExecutor).FullName, _configProvider, _hotReloadEventHandler);
+                ILoggerFactory? loggerFactory = CreateLoggerFactoryForHostedAndNonHostedScenario(serviceProvider, logLevelInit);
+                return loggerFactory.CreateLogger<IQueryExecutor>();
+            });
+
+            services.AddSingleton<ILogger<ISqlMetadataProvider>>(implementationFactory: (serviceProvider) =>
+            {
+                LogLevelInitializer logLevelInit = new(MinimumLogLevel, typeof(ISqlMetadataProvider).FullName, _configProvider, _hotReloadEventHandler);
+                ILoggerFactory? loggerFactory = CreateLoggerFactoryForHostedAndNonHostedScenario(serviceProvider, logLevelInit);
+                return loggerFactory.CreateLogger<ISqlMetadataProvider>();
+            });
+
+            // Below are the factory registrations that will enable multiple databases scenario.
+            // within these factories the various instances will be created based on the database type and datasourceName.
+            services.AddSingleton<IAbstractQueryManagerFactory, QueryManagerFactory>();
+
+            // Register IOboTokenProvider only when user-delegated auth is configured.
+            // This avoids registering a null singleton and supports hot-reload scenarios.
+            // Requires environment variables: DAB_OBO_CLIENT_ID, DAB_OBO_TENANT_ID, DAB_OBO_CLIENT_SECRET
+            //
+            // Design note: A single IOboTokenProvider is registered using one Azure AD app registration.
+            // Multiple databases with different database-audience values ARE supported - the audience
+            // is passed to GetAccessTokenOnBehalfOfAsync() at query execution time, allowing the same
+            // MSAL client to acquire tokens for different resource servers.
+            if (IsOboConfigured())
+            {
+                // Register IMsalClientWrapper for dependency injection
+                services.AddSingleton<IMsalClientWrapper>(serviceProvider =>
+                {
+                    string? clientId = Environment.GetEnvironmentVariable(UserDelegatedAuthOptions.DAB_OBO_CLIENT_ID_ENV_VAR);
+                    string? tenantId = Environment.GetEnvironmentVariable(UserDelegatedAuthOptions.DAB_OBO_TENANT_ID_ENV_VAR);
+                    string? clientSecret = Environment.GetEnvironmentVariable(UserDelegatedAuthOptions.DAB_OBO_CLIENT_SECRET_ENV_VAR);
+
+                    string authority = $"https://login.microsoftonline.com/{tenantId}";
+
+                    IConfidentialClientApplication msalClient = ConfidentialClientApplicationBuilder
+                        .Create(clientId)
+                        .WithAuthority(authority)
+                        .WithClientSecret(clientSecret)
+                        .Build();
+
+                    return new MsalClientWrapper(msalClient);
+                });
+
+                // Register OboSqlTokenProvider with dependencies from DI
+                services.AddSingleton<IOboTokenProvider, OboSqlTokenProvider>();
+            }
+
+            services.AddSingleton<IQueryEngineFactory, QueryEngineFactory>();
+
+            services.AddSingleton<IMutationEngineFactory, MutationEngineFactory>();
+
+            services.AddSingleton<IMetadataProviderFactory, MetadataProviderFactory>();
+
+            services.AddSingleton<GraphQLSchemaCreator>();
+            services.AddSingleton<GQLFilterParser>();
+            services.AddSingleton<RequestValidator>();
+            services.AddSingleton<RestService>();
+            services.AddSingleton<HealthCheckHelper>();
+            services.AddSingleton<HttpUtilities>();
+            services.AddSingleton<BasicHealthReportResponseWriter>();
+            services.AddSingleton<ComprehensiveHealthReportResponseWriter>();
+
+            // ILogger explicit creation required for logger to use --log-level startup argument specified.
+            services.AddSingleton<ILogger<BasicHealthReportResponseWriter>>(implementationFactory: (serviceProvider) =>
+            {
+                LogLevelInitializer logLevelInit = new(MinimumLogLevel, typeof(BasicHealthReportResponseWriter).FullName, _configProvider, _hotReloadEventHandler);
+                ILoggerFactory? loggerFactory = CreateLoggerFactoryForHostedAndNonHostedScenario(serviceProvider, logLevelInit);
+                return loggerFactory.CreateLogger<BasicHealthReportResponseWriter>();
+            });
+
+            // ILogger explicit creation required for logger to use --log-level startup argument specified.
+            services.AddSingleton<ILogger<ComprehensiveHealthReportResponseWriter>>(implementationFactory: (serviceProvider) =>
+            {
+                LogLevelInitializer logLevelInit = new(MinimumLogLevel, typeof(ComprehensiveHealthReportResponseWriter).FullName, _configProvider, _hotReloadEventHandler);
+                ILoggerFactory? loggerFactory = CreateLoggerFactoryForHostedAndNonHostedScenario(serviceProvider, logLevelInit);
+                return loggerFactory.CreateLogger<ComprehensiveHealthReportResponseWriter>();
+            });
+
+            // ILogger explicit creation required for logger to use --log-level startup argument specified.
+            services.AddSingleton<ILogger<HealthCheckHelper>>(implementationFactory: (serviceProvider) =>
+            {
+                LogLevelInitializer logLevelInit = new(MinimumLogLevel, typeof(HealthCheckHelper).FullName, _configProvider, _hotReloadEventHandler);
+                ILoggerFactory? loggerFactory = CreateLoggerFactoryForHostedAndNonHostedScenario(serviceProvider, logLevelInit);
+                return loggerFactory.CreateLogger<HealthCheckHelper>();
+            });
+
+            // ILogger explicit creation required for logger to use --log-level startup argument specified.
+            services.AddSingleton<ILogger<HttpUtilities>>(implementationFactory: (serviceProvider) =>
+            {
+                LogLevelInitializer logLevelInit = new(MinimumLogLevel, typeof(HttpUtilities).FullName, _configProvider, _hotReloadEventHandler);
+                ILoggerFactory? loggerFactory = CreateLoggerFactoryForHostedAndNonHostedScenario(serviceProvider, logLevelInit);
+                return loggerFactory.CreateLogger<HttpUtilities>();
+            });
+
+            services.AddSingleton<ILogger<RestController>>(implementationFactory: (serviceProvider) =>
+            {
+                LogLevelInitializer logLevelInit = new(MinimumLogLevel, typeof(RestController).FullName, _configProvider, _hotReloadEventHandler);
+                ILoggerFactory? loggerFactory = CreateLoggerFactoryForHostedAndNonHostedScenario(serviceProvider, logLevelInit);
+                return loggerFactory.CreateLogger<RestController>();
+            });
+
+            services.AddSingleton<ILogger<ClientRoleHeaderAuthenticationMiddleware>>(implementationFactory: (serviceProvider) =>
+            {
+                LogLevelInitializer logLevelRuntime = new(MinimumLogLevel, typeof(ClientRoleHeaderAuthenticationMiddleware).FullName, _configProvider, _hotReloadEventHandler);
+                ILoggerFactory? loggerFactory = CreateLoggerFactoryForHostedAndNonHostedScenario(serviceProvider, logLevelRuntime);
+                return loggerFactory.CreateLogger<ClientRoleHeaderAuthenticationMiddleware>();
+            });
+
+            services.AddSingleton<ILogger<ConfigurationController>>(implementationFactory: (serviceProvider) =>
+            {
+                LogLevelInitializer logLevelInit = new(MinimumLogLevel, typeof(ConfigurationController).FullName, _configProvider, _hotReloadEventHandler);
+                ILoggerFactory? loggerFactory = CreateLoggerFactoryForHostedAndNonHostedScenario(serviceProvider, logLevelInit);
+                return loggerFactory.CreateLogger<ConfigurationController>();
+            });
+
+            //Enable accessing HttpContext in RestService to get ClaimsPrincipal.
+            services.AddHttpContextAccessor();
+
+            services.AddHttpClient("ContextConfiguredHealthCheckClient")
+                .ConfigureHttpClient((serviceProvider, client) =>
+                {
+                    int port = PortResolutionHelper.ResolveInternalPort();
+                    string baseUri = $"http://localhost:{port}";
+                    client.BaseAddress = new Uri(baseUri);
+                    _logger.LogInformation($"Configured HealthCheck HttpClient BaseAddress as: {baseUri}");
+                    client.DefaultRequestHeaders.Accept.Clear();
+                    client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+                    client.Timeout = TimeSpan.FromSeconds(200);
+                })
+                .ConfigurePrimaryHttpMessageHandler(serviceProvider =>
+                {
+                    // For debug purpose, USE_SELF_SIGNED_CERT can be set to true in Environment variables
+                    bool allowSelfSigned = Environment.GetEnvironmentVariable("USE_SELF_SIGNED_CERT")?.Equals("true", StringComparison.OrdinalIgnoreCase) == true;
+
+                    HttpClientHandler handler = new();
+
+                    if (allowSelfSigned)
+                    {
+                        handler.ServerCertificateCustomValidationCallback =
+                            HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
+                    }
+
+                    return handler;
+                });
+
+            bool isMcpStdio = Configuration.GetValue<bool>("MCP:StdioMode");
+
+            if (isMcpStdio)
+            {
+                // Explicitly force Simulator when running in MCP stdio mode.
+                services.AddAuthentication(
+                        defaultScheme: SimulatorAuthenticationDefaults.AUTHENTICATIONSCHEME)
+                    .AddSimulatorAuthentication();
+            }
+            else if (runtimeConfig is not null && runtimeConfig.Runtime?.Host?.Mode is HostMode.Development)
+            {
+                // Development mode implies support for "Hot Reload". The V2 authentication function
+                // wires up all DAB supported authentication providers (schemes) so that at request time,
+                // the runtime config defined authentication provider is used to authenticate requests.
+                ConfigureAuthenticationV2(services, configProvider);
+            }
+            else
+            {
+                ConfigureAuthentication(services, configProvider);
+            }
+
+            services.AddAuthorization();
+            services.AddSingleton<ILogger<IAuthorizationHandler>>(implementationFactory: (serviceProvider) =>
+            {
+                LogLevelInitializer logLevelInit = new(MinimumLogLevel, typeof(IAuthorizationHandler).FullName, _configProvider, _hotReloadEventHandler);
+                ILoggerFactory? loggerFactory = CreateLoggerFactoryForHostedAndNonHostedScenario(serviceProvider, logLevelInit);
+                return loggerFactory.CreateLogger<IAuthorizationHandler>();
+            });
+            services.AddSingleton<ILogger<IAuthorizationResolver>>(implementationFactory: (serviceProvider) =>
+            {
+                LogLevelInitializer logLevelInit = new(MinimumLogLevel, typeof(IAuthorizationResolver).FullName, _configProvider, _hotReloadEventHandler);
+                ILoggerFactory? loggerFactory = CreateLoggerFactoryForHostedAndNonHostedScenario(serviceProvider, logLevelInit);
+                return loggerFactory.CreateLogger<IAuthorizationResolver>();
+            });
+
+            services.AddSingleton<IAuthorizationHandler, RestAuthorizationHandler>();
+            services.AddSingleton<IAuthorizationResolver, AuthorizationResolver>();
+            services.AddSingleton<IOpenApiDocumentor, OpenApiDocumentor>();
+
+            // Register embedding service if configured and enabled.
+            // NOTE: IEmbeddingService is only registered when enabled to avoid constructor
+            // failures when config has empty/placeholder values for disabled embeddings.
+            // TODO: To support hot-reload for embeddings (toggling enabled on/off at runtime),
+            // EmbeddingService would need to read config dynamically from RuntimeConfigProvider
+            // and defer constructor validation. Track as a separate work item.
+            if (runtimeConfigAvailable
+                && runtimeConfig?.Runtime?.IsEmbeddingsConfigured == true)
+            {
+                EmbeddingsOptions embeddingsOptions = runtimeConfig.Runtime.Embeddings;
+                services.AddSingleton(embeddingsOptions);
+
+                string providerName = embeddingsOptions.Provider.ToString().ToLowerInvariant();
+
+                if (embeddingsOptions.Enabled)
+                {
+                    // Configure dedicated FusionCache for embeddings
+                    ConfigureEmbeddingsCache(services, embeddingsOptions, runtimeConfigAvailable);
+
+                    // Register a named HttpClient for EmbeddingService. The IEmbeddingService
+                    // registration below resolves this client by name via IHttpClientFactory using
+                    // nameof(EmbeddingService), which matches the name passed here.
+                    services.AddHttpClient(nameof(EmbeddingService));
+
+                    // Register IEmbeddingService as a singleton that uses the named FusionCache
+                    // ("EmbeddingsCache") when embeddings caching is enabled, or falls back to the
+                    // default IFusionCache otherwise. The factory pattern is required because we need
+                    // to select between two IFusionCache instances at resolution time.
+                    services.AddSingleton<IEmbeddingService>(serviceProvider =>
+                    {
+                        IFusionCache cache = embeddingsOptions.IsCachingEnabled
+                            ? serviceProvider.GetRequiredService<IFusionCacheProvider>().GetCache("EmbeddingsCache")
+                            : serviceProvider.GetRequiredService<IFusionCache>(); // Fallback to default cache
+
+                        ILogger<EmbeddingService> logger = serviceProvider.GetRequiredService<ILogger<EmbeddingService>>();
+                        IHttpClientFactory httpClientFactory = serviceProvider.GetRequiredService<IHttpClientFactory>();
+                        HttpClient httpClient = httpClientFactory.CreateClient(nameof(EmbeddingService));
+
+                        return new EmbeddingService(httpClient, embeddingsOptions, logger, cache);
+                    });
+
+                    _logger.LogInformation(
+                        "Embeddings service enabled with provider: {Provider}, model: {Model}, base-url: {BaseUrl}",
+                        providerName,
+                        embeddingsOptions.EffectiveModel ?? "(default)",
+                        embeddingsOptions.BaseUrl);
+
+                    // Endpoint is only available if both embeddings and endpoint are enabled
+                    if (embeddingsOptions.IsEndpointEnabled)
+                    {
+                        _logger.LogInformation(
+                            "Embeddings endpoint enabled at path: {Path}",
+                            EmbeddingsEndpointOptions.DEFAULT_PATH);
+                    }
+
+                    if (embeddingsOptions.IsHealthCheckEnabled)
+                    {
+                        _logger.LogInformation(
+                            "Embeddings health check enabled with threshold: {ThresholdMs}ms",
+                            embeddingsOptions.Health!.ThresholdMs);
+                    }
+                }
+                else
+                {
+                    _logger.LogInformation("Embeddings service is configured but disabled.");
+                }
+            }
+
+            AddGraphQLService(services, runtimeConfig?.Runtime?.GraphQL);
+
+            // Subscribe the GraphQL schema refresh method to the specific hot-reload event
+            _hotReloadEventHandler.Subscribe(
+                DabConfigEvents.GRAPHQL_SCHEMA_REFRESH_ON_CONFIG_CHANGED,
+                (_, args) =>
+                {
+                    args.CancellationToken.ThrowIfCancellationRequested();
+                    RefreshGraphQLSchema(services);
+                });
+
+            // Cache config
+            IFusionCacheBuilder fusionCacheBuilder = services.AddFusionCache()
+                .WithOptions(options =>
+                {
+                    options.FactoryErrorsLogLevel = LogLevel.Debug;
+                    options.EventHandlingErrorsLogLevel = LogLevel.Debug;
+                    string? cachePartition = runtimeConfig?.Runtime?.Cache?.Level2?.Partition;
+                    if (string.IsNullOrWhiteSpace(cachePartition) == false)
+                    {
+                        options.CacheKeyPrefix = cachePartition + "_";
+                        options.BackplaneChannelPrefix = cachePartition + "_";
+                    }
+                })
+                .WithDefaultEntryOptions(new FusionCacheEntryOptions
+                {
+                    Duration = TimeSpan.FromSeconds(RuntimeCacheOptions.DEFAULT_TTL_SECONDS),
+                    ReThrowBackplaneExceptions = false,
+                    ReThrowDistributedCacheExceptions = false,
+                    ReThrowSerializationExceptions = false,
+                });
+
+            // Level2 cache config
+            bool isLevel2Enabled = runtimeConfigAvailable
+                && (runtimeConfig?.Runtime?.IsCachingEnabled ?? false)
+                && (runtimeConfig?.Runtime?.Cache?.Level2?.Enabled ?? false);
+
+            if (isLevel2Enabled)
+            {
+                RuntimeCacheLevel2Options level2CacheOptions = runtimeConfig!.Runtime!.Cache!.Level2!;
+                string level2CacheProvider = level2CacheOptions.Provider ?? EntityCacheOptions.L2_CACHE_PROVIDER;
+
+                switch (level2CacheProvider.ToLowerInvariant())
+                {
+                    case EntityCacheOptions.L2_CACHE_PROVIDER:
+                        if (string.IsNullOrWhiteSpace(level2CacheOptions.ConnectionString))
+                        {
+                            throw new Exception($"Cache Provider: the \"{EntityCacheOptions.L2_CACHE_PROVIDER}\" level2 cache provider requires a valid connection-string. Please provide one.");
+                        }
+                        else
+                        {
+                            // NOTE: this is done to reuse the same connection multiplexer for both the cache and backplane
+                            Task<IConnectionMultiplexer> connectionMultiplexerTask = CreateConnectionMultiplexerAsync(level2CacheOptions.ConnectionString);
+
+                            fusionCacheBuilder
+                                .WithSerializer(new FusionCacheSystemTextJsonSerializer())
+                                .WithDistributedCache(new RedisCache(new RedisCacheOptions
+                                {
+                                    ConnectionMultiplexerFactory = async () =>
+                                    {
+                                        return await connectionMultiplexerTask;
+                                    }
+                                }))
+                                .WithBackplane(new RedisBackplane(new RedisBackplaneOptions
+                                {
+                                    ConnectionMultiplexerFactory = async () =>
+                                    {
+                                        return await connectionMultiplexerTask;
+                                    }
+                                }));
+                        }
+
+                        break;
+                    default:
+                        throw new Exception($"Cache Provider: ${level2CacheOptions.Provider} not supported. Please provide a valid cache provider.");
+                }
+            }
+
+            services.AddSingleton<DabCacheService>();
+
+            services.AddDabMcpServer(configProvider);
+
+            services.AddSingleton<IMcpStdioServer, McpStdioServer>();
+
+            // Add Response Compression services based on config
+            ConfigureResponseCompression(services, runtimeConfig);
+
+            services.AddControllers();
+
+            // Hosted services stop in reverse registration order. Register the loader drain last
+            // so reload work exits before any other hosted service begins shutting down and before
+            // the root provider disposes reload subscribers or their dependencies.
+            services.AddSingleton<IHostedService>(serviceProvider =>
+                serviceProvider.GetRequiredService<RuntimeConfigLoaderShutdownService>());
+        }
+
+        /// <summary>
+        /// Creates a ConnectionMultiplexer for Redis with support for Azure Entra authentication.
+        /// </summary>
+        /// <param name="connectionString">The Redis connection string.</param>
+        /// <returns>A task that represents the asynchronous operation. The task result contains the connected IConnectionMultiplexer.</returns>
+        private static async Task<IConnectionMultiplexer> CreateConnectionMultiplexerAsync(string connectionString)
+        {
+            ConfigurationOptions options = ConfigurationOptions.Parse(connectionString);
+
+            if (ShouldUseEntraAuthForRedis(options))
+            {
+                options = await options.ConfigureForAzureWithTokenCredentialAsync(new DefaultAzureCredential()); // CodeQL [SM05137] DefaultAzureCredential will use Managed Identity if available or fallback to default.
+            }
+
+            return await ConnectionMultiplexer.ConnectAsync(options);
+        }
+
+        /// <summary>
+        /// Determines whether Azure Entra authentication should be used.
+        /// Conditions:
+        /// - No password provided
+        /// - At least one endpoint is NOT localhost/loopback
+        /// </summary>
+        /// <param name="options">The Redis configuration options.</param>
+        /// <returns>True if Azure Entra authentication should be used; otherwise, false.</returns>
+        /// <remarks>Internal for testing.</remarks>
+        internal static bool ShouldUseEntraAuthForRedis(ConfigurationOptions options)
+        {
+            // Determine if an endpoint is localhost/loopback
+            static bool IsLocalhostEndpoint(EndPoint ep) => ep switch
+            {
+                DnsEndPoint dns => string.Equals(dns.Host, "localhost", StringComparison.OrdinalIgnoreCase),
+                IPEndPoint ip => IPAddress.IsLoopback(ip.Address),
+                _ => false,
+            };
+
+            return string.IsNullOrEmpty(options.Password)
+                && options.EndPoints.Any(ep => !IsLocalhostEndpoint(ep));
+        }
+
+        /// <summary>
+        /// Configures HTTP response compression based on the runtime configuration.
+        /// Compression is applied at the middleware level and supports Gzip and Brotli.
+        /// Applies to REST, GraphQL, and MCP endpoints.
+        /// </summary>
+        private void ConfigureResponseCompression(IServiceCollection services, RuntimeConfig? runtimeConfig)
+        {
+            CompressionLevel compressionLevel = runtimeConfig?.Runtime?.Compression?.Level ?? CompressionOptions.DEFAULT_LEVEL;
+
+            // Only configure compression if level is not None
+            if (compressionLevel == CompressionLevel.None)
+            {
+                return;
+            }
+
+            System.IO.Compression.CompressionLevel systemCompressionLevel = compressionLevel switch
+            {
+                CompressionLevel.Fastest => System.IO.Compression.CompressionLevel.Fastest,
+                CompressionLevel.Optimal => System.IO.Compression.CompressionLevel.Optimal,
+                _ => System.IO.Compression.CompressionLevel.Optimal
+            };
+
+            services.AddResponseCompression(options =>
+            {
+                options.EnableForHttps = true;
+                options.Providers.Add<Microsoft.AspNetCore.ResponseCompression.GzipCompressionProvider>();
+                options.Providers.Add<Microsoft.AspNetCore.ResponseCompression.BrotliCompressionProvider>();
+            });
+
+            services.Configure<Microsoft.AspNetCore.ResponseCompression.GzipCompressionProviderOptions>(options =>
+            {
+                options.Level = systemCompressionLevel;
+            });
+
+            services.Configure<Microsoft.AspNetCore.ResponseCompression.BrotliCompressionProviderOptions>(options =>
+            {
+                options.Level = systemCompressionLevel;
+            });
+
+            _logBuffer.BufferLog(LogLevel.Information, $"Response compression enabled with level '{compressionLevel}' for REST, GraphQL, and MCP endpoints.");
+        }
+
+        /// <summary>
+        /// Configure GraphQL services within the service collection of the
+        /// request pipeline.
+        /// - AllowIntrospection defaulted to false so HotChocolate configures a request validation rule
+        /// that checks for the presence of the GraphQL context key WellKnownContextData.IntrospectionAllowed
+        /// when determining whether to allow introspection requests to proceed.
+        /// </summary>
+        /// <param name="services">Service Collection</param>
+        /// <param name="graphQLRuntimeOptions">The GraphQL runtime options.</param>
+        private void AddGraphQLService(IServiceCollection services, GraphQLRuntimeOptions? graphQLRuntimeOptions)
+        {
+            IRequestExecutorBuilder server = services.AddGraphQLServer()
+                // Defer schema construction to the first GraphQL request so the runtime config
+                // is available for both file-based and POST /configuration (hosted) scenarios.
+                // See docs/design/HC16-upgrade.md for the full rationale.
+                .ModifyOptions(options => options.LazyInitialization = true)
+                .AddInstrumentation()
+                .AddType(new DateTimeType(new DateTimeOptions { ValidateInputFormat = !(graphQLRuntimeOptions?.EnableLegacyDateTimeScalar ?? true) }))
+                .AddHttpRequestInterceptor<DefaultHttpRequestInterceptor>()
+                .ConfigureSchema((serviceProvider, schemaBuilder) =>
+                {
+                    // Runs on first GraphQL request (LazyInitialization). The placeholder
+                    // fallback covers GraphQL-disabled configs and schema-construction failures.
+                    RuntimeConfigProvider configProvider = serviceProvider.GetRootServiceProvider()
+                        .GetRequiredService<RuntimeConfigProvider>();
+                    if (!configProvider.TryGetConfig(out RuntimeConfig? loadedConfig))
+                    {
+                        EmitPlaceholderSchema(schemaBuilder);
+                        return;
+                    }
+
+                    if (!loadedConfig.IsGraphQLEnabled)
+                    {
+                        EmitPlaceholderSchema(schemaBuilder);
+                        return;
+                    }
+
+                    try
+                    {
+                        // The GraphQLSchemaCreator is an application service that is not available on 
+                        // the schema specific service provider, this means we have to get it with 
+                        // the GetRootServiceProvider helper.
+                        GraphQLSchemaCreator graphQLService = serviceProvider.GetRootServiceProvider().GetRequiredService<GraphQLSchemaCreator>();
+                        graphQLService.InitializeSchemaAndResolvers(schemaBuilder);
+                    }
+                    catch (Exception ex)
+                    {
+                        // Schema construction failed (e.g. metadata provider was not initialized
+                        // due to a config validation error). Fall back to the placeholder schema
+                        // so the host can still start; the underlying error will have already
+                        // been surfaced by Startup.PerformOnConfigChangeAsync.
+                        _logger.LogWarning(
+                            exception: ex,
+                            message: "Failed to build GraphQL schema; emitting placeholder schema. The error will surface on first GraphQL request and is typically caused by a runtime config that failed validation.");
+                        EmitPlaceholderSchema(schemaBuilder);
+                    }
+                })
+                .AddHttpRequestInterceptor<IntrospectionInterceptor>()
+                .AddAuthorizationHandler<GraphQLAuthorizationHandler>()
+                .BindRuntimeType<TimeOnly, HotChocolate.Types.NodaTime.LocalTimeType>()
+                .BindScalarType<HotChocolate.Types.NodaTime.LocalTimeType>("LocalTime")
+                .AddTypeConverter<LocalTime, TimeOnly>(
+                    from => new TimeOnly(from.Hour, from.Minute, from.Second, from.Millisecond))
+                .AddTypeConverter<TimeOnly, LocalTime>(
+                    from => new LocalTime(from.Hour, from.Minute, from.Second, from.Millisecond));
+
+            // Conditionally adds a maximum depth rule to the GraphQL queries/mutation selection set.
+            // This rule is only added if a positive depth limit is specified, ensuring that the server
+            // enforces a limit on the depth of incoming GraphQL queries/mutation to prevent extremely deep queries
+            // that could potentially lead to performance issues.
+            // Additionally, the skipIntrospectionFields parameter is set to true to skip depth limit enforcement on introspection queries.
+            if (graphQLRuntimeOptions is not null && graphQLRuntimeOptions.DepthLimit is > 0)
+            {
+                server = server.AddMaxExecutionDepthRule(maxAllowedExecutionDepth: graphQLRuntimeOptions.DepthLimit.Value, skipIntrospectionFields: true);
+            }
+
+            server.AddErrorFilter(error =>
+            {
+                if (error.Exception is not null)
+                {
+                    _logger.LogError(error.Exception, "A GraphQL request execution error occurred.");
+                    return error.WithMessage(error.Exception.Message);
+                }
+
+                if (error.Code is not null)
+                {
+                    _logger.LogError($"Error code: {error.Code}\nError message: {error.Message}");
+                    return error.WithMessage(error.Message);
+                }
+
+                return error;
+            })
+            .AddErrorFilter(error =>
+            {
+                if (error.Exception is DataApiBuilderException thrownException)
+                {
+                    error = error
+                        .WithException(null)
+                        .WithMessage(thrownException.Message)
+                        .WithCode($"{thrownException.SubStatusCode}");
+
+                    // If user error i.e. validation error or conflict error with datasource, then retain location/path
+                    if (!thrownException.StatusCode.IsClientError())
+                    {
+                        error = error.WithLocations(Array.Empty<Location>());
+                    }
+                }
+
+                return error;
+            })
+            // Allows DAB to override the HTTP error code set by HotChocolate.
+            // This is used to ensure HTTP code 4XX is set when the datatbase
+            // returns a "bad request" error such as stored procedure params missing.
+            .UseRequest<DetermineStatusCodeMiddleware>()
+            .UseRequest<BuildRequestStateMiddleware>()
+            .UseDefaultPipeline();
+        }
+
+        /// <summary>
+        /// Refreshes the GraphQL schema when the runtime config updates during hot-reload scenario.
+        /// </summary>
+        private void RefreshGraphQLSchema(IServiceCollection services)
+        {
+            // Re-add GraphQL services with updated config.
+            RuntimeConfig runtimeConfig = _configProvider!.GetConfig();
+            Console.WriteLine("Updating GraphQL service.");
+            AddGraphQLService(services, runtimeConfig.Runtime?.GraphQL);
+        }
+
+        // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
+        public void Configure(IApplicationBuilder app, IWebHostEnvironment env, RuntimeConfigProvider runtimeConfigProvider, IHostApplicationLifetime hostLifetime)
+        {
+            bool isRuntimeReady = false;
+            RuntimeConfig? runtimeConfig = null;
+
+            // Wire a logger on the DynamicLogLevelProvider as soon as ILoggerFactory is available
+            // — ahead of any config-load branch — so an early MCP logging/setLevel call (which can
+            // arrive before runtime config in the late-configured path) still surfaces its audit
+            // log line through the standard logging pipeline.
+            DynamicLogLevelProvider? logLevelProviderForAudit = app.ApplicationServices.GetService<DynamicLogLevelProvider>();
+            if (logLevelProviderForAudit?.IsLogLevelLegacy is true)
+            {
+                _logBuffer.BufferLog(LogLevel.Warning, "--LogLevel is deprecated, please use --log-level instead.");
+            }
+
+            ILoggerFactory? earlyLoggerFactory = app.ApplicationServices.GetService<ILoggerFactory>();
+            if (logLevelProviderForAudit is not null && earlyLoggerFactory is not null)
+            {
+                logLevelProviderForAudit.Logger = earlyLoggerFactory.CreateLogger<DynamicLogLevelProvider>();
+            }
+
+            try
+            {
+                if (runtimeConfigProvider.TryGetConfig(out runtimeConfig))
+                {
+                    // Create log level initializer for Startup, which allows it to respond to runtime config changes and update the log level accordingly.
+                    LogLevelInitializer logLevelInit = new(MinimumLogLevel, typeof(Startup).FullName, runtimeConfigProvider, _hotReloadEventHandler);
+
+                    // Set LogLevel based on RuntimeConfig
+                    DynamicLogLevelProvider logLevelProvider = app.ApplicationServices.GetRequiredService<DynamicLogLevelProvider>();
+                    logLevelProvider.UpdateFromRuntimeConfig(runtimeConfig);
+
+                    // Configure Telemetry
+                    // TODO: Issue #3239. Refactor this methods so that they are all called before creating the new logger factory.
+                    ConfigureApplicationInsightsTelemetry(app, runtimeConfig, logLevelInit);
+                    ConfigureOpenTelemetry(app, runtimeConfig, logLevelInit);
+                    ConfigureAzureLogAnalytics(app, runtimeConfig, logLevelInit);
+                    ConfigureFileSink(app, runtimeConfig, logLevelInit);
+
+                    //Flush all logs that were buffered before setting the LogLevel.
+                    // Important: All logs set before this point should use _logBuffer.
+                    FlushAllLogs(app);
+
+                    // Config provided before starting the engine.
+                    isRuntimeReady = PerformOnConfigChangeAsync(app).Result;
+
+                    if (!isRuntimeReady)
+                    {
+                        _logger.LogError(
+                            message: "Could not initialize the engine with the runtime config file: {configFilePath}",
+                            runtimeConfigProvider.ConfigFilePath);
+                        hostLifetime.StopApplication();
+                    }
+                }
+                else
+                {
+                    // Config provided during runtime.
+                    runtimeConfigProvider.IsLateConfigured = true;
+                    runtimeConfigProvider.RuntimeConfigLoadedHandlers.Add(async (_, _) =>
+                    {
+                        // This section will only run if the runtime config is provided during runtime. E.g. IsLateConfigured is true.
+                        // Set LogLevel based on RuntimeConfig
+                        RuntimeConfigProvider runtimeConfigProvider = app.ApplicationServices.GetService<RuntimeConfigProvider>()!;
+                        RuntimeConfig runtimeConfig = runtimeConfigProvider.GetConfig();
+                        DynamicLogLevelProvider logLevelProvider = app.ApplicationServices.GetRequiredService<DynamicLogLevelProvider>();
+                        logLevelProvider.UpdateFromRuntimeConfig(runtimeConfig);
+
+                        //Flush all logs that were buffered before setting the LogLevel.
+                        // Important: All logs set before this point should use _logBuffer.
+                        // This flush ensures that no logs are lost in the case of an IsLateConfigured scenario.
+                        FlushAllLogs(app);
+
+                        isRuntimeReady = await PerformOnConfigChangeAsync(app);
+
+                        return isRuntimeReady;
+                    });
+                }
+            }
+            finally
+            {
+                // Attempt one final flush in case there was any exception that caused the
+                // previous section to throw an error before flushing the logs.
+                FlushAllLogs(app);
+            }
+
+            if (env.IsDevelopment())
+            {
+                app.UseDeveloperExceptionPage();
+            }
+
+            if (!Program.IsHttpsRedirectionDisabled)
+            {
+                // Use HTTPS redirection for all endpoints except /health and /graphql.
+                // This is necessary because ContextConfiguredHealthCheckClient base URI is http://localhost:{port} for internal API calls
+                app.UseWhen(
+                    context => !(context.Request.Path.StartsWithSegments("/health") || context.Request.Path.StartsWithSegments("/graphql")),
+                    appBuilder => appBuilder.UseHttpsRedirection()
+                );
+            }
+
+            // Response compression middleware should be placed early in the pipeline.
+            // Only use if compression is not set to None.
+            if (runtimeConfig?.Runtime?.Compression?.Level is not CompressionLevel.None)
+            {
+                app.UseResponseCompression();
+            }
+
+            // URL Rewrite middleware MUST be called prior to UseRouting().
+            // https://andrewlock.net/understanding-pathbase-in-aspnetcore/#placing-usepathbase-in-the-correct-location
+            app.UseCorrelationIdMiddleware();
+            app.UsePathRewriteMiddleware();
+
+            // SwaggerUI visualization of the OpenAPI description document is only available
+            // in developer mode in alignment with the restriction placed on ChilliCream's BananaCakePop IDE.
+            // Consequently, SwaggerUI is not presented in a StaticWebApps (late-bound config) environment.
+            if (IsUIEnabled(runtimeConfig, env))
+            {
+                app.UseSwaggerUI(c => // CodeQL [SM04686] SwaggerUI is only enabled for Development environment.
+                {
+                    c.ConfigObject.Urls = new SwaggerEndpointMapper(app.ApplicationServices.GetService<RuntimeConfigProvider?>());
+                });
+            }
+
+            app.UseRouting();
+
+            // Adding CORS Middleware
+            if (runtimeConfig is not null && runtimeConfig.Runtime?.Host?.Cors is not null)
+            {
+                app.UseCors(corsPolicyBuilder =>
+                {
+                    CorsOptions corsConfig = runtimeConfig.Runtime.Host.Cors;
+                    ConfigureCors(corsPolicyBuilder, corsConfig);
+                });
+            }
+
+            app.Use(async (context, next) =>
+            {
+                bool isHealthCheckRequest = context.Request.Path == "/" && context.Request.Method == HttpMethod.Get.Method;
+                bool isSettingConfig = context.Request.Path.StartsWithSegments("/configuration")
+                    && context.Request.Method == HttpMethod.Post.Method;
+                if (isRuntimeReady || isHealthCheckRequest)
+                {
+                    await next.Invoke();
+                }
+                else if (isSettingConfig)
+                {
+                    if (isRuntimeReady)
+                    {
+                        context.Response.StatusCode = StatusCodes.Status409Conflict;
+                    }
+                    else if (!IsConfigurationRequestAuthorized(context))
+                    {
+                        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                    }
+                    else
+                    {
+                        await next.Invoke();
+                    }
+                }
+                else
+                {
+                    context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+                }
+
+            });
+
+            app.UseAuthentication();
+
+            app.UseClientRoleHeaderAuthenticationMiddleware();
+
+            app.UseAuthorization();
+
+            // Authorization Engine middleware enforces that all requests (including introspection)
+            // include proper auth headers.
+            // - {Authorization header + Client role header for JWT}
+            // - {X-MS-CLIENT-PRINCIPAL + Client role header for EasyAuth}
+            // When enabled, the middleware will prevent Banana Cake Pop(GraphQL client) from loading
+            // without proper authorization headers.
+            app.UseClientRoleHeaderAuthorizationMiddleware();
+
+            // Protect the browser-reachable MCP Streamable HTTP transport against DNS rebinding
+            // attacks by validating the Host and Origin headers before the request reaches the
+            // MCP endpoint. Loopback hosts are always trusted; additional trusted hosts can be
+            // configured via runtime.mcp.allowed-hosts.
+            app.UseMiddleware<McpDnsRebindingProtectionMiddleware>();
+
+            IRequestExecutorManager requestExecutorManager = app.ApplicationServices.GetRequiredService<IRequestExecutorManager>();
+            _hotReloadEventHandler.Subscribe(
+                "GRAPHQL_SCHEMA_EVICTION_ON_CONFIG_CHANGED",
+                (_, args) =>
+                {
+                    args.CancellationToken.ThrowIfCancellationRequested();
+                    EvictGraphQLSchema(requestExecutorManager);
+                });
+
+            app.UseEndpoints(endpoints =>
+            {
+                // Map the embeddings POST endpoint with a literal path BEFORE MapControllers
+                // so it wins over RestController's global catch-all attribute route ({*route})
+                // by route specificity. The path is taken from runtime config
+                // (runtime.embeddings.endpoint.path), defaulting to "/embed".
+                if (runtimeConfig?.Runtime?.Embeddings is { Enabled: true } embeddingsOptions
+                    && embeddingsOptions.Endpoint is { Enabled: true } embeddingsEndpoint)
+                {
+                    string embedPath = embeddingsEndpoint.EffectivePath;
+                    if (!embedPath.StartsWith('/'))
+                    {
+                        embedPath = "/" + embedPath;
+                    }
+
+                    // ARCHITECTURAL NOTE: This MapPost delegate manually instantiates EmbeddingController
+                    // via ActivatorUtilities so the embeddings endpoint can be served on a configurable,
+                    // literal path that wins over RestController's global catch-all attribute route
+                    // ({*route}) by route-specificity. This intentionally bypasses the MVC controller
+                    // pipeline, which means:
+                    //   * MVC action filters, [Authorize], [Consumes]/[Produces], and model-binding/
+                    //     validation attributes on EmbeddingController are NOT executed here.
+                    //   * Authentication & authorization are still enforced because the ASP.NET Core
+                    //     auth middleware (UseAuthentication/UseAuthorization and the DAB client-role
+                    //     header authorization middleware) runs earlier in the pipeline, before
+                    //     UseEndpoints. EmbeddingController.PostAsync performs its own role/permission
+                    //     checks against HttpContext.User.
+                    // If future work adds new filter/authorization attributes to EmbeddingController,
+                    // those will NOT take effect on this path; either replicate the behavior here or
+                    // move to a standard attribute-routed controller mapping.
+                    endpoints.MapPost(embedPath, async context =>
+                    {
+                        EmbeddingController controller = ActivatorUtilities.CreateInstance<EmbeddingController>(context.RequestServices);
+                        controller.ControllerContext = new ControllerContext { HttpContext = context };
+                        IActionResult result = await controller.PostAsync(embedPath.TrimStart('/'));
+                        await result.ExecuteResultAsync(controller.ControllerContext);
+                    });
+                }
+
+                endpoints.MapControllers();
+
+                // Special for MCP
+                endpoints.MapDabMcp(runtimeConfigProvider);
+
+                endpoints
+                    .MapGraphQL()
+                    .WithOptions(options =>
+                    {
+                        // Determines if accessing the endpoint from a browser
+                        // will load the GraphQL Banana Cake Pop / Nitro IDE.
+                        options.Tool.Enable = IsUIEnabled(runtimeConfig, env);
+                    });
+
+                endpoints.MapHealthChecks("/", new HealthCheckOptions
+                {
+                    ResponseWriter = app.ApplicationServices.GetRequiredService<BasicHealthReportResponseWriter>().WriteResponse
+                });
+            });
+        }
+
+        /// <summary>
+        /// Evicts the GraphQL schema from the request executor resolver.
+        /// </summary>
+        private static void EvictGraphQLSchema(IRequestExecutorManager requestExecutorResolver)
+        {
+            Console.WriteLine("Evicting old GraphQL schema.");
+            requestExecutorResolver.EvictExecutor();
+        }
+
+        /// <summary>
+        /// Registers a minimal valid GraphQL schema (a single placeholder field with a no-op
+        /// resolver) on the supplied <paramref name="schemaBuilder"/>. Used to satisfy Hot
+        /// Chocolate v16's eager schema validation when the real schema cannot be constructed
+        /// at startup (no runtime config loaded yet, or a config validation failure prevented
+        /// metadata provider initialization). The placeholder is unreachable in normal
+        /// operation: it is shadowed once a real config is hot-reloaded via the
+        /// <c>GRAPHQL_SCHEMA_EVICTION_ON_CONFIG_CHANGED</c> event.
+        /// </summary>
+        private static void EmitPlaceholderSchema(ISchemaBuilder schemaBuilder)
+        {
+            schemaBuilder.AddDocumentFromString("type Query { _dab: String }");
+            schemaBuilder.AddResolver("Query", "_dab", _ => null);
+        }
+
+        /// <summary>
+        /// If LogLevel is NOT overridden by CLI, attempts to find the
+        /// minimum log level based on host.mode in the runtime config if available.
+        /// Creates a logger factory with the minimum log level.
+        /// </summary>
+        public static ILoggerFactory CreateLoggerFactoryForHostedAndNonHostedScenario(IServiceProvider serviceProvider, LogLevelInitializer logLevelInitializer)
+        {
+            if (!IsCliOverriding)
+            {
+                // If the log level is not overridden by command line arguments specified through CLI,
+                // attempt to get the runtime config to determine the loglevel based on host.mode.
+                // If runtime config is available, set the loglevel to Error if host.mode is Production,
+                // Debug if it is Development.
+
+                logLevelInitializer.SetLogLevel();
+            }
+
+            TelemetryClient? appTelemetryClient = serviceProvider.GetService<TelemetryClient>();
+            Logger? serilogLogger = serviceProvider.GetService<Logger>();
+
+            return Program.GetLoggerFactoryForLogLevel(logLevelInitializer.MinLogLevel, appTelemetryClient, logLevelInitializer, serilogLogger);
+        }
+
+        /// <summary>
+        /// Add services necessary for Authentication Middleware and based on the loaded
+        /// runtime configuration set the AuthenticationOptions to be either
+        /// Unauthenticated (by default), EasyAuth based, or JwtBearerOptions.
+        /// When no runtime configuration is available on engine startup, set the
+        /// default authentication scheme to EasyAuth for late configuration.
+        /// </summary>
+        /// <param name="services">The service collection where authentication services are added.</param>
+        /// <param name="runtimeConfigurationProvider">The provider used to load runtime configuration.</param>
+        private void ConfigureAuthentication(IServiceCollection services, RuntimeConfigProvider runtimeConfigurationProvider)
+        {
+            if (runtimeConfigurationProvider.TryGetConfig(out RuntimeConfig? runtimeConfig))
+            {
+                AuthenticationOptions authOptions = runtimeConfig.Runtime?.Host?.Authentication ?? new();
+                HostMode mode = runtimeConfig.Runtime?.Host?.Mode ?? HostMode.Production;
+                if (authOptions.IsJwtConfiguredIdentityProvider())
+                {
+                    services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+                    .AddJwtBearer(options =>
+                    {
+                        options.MapInboundClaims = false;
+                        options.Audience = authOptions.Jwt!.Audience;
+                        options.Authority = authOptions.Jwt!.Issuer;
+                        options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters()
+                        {
+                            // Instructs the asp.net core middleware to use the data in the "roles" claim for User.IsInRole()
+                            // See https://learn.microsoft.com/en-us/dotnet/api/system.security.claims.claimsprincipal.isinrole#remarks
+                            RoleClaimType = AuthenticationOptions.ROLE_CLAIM_TYPE
+                        };
+                    });
+                }
+                else if (authOptions.IsEasyAuthAuthenticationProvider())
+                {
+                    EasyAuthType easyAuthType = EnumExtensions.Deserialize<EasyAuthType>(authOptions.Provider);
+                    bool isProductionMode = mode != HostMode.Development;
+                    bool appServiceEnvironmentDetected = AppServiceAuthenticationInfo.AreExpectedAppServiceEnvVarsPresent();
+                    bool swaEnvironmentDetected = StaticWebAppsAuthentication.AreExpectedSWAEnvVarsPresent();
+
+                    if (easyAuthType == EasyAuthType.AppService && !appServiceEnvironmentDetected)
+                    {
+                        if (isProductionMode)
+                        {
+                            // SECURITY: In production the X-MS-CLIENT-PRINCIPAL header is blindly trusted.
+                            // Refuse to start when there is no evidence of an App Service EasyAuth proxy.
+                            throw new DataApiBuilderException(
+                                message: AppServiceAuthenticationInfo.APPSERVICE_PROD_MISSING_ENV_CONFIG,
+                                statusCode: System.Net.HttpStatusCode.ServiceUnavailable,
+                                subStatusCode: DataApiBuilderException.SubStatusCodes.ConfigValidationError);
+                        }
+
+                        _logBuffer.BufferLog(LogLevel.Warning, AppServiceAuthenticationInfo.APPSERVICE_DEV_MISSING_ENV_CONFIG);
+                    }
+                    else if (easyAuthType == EasyAuthType.StaticWebApps && !swaEnvironmentDetected)
+                    {
+                        if (isProductionMode)
+                        {
+                            // SECURITY: In production the X-MS-CLIENT-PRINCIPAL header is blindly trusted.
+                            // Refuse to start when there is no evidence of a Static Web Apps proxy.
+                            throw new DataApiBuilderException(
+                                message: StaticWebAppsAuthentication.SWA_PROD_MISSING_ENV_CONFIG,
+                                statusCode: System.Net.HttpStatusCode.ServiceUnavailable,
+                                subStatusCode: DataApiBuilderException.SubStatusCodes.ConfigValidationError);
+                        }
+
+                        _logBuffer.BufferLog(LogLevel.Warning, StaticWebAppsAuthentication.SWA_DEV_MISSING_ENV_CONFIG);
+                    }
+
+                    string defaultScheme = easyAuthType == EasyAuthType.AppService
+                        ? EasyAuthAuthenticationDefaults.APPSERVICEAUTHSCHEME
+                        : EasyAuthAuthenticationDefaults.SWAAUTHSCHEME;
+
+                    services.AddAuthentication(defaultScheme)
+                            .AddEnvDetectedEasyAuth();
+
+                    _logBuffer.BufferLog(LogLevel.Information, $"Registered EasyAuth scheme: {defaultScheme}");
+
+                }
+                else if (authOptions.IsUnauthenticatedAuthenticationProvider())
+                {
+                    services.AddAuthentication(UnauthenticatedAuthenticationDefaults.AUTHENTICATIONSCHEME)
+                        .AddUnauthenticatedAuthentication();
+                }
+                else if (mode == HostMode.Development && authOptions.IsAuthenticationSimulatorEnabled())
+                {
+                    services.AddAuthentication(SimulatorAuthenticationDefaults.AUTHENTICATIONSCHEME)
+                        .AddSimulatorAuthentication();
+                }
+                else
+                {
+                    // Condition met when Jwt section (audience/authority), EasyAuth types, or Simulator (in development mode)
+                    // values are not used in the authentication section.
+                    throw new DataApiBuilderException(
+                        message: "Authentication configuration not supported.",
+                        statusCode: System.Net.HttpStatusCode.ServiceUnavailable,
+                        subStatusCode: DataApiBuilderException.SubStatusCodes.ConfigValidationError);
+                }
+            }
+            else
+            {
+                // Sets EasyAuth as the default authentication scheme when runtime configuration
+                // is not present.
+                SetAppServiceAuthentication(services);
+            }
+        }
+
+        /// <summary>
+        /// Registers all DAB supported authentication providers (schemes) so that at request time,
+        /// DAB can use the runtime config's defined provider to authenticate requests.
+        /// The function includes JWT specific configuration handling:
+        /// - IOptionsChangeTokenSource{JwtBearerOptions} : Registers a change token source for dynamic config updates which
+        /// is used internally by JwtBearerHandler's OptionsMonitor to listen for changes in JwtBearerOptions.
+        /// - IConfigureOptions{JwtBearerOptions} : Registers named JwtBearerOptions whose "Configure(...)" function is
+        /// called by OptionsFactory internally by .NET to fetch the latest configuration from the RuntimeConfigProvider.
+        /// </summary>
+        /// <seealso cref="https://github.com/dotnet/aspnetcore/issues/49586#issuecomment-1671838595">Guidance for registering IOptionsChangeTokenSource</seealso>
+        /// <seealso cref="https://github.com/dotnet/aspnetcore/issues/21491#issuecomment-624240160">Guidance for registering named options.</seealso>
+        private static void ConfigureAuthenticationV2(IServiceCollection services, RuntimeConfigProvider runtimeConfigProvider)
+        {
+            services.AddSingleton<IOptionsChangeTokenSource<JwtBearerOptions>>(new JwtBearerOptionsChangeTokenSource(runtimeConfigProvider));
+            services.AddSingleton<IConfigureOptions<JwtBearerOptions>, ConfigureJwtBearerOptions>();
+            services.AddAuthentication()
+                    .AddEnvDetectedEasyAuth()
+                    .AddJwtBearer()
+                    .AddSimulatorAuthentication()
+                    .AddUnauthenticatedAuthentication();
+        }
+
+        /// <summary>
+        /// Configure Application Insights Telemetry based on the loaded runtime configuration. If Application Insights
+        /// is enabled, we can track different events and metrics.
+        /// </summary>
+        /// <param name="app">The application builder.</param>
+        /// <param name="runtimeConfig">The provider used to load runtime configuration.</param>
+        /// <seealso cref="https://docs.microsoft.com/en-us/azure/azure-monitor/app/asp-net-core#enable-application-insights-telemetry-collection"/>
+        private void ConfigureApplicationInsightsTelemetry(IApplicationBuilder app, RuntimeConfig runtimeConfig, LogLevelInitializer logLevelInit)
+        {
+            if (runtimeConfig?.Runtime?.Telemetry is not null
+                && runtimeConfig.Runtime.Telemetry.ApplicationInsights is not null)
+            {
+                AppInsightsOptions = runtimeConfig.Runtime.Telemetry.ApplicationInsights;
+
+                if (!AppInsightsOptions.Enabled)
+                {
+                    _logBuffer.BufferLog(LogLevel.Information, "Application Insights are disabled.");
+                    return;
+                }
+
+                if (string.IsNullOrWhiteSpace(AppInsightsOptions.ConnectionString))
+                {
+                    _logBuffer.BufferLog(LogLevel.Warning, "Logs won't be sent to Application Insights because an Application Insights connection string is not available in the runtime config.");
+                    return;
+                }
+
+                TelemetryClient? appTelemetryClient = app.ApplicationServices.GetService<TelemetryClient>();
+
+                if (appTelemetryClient is null)
+                {
+                    _logBuffer.BufferLog(LogLevel.Error, "Telemetry client is not initialized.");
+                    return;
+                }
+
+                // Update the TelemetryConfiguration object
+                TelemetryConfiguration telemetryConfiguration = appTelemetryClient.TelemetryConfiguration;
+                telemetryConfiguration.ConnectionString = AppInsightsOptions.ConnectionString;
+
+                // Update default telemetry channel to custom provided telemetry channel
+                if (CustomTelemetryChannel is not null)
+                {
+                    telemetryConfiguration.TelemetryChannel = CustomTelemetryChannel;
+                }
+
+                // Updating Startup Logger to Log from Startup Class.
+                ILoggerFactory? loggerFactory = CreateLoggerFactoryForHostedAndNonHostedScenario(app.ApplicationServices, logLevelInit);
+                _logger = loggerFactory.CreateLogger<Startup>();
+            }
+        }
+
+        /// <summary>
+        /// Configure Open Telemetry based on the loaded runtime configuration. If Open Telemetry
+        /// is enabled, we can track different events and metrics.
+        /// </summary>
+        /// <param name="runtimeConfigurationProvider">The provider used to load runtime configuration.</param>
+        private void ConfigureOpenTelemetry(IApplicationBuilder app, RuntimeConfig runtimeConfig, LogLevelInitializer logLevelInit)
+        {
+            if (runtimeConfig?.Runtime?.Telemetry is not null
+                && runtimeConfig.Runtime.Telemetry.OpenTelemetry is not null)
+            {
+                OpenTelemetryOptions = runtimeConfig.Runtime.Telemetry.OpenTelemetry;
+
+                if (!OpenTelemetryOptions.Enabled)
+                {
+                    _logBuffer.BufferLog(LogLevel.Information, "Open Telemetry is disabled.");
+                    return;
+                }
+
+                if (string.IsNullOrWhiteSpace(OpenTelemetryOptions?.Endpoint)
+                    || !Uri.TryCreate(OpenTelemetryOptions.Endpoint, UriKind.Absolute, out _))
+                {
+                    _logBuffer.BufferLog(LogLevel.Warning, "Logs won't be sent to Open Telemetry because a valid Open Telemetry endpoint URI is not available in the runtime config.");
+                    return;
+                }
+
+                // Updating Startup Logger to Log from Startup Class.
+                ILoggerFactory? loggerFactory = CreateLoggerFactoryForHostedAndNonHostedScenario(app.ApplicationServices, logLevelInit);
+                _logger = loggerFactory.CreateLogger<Startup>();
+            }
+        }
+
+        /// <summary>
+        /// Configure Azure Log Analytics based on the loaded runtime configuration. If Azure Log Analytics
+        /// is enabled, we can track different events and metrics.
+        /// </summary>
+        /// <param name="runtimeConfigurationProvider">The provider used to load runtime configuration.</param>
+        private void ConfigureAzureLogAnalytics(IApplicationBuilder app, RuntimeConfig runtimeConfig, LogLevelInitializer logLevelInit)
+        {
+            if (runtimeConfig?.Runtime?.Telemetry is not null
+                && runtimeConfig.Runtime.Telemetry.AzureLogAnalytics is not null)
+            {
+                AzureLogAnalyticsOptions = runtimeConfig.Runtime.Telemetry.AzureLogAnalytics;
+
+                if (!AzureLogAnalyticsOptions.Enabled)
+                {
+                    _logBuffer.BufferLog(LogLevel.Information, "Azure Log Analytics is disabled.");
+                    return;
+                }
+
+                bool isAuthIncomplete = false;
+                if (string.IsNullOrEmpty(AzureLogAnalyticsOptions.Auth?.CustomTableName))
+                {
+                    _logBuffer.BufferLog(LogLevel.Error, "Logs won't be sent to Azure Log Analytics because the Custom Table Name is not available in the config file.");
+                    isAuthIncomplete = true;
+                }
+
+                if (string.IsNullOrEmpty(AzureLogAnalyticsOptions.Auth?.DcrImmutableId))
+                {
+                    _logBuffer.BufferLog(LogLevel.Error, "Logs won't be sent to Azure Log Analytics because the DCR Immutable Id is not available in the config file.");
+                    isAuthIncomplete = true;
+                }
+
+                if (string.IsNullOrEmpty(AzureLogAnalyticsOptions.Auth?.DceEndpoint))
+                {
+                    _logBuffer.BufferLog(LogLevel.Error, "Logs won't be sent to Azure Log Analytics because the DCE Endpoint is not available in the config file.");
+                    isAuthIncomplete = true;
+                }
+
+                if (isAuthIncomplete)
+                {
+                    return;
+                }
+
+                // Updating Startup Logger to Log from Startup Class.
+                ILoggerFactory? loggerFactory = CreateLoggerFactoryForHostedAndNonHostedScenario(app.ApplicationServices, logLevelInit);
+                _logger = loggerFactory.CreateLogger<Startup>();
+            }
+        }
+
+        /// <summary>
+        /// Configure File Sink based on the loaded runtime configuration. If File Sink
+        /// is enabled, we can track different events and metrics.
+        /// </summary>
+        /// <param name="app">The application builder.</param>
+        /// <param name="runtimeConfig">The provider used to load runtime configuration.</param>
+        private void ConfigureFileSink(IApplicationBuilder app, RuntimeConfig runtimeConfig, LogLevelInitializer logLevelInit)
+        {
+            if (runtimeConfig?.Runtime?.Telemetry is not null
+               && runtimeConfig.Runtime.Telemetry.File is not null)
+            {
+                FileSinkOptions = runtimeConfig.Runtime.Telemetry.File;
+
+                if (!FileSinkOptions.Enabled)
+                {
+                    _logBuffer.BufferLog(LogLevel.Information, "File is disabled.");
+                    return;
+                }
+
+                if (string.IsNullOrWhiteSpace(FileSinkOptions.Path))
+                {
+                    _logBuffer.BufferLog(LogLevel.Error, "Logs won't be sent to File because the Path is not available in the config file.");
+                    return;
+                }
+
+                Logger? serilogLogger = app.ApplicationServices.GetService<Logger>();
+                if (serilogLogger is null)
+                {
+                    _logBuffer.BufferLog(LogLevel.Error, "Serilog Logger Configuration is not set.");
+                    return;
+                }
+
+                // Updating Startup Logger to Log from Startup Class.
+                ILoggerFactory? loggerFactory = CreateLoggerFactoryForHostedAndNonHostedScenario(app.ApplicationServices, logLevelInit);
+                _logger = loggerFactory.CreateLogger<Startup>();
+            }
+        }
+
+        /// <summary>
+        /// Sets App Service EasyAuth as the authentication scheme for the engine.
+        /// </summary>
+        /// <param name="services">The service collection where authentication services are added.</param>
+        private static void SetAppServiceAuthentication(IServiceCollection services)
+        {
+            services.AddAuthentication(EasyAuthAuthenticationDefaults.APPSERVICEAUTHSCHEME)
+                .AddEnvDetectedEasyAuth();
+        }
+
+        /// <summary>
+        /// Perform these additional steps once the configuration has been bound
+        /// to a particular database type.
+        /// </summary>
+        /// <param name="app"></param>
+        /// <returns>Indicates if the runtime is ready to accept requests.</returns>
+        private async Task<bool> PerformOnConfigChangeAsync(IApplicationBuilder app)
+        {
+            try
+            {
+                RuntimeConfig runtimeConfig =
+                    await RuntimeInitializationHelper.InitializeRuntimeDependenciesAsync(
+                        app.ApplicationServices);
+                RuntimeConfigValidator runtimeConfigValidator = app.ApplicationServices.GetService<RuntimeConfigValidator>()!;
+                IMetadataProviderFactory sqlMetadataProviderFactory =
+                    app.ApplicationServices.GetRequiredService<IMetadataProviderFactory>();
+
+                // Manually trigger DI service instantiation of GraphQLSchemaCreator and RestService
+                // to attempt to reduce chances that the first received client request
+                // triggers instantiation and encounters undesired instantiation latency.
+                // In their constructors, those services consequentially inject
+                // other required services, triggering instantiation. Such recursive nature of DI and
+                // service instantiation results in the activation of all required services.
+                GraphQLSchemaCreator graphQLSchemaCreator =
+                    app.ApplicationServices.GetRequiredService<GraphQLSchemaCreator>();
+
+                RestService restService =
+                    app.ApplicationServices.GetRequiredService<RestService>();
+
+                if (graphQLSchemaCreator is null || restService is null)
+                {
+                    _logger.LogError("Endpoint service initialization failed.");
+                }
+
+                if (runtimeConfig.IsDevelopmentMode())
+                {
+                    // Running only in developer mode to ensure fast and smooth startup in production.
+                    runtimeConfigValidator.ValidateRelationshipConfigCorrectness(runtimeConfig);
+                    runtimeConfigValidator.ValidateRelationships(runtimeConfig, sqlMetadataProviderFactory!);
+                }
+
+                // OpenAPI document creation is only attempted for REST supporting database types.
+                // CosmosDB is not supported for OpenAPI document creation.
+                if (!runtimeConfig.CosmosDataSourceUsed)
+                {
+                    // Attempt to create OpenAPI document.
+                    // Errors must not crash nor halt the intialization of the engine
+                    // because OpenAPI document creation is not required for the engine to operate.
+                    // Errors will be logged.
+                    try
+                    {
+                        IOpenApiDocumentor openApiDocumentor = app.ApplicationServices.GetRequiredService<IOpenApiDocumentor>();
+                        openApiDocumentor.CreateDocument(isHotReloadScenario: false);
+                    }
+                    catch (DataApiBuilderException dabException)
+                    {
+                        _logger.LogWarning(exception: dabException, message: "OpenAPI Documentor initialization failed. This will not affect dab startup.");
+                    }
+                }
+
+                _logger.LogInformation("Successfully completed runtime initialization.");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(exception: ex, message: "Unable to complete runtime initialization. Refer to exception for error details.");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Build a CorsPolicy to be consumed by the useCors function, allowing requests with any methods or headers
+        /// Used both for app startup and testing purposes
+        /// </summary>
+        /// <param name="builder"> The CorsPolicyBuilder that will be used to build the policy </param>
+        /// <param name="corsConfig"> The cors runtime configuration specifying the allowed origins and whether credentials can be included in requests </param>
+        /// <returns> The built cors policy </returns>
+        public static CorsPolicy ConfigureCors(CorsPolicyBuilder builder, CorsOptions corsConfig)
+        {
+            if (corsConfig.AllowCredentials)
+            {
+                return builder
+                    .WithOrigins(corsConfig.Origins)
+                    .AllowAnyMethod()
+                    .AllowAnyHeader()
+                    .SetIsOriginAllowedToAllowWildcardSubdomains()
+                    .AllowCredentials()
+                    .Build();
+            }
+
+            return builder
+                .WithOrigins(corsConfig.Origins)
+                .AllowAnyMethod()
+                .AllowAnyHeader()
+                .SetIsOriginAllowedToAllowWildcardSubdomains()
+                .Build();
+        }
+
+        /// <summary>
+        /// Indicates whether to provide UI visualization of REST(via Swagger) or GraphQL (via Banana CakePop).
+        /// </summary>
+        private static bool IsUIEnabled(RuntimeConfig? runtimeConfig, IWebHostEnvironment env)
+        {
+            return (runtimeConfig is not null && runtimeConfig.IsDevelopmentMode()) || env.IsDevelopment();
+        }
+
+        /// <summary>
+        /// Determines whether a POST /configuration request is authorized by enforcing:
+        /// 1. The request must originate from a loopback address (localhost / 127.0.0.1 / ::1
+        ///    or its IPv4-mapped IPv6 form such as ::ffff:127.0.0.1).
+        /// 2. If the DAB_CONFIG_AUTH_TOKEN environment variable is set, the request must include
+        ///    an X-DAB-CONFIG-AUTH header whose value matches the token (constant-time comparison).
+        /// This prevents unauthenticated network-remote callers from supplying the runtime
+        /// configuration during the late-configured bootstrap window.
+        /// </summary>
+        internal static bool IsConfigurationRequestAuthorized(HttpContext context)
+        {
+            // Defense 1: Restrict to loopback addresses only.
+            // A null RemoteIpAddress indicates an in-process call (e.g. TestServer)
+            // where there is no underlying TCP connection — by definition this cannot
+            // be a remote attacker, so we treat it as loopback-equivalent. A real
+            // network-borne request always carries a TCP source IP.
+            IPAddress? remoteIp = context.Connection.RemoteIpAddress;
+            if (remoteIp is not null)
+            {
+                // Kestrel often listens on dual-stack IPv6, so an IPv4 loopback caller can
+                // arrive as the IPv4-mapped IPv6 form (e.g. ::ffff:127.0.0.1). IPAddress.IsLoopback
+                // does not treat those as loopback, so normalize to IPv4 first.
+                IPAddress effectiveIp = remoteIp.IsIPv4MappedToIPv6 ? remoteIp.MapToIPv4() : remoteIp;
+                if (!IPAddress.IsLoopback(effectiveIp))
+                {
+                    return false;
+                }
+            }
+
+            // Defense 2: If a bootstrap token is configured, require it in the request header.
+            string? expectedToken = Environment.GetEnvironmentVariable(CONFIG_AUTH_TOKEN_ENV_VAR);
+            if (!string.IsNullOrEmpty(expectedToken))
+            {
+                string? providedToken = context.Request.Headers[CONFIG_AUTH_HEADER].FirstOrDefault();
+                if (string.IsNullOrEmpty(providedToken))
+                {
+                    return false;
+                }
+
+                // Use fixed-time comparison to prevent timing attacks.
+                if (!CryptographicOperations.FixedTimeEquals(
+                    Encoding.UTF8.GetBytes(expectedToken),
+                    Encoding.UTF8.GetBytes(providedToken)))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Checks whether On-Behalf-Of (OBO) authentication is configured by verifying that
+        /// the required environment variables are set and the config has user-delegated auth enabled.
+        /// </summary>
+        /// <returns>True if OBO is configured and ready to use; otherwise, false.</returns>
+        private bool IsOboConfigured()
+        {
+            // Check required environment variables first (fast path)
+            string? clientId = Environment.GetEnvironmentVariable(UserDelegatedAuthOptions.DAB_OBO_CLIENT_ID_ENV_VAR);
+            string? tenantId = Environment.GetEnvironmentVariable(UserDelegatedAuthOptions.DAB_OBO_TENANT_ID_ENV_VAR);
+            string? clientSecret = Environment.GetEnvironmentVariable(UserDelegatedAuthOptions.DAB_OBO_CLIENT_SECRET_ENV_VAR);
+
+            if (string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(tenantId) || string.IsNullOrEmpty(clientSecret))
+            {
+                return false;
+            }
+
+            // Check if any data source has user-delegated auth enabled
+            RuntimeConfig? config = _configProvider?.TryGetConfig(out RuntimeConfig? c) == true ? c : null;
+            if (config is null)
+            {
+                return false;
+            }
+
+            foreach (DataSource ds in config.ListAllDataSources())
+            {
+                if (ds.IsUserDelegatedAuthEnabled &&
+                    !string.IsNullOrEmpty(ds.UserDelegatedAuth!.DatabaseAudience))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Adds all of the class namespaces that have loggers that the user is able to change
+        /// </summary>
+        public static void AddValidFilters()
+        {
+            LoggerFilters.AddFilter(typeof(Startup).FullName);
+            LoggerFilters.AddFilter(typeof(RuntimeConfigValidator).FullName);
+            LoggerFilters.AddFilter(typeof(SqlQueryEngine).FullName);
+            LoggerFilters.AddFilter(typeof(IQueryExecutor).FullName);
+            LoggerFilters.AddFilter(typeof(ISqlMetadataProvider).FullName);
+            LoggerFilters.AddFilter(typeof(BasicHealthReportResponseWriter).FullName);
+            LoggerFilters.AddFilter(typeof(ComprehensiveHealthReportResponseWriter).FullName);
+            LoggerFilters.AddFilter(typeof(RestController).FullName);
+            LoggerFilters.AddFilter(typeof(ClientRoleHeaderAuthenticationMiddleware).FullName);
+            LoggerFilters.AddFilter(typeof(ConfigurationController).FullName);
+            LoggerFilters.AddFilter(typeof(IAuthorizationHandler).FullName);
+            LoggerFilters.AddFilter(typeof(IAuthorizationResolver).FullName);
+            LoggerFilters.AddFilter(typeof(FileSystemRuntimeConfigLoader).FullName);
+            LoggerFilters.AddFilter("default");
+        }
+
+        /// <summary>
+        /// Helper function that returns if AzureLogAnalytics feature is enabled and properly configured.
+        /// </summary>
+        public static bool IsAzureLogAnalyticsAvailable(AzureLogAnalyticsOptions azureLogAnalyticsOptions)
+        {
+            return azureLogAnalyticsOptions.Auth is not null
+                && azureLogAnalyticsOptions.Enabled
+                && !string.IsNullOrWhiteSpace(azureLogAnalyticsOptions.Auth.CustomTableName)
+                && !string.IsNullOrWhiteSpace(azureLogAnalyticsOptions.Auth.DcrImmutableId)
+                && !string.IsNullOrWhiteSpace(azureLogAnalyticsOptions.Auth.DceEndpoint);
+        }
+
+        /// <summary>
+        /// Configures a dedicated FusionCache instance for embeddings with optional L2 Azure Managed Redis cache.
+        /// </summary>
+        /// <param name="services">The service collection.</param>
+        /// <param name="embeddingsOptions">The embeddings configuration options.</param>
+        /// <param name="runtimeConfigAvailable">Whether the runtime config is available.</param>
+        private void ConfigureEmbeddingsCache(
+            IServiceCollection services,
+            EmbeddingsOptions embeddingsOptions,
+            bool runtimeConfigAvailable)
+        {
+            if (!embeddingsOptions.IsCachingEnabled)
+            {
+                _logger.LogInformation("Embeddings caching is disabled");
+                return;
+            }
+
+            EmbeddingsCacheOptions cacheOptions = embeddingsOptions.Cache ?? new EmbeddingsCacheOptions();
+            int ttlHours = cacheOptions.EffectiveTtlHours;
+
+            IFusionCacheBuilder embeddingsCacheBuilder = services.AddFusionCache("EmbeddingsCache")
+                .WithOptions(options =>
+                {
+                    options.FactoryErrorsLogLevel = LogLevel.Debug;
+                    options.EventHandlingErrorsLogLevel = LogLevel.Debug;
+                })
+                .WithDefaultEntryOptions(new FusionCacheEntryOptions
+                {
+                    Duration = TimeSpan.FromHours(ttlHours),
+                    ReThrowBackplaneExceptions = false,
+                    ReThrowDistributedCacheExceptions = false,
+                    ReThrowSerializationExceptions = false,
+                });
+
+            _logger.LogInformation(
+                "Embeddings cache configured with TTL: {TtlHours} hours",
+                ttlHours);
+
+            // Configure L2 Redis cache if enabled
+            if (embeddingsOptions.IsLevel2CacheEnabled && runtimeConfigAvailable)
+            {
+                EmbeddingsCacheLevel2Options level2Options = cacheOptions.Level2!;
+
+                if (string.IsNullOrWhiteSpace(level2Options.ConnectionString))
+                {
+                    throw new Exception("Embeddings internal L2 cache requires a valid connection-string.");
+                }
+
+                // Create connection multiplexer for embeddings Azure Managed Redis cache.
+                // The factory is invoked lazily by FusionCache; we wrap it so that any connection
+                // failure (including transient errors after StackExchange.Redis' own ConnectRetry
+                // exhausts) is logged and surfaced as a distributed-cache exception. Because the
+                // embeddings cache is configured with ReThrowDistributedCacheExceptions = false,
+                // FusionCache will transparently fall back to the L1 (in-memory) cache when L2
+                // is unavailable, so a Redis outage does not break embeddings.
+                Task<IConnectionMultiplexer>? connectionMultiplexerTask = null;
+                Func<Task<IConnectionMultiplexer>> connectionFactory = () =>
+                {
+                    // Cache the task so the connection (and any retry sequence) is shared by the
+                    // distributed cache and the backplane.
+                    connectionMultiplexerTask ??= CreateEmbeddingsRedisConnectionAsync(level2Options.ConnectionString);
+                    return connectionMultiplexerTask;
+                };
+
+                embeddingsCacheBuilder
+                    .WithSerializer(new FusionCacheSystemTextJsonSerializer())
+                    .WithDistributedCache(new RedisCache(new RedisCacheOptions
+                    {
+                        ConnectionMultiplexerFactory = connectionFactory
+                    }))
+                    .WithBackplane(new RedisBackplane(new RedisBackplaneOptions
+                    {
+                        ConnectionMultiplexerFactory = connectionFactory
+                    }));
+
+                _logger.LogInformation("Embeddings L2 (internal) cache enabled");
+            }
+            else
+            {
+                _logger.LogInformation("Embeddings using L1 (memory) cache only");
+            }
+        }
+
+        /// <summary>
+        /// Creates a Redis connection for the embeddings L2 cache with retry on transient failure.
+        /// StackExchange.Redis applies its own ConnectRetry per attempt; this wrapper adds a small
+        /// number of additional attempts with exponential backoff to absorb longer transient outages
+        /// (DNS, brief network blips, AAD token acquisition). If all attempts fail the exception is
+        /// re-thrown so FusionCache can mark the distributed cache as unavailable and fall back to L1.
+        /// </summary>
+        private async Task<IConnectionMultiplexer> CreateEmbeddingsRedisConnectionAsync(string connectionString)
+        {
+            return await ConnectWithRetryAsync(
+                () => CreateConnectionMultiplexerAsync(connectionString),
+                maxAttempts: EMBEDDINGS_REDIS_MAX_CONNECT_ATTEMPTS,
+                initialDelay: TimeSpan.FromMilliseconds(EMBEDDINGS_REDIS_INITIAL_RETRY_DELAY_MS),
+                logger: _logger);
+        }
+
+        // Retry knobs for embeddings L2 Redis connection. Exposed as constants so tests can
+        // reference the same values without duplication.
+        internal const int EMBEDDINGS_REDIS_MAX_CONNECT_ATTEMPTS = 3;
+        internal const int EMBEDDINGS_REDIS_INITIAL_RETRY_DELAY_MS = 500;
+
+        /// <summary>
+        /// Invokes <paramref name="connectFactory"/> with retry-on-exception and exponential backoff.
+        /// Logs each failed attempt as a warning (with the originating exception) and, after all
+        /// attempts are exhausted, logs an error and re-throws the last exception so the caller
+        /// (e.g. FusionCache) can mark the distributed cache as unavailable and fall back to L1.
+        /// Exposed as <c>internal static</c> so unit tests can exercise the retry behavior without
+        /// taking a real Redis dependency.
+        /// </summary>
+        /// <param name="connectFactory">Delegate that performs a single connection attempt.</param>
+        /// <param name="maxAttempts">Maximum number of attempts. Must be >= 1.</param>
+        /// <param name="initialDelay">Delay before the second attempt. Doubled for each subsequent attempt.</param>
+        /// <param name="logger">Logger used to record retry diagnostics. May be null.</param>
+        /// <param name="delayAsync">Optional delay function for tests to avoid real waits.</param>
+        internal static async Task<IConnectionMultiplexer> ConnectWithRetryAsync(
+            Func<Task<IConnectionMultiplexer>> connectFactory,
+            int maxAttempts,
+            TimeSpan initialDelay,
+            Microsoft.Extensions.Logging.ILogger? logger,
+            Func<TimeSpan, Task>? delayAsync = null)
+        {
+            if (connectFactory is null)
+            {
+                throw new ArgumentNullException(nameof(connectFactory));
+            }
+
+            if (maxAttempts < 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(maxAttempts), "maxAttempts must be >= 1.");
+            }
+
+            delayAsync ??= Task.Delay;
+            TimeSpan delay = initialDelay;
+            Exception? lastException = null;
+
+            for (int attempt = 1; attempt <= maxAttempts; attempt++)
+            {
+                try
+                {
+                    IConnectionMultiplexer multiplexer = await connectFactory();
+                    if (attempt > 1)
+                    {
+                        logger?.LogInformation(
+                            "Embeddings L2 Redis cache connected on attempt {Attempt}/{MaxAttempts}.",
+                            attempt, maxAttempts);
+                    }
+
+                    return multiplexer;
+                }
+                catch (Exception ex)
+                {
+                    lastException = ex;
+                    logger?.LogWarning(
+                        ex,
+                        "Embeddings L2 Redis cache connection attempt {Attempt}/{MaxAttempts} failed: {Message}",
+                        attempt, maxAttempts, ex.Message);
+
+                    if (attempt < maxAttempts)
+                    {
+                        await delayAsync(delay);
+                        delay = TimeSpan.FromMilliseconds(delay.TotalMilliseconds * 2);
+                    }
+                }
+            }
+
+            logger?.LogError(
+                lastException,
+                "Embeddings L2 Redis cache connection failed after {MaxAttempts} attempts. " +
+                "Falling back to L1 (in-memory) cache only.",
+                maxAttempts);
+
+            // Re-throw so FusionCache treats the distributed cache as unavailable. With
+            // ReThrowDistributedCacheExceptions = false on the embeddings cache entry options,
+            // this fallback is transparent to callers.
+            throw lastException!;
+        }
+
+        /// <summary>
+        /// Helper function that sets the logger for FileSystemRuntimeConfigLoader and flushes the buffered logs to the logger.
+        /// </summary>
+        /// <param name="app">Contains all the services needed to set the logger.</param>
+        private void FlushAllLogs(IApplicationBuilder app)
+        {
+            try
+            {
+                FileSystemRuntimeConfigLoader configLoader = app.ApplicationServices.GetRequiredService<FileSystemRuntimeConfigLoader>();
+                configLoader.SetLogger(app.ApplicationServices.GetRequiredService<ILogger<FileSystemRuntimeConfigLoader>>());
+
+                _logBuffer.FlushToLogger(_logger);
+                configLoader.FlushLogBuffer();
+            }
+            catch (Exception ex)
+            {
+                throw new DataApiBuilderException(
+                    message: ex.Message,
+                    statusCode: System.Net.HttpStatusCode.ServiceUnavailable,
+                    subStatusCode: DataApiBuilderException.SubStatusCodes.ErrorInInitialization);
+            }
+        }
+    }
+}

@@ -1,0 +1,107 @@
+name: northlake-ds-catalog
+description: Create a durable, readable DS_CATALOG_V1 catalog from the supplied
+  Northlake rental-operations inventory.
+version: 1.0.0
+type: capability
+defaults:
+  runs: 1
+  timeout: 60m
+  executor:
+    name: restricted-copilot-sdk
+    config:
+      sessionPolicy:
+        availableTools: []
+        permissions:
+          allow: []
+          deny: []
+  model: ${AGENT_MODEL=MUST-SET-AGENT-MODEL}
+agent_environment:
+  env:
+    DO_NOT_TRACK: "1"
+  skills: []
+  files:
+    - src: ../fixtures/detailed-data-catalog/public
+      dest: task-fixture
+scoring: {}
+stimuli:
+  - name: northlake-ds-catalog
+    constraints:
+      max_agent_duration: 20m
+      max_duration: 60m
+    artifacts:
+      include:
+        - deliverable/**
+    prompt: >
+      Create a durable, customer-readable DS_CATALOG_V1 catalog for the
+      rental-operations data team.
+
+
+      Use only the public task inputs staged under task-fixture:
+
+      - task-fixture/BRIEF.txt for the publisher's need
+
+      - task-fixture/inventory.json as the authoritative inventory facts to
+      preserve
+
+      - task-fixture/profiles/*.json as profile attachments
+
+      - task-fixture/contract/** for the public contract, disclaimer source,
+      validator, and provenance
+
+      - task-fixture/TOOLS.txt for approved installed tools
+
+      - task-fixture/PROVENANCE.json for source provenance
+
+
+      Save the final catalog to deliverable/northlake-ds-catalog.md.
+
+
+      Requirements disclosed to both candidates:
+
+      - Use `engagement: northlake-equipment-rentals` in the DS_CATALOG_V1
+      frontmatter.
+
+      - The catalog must be a valid DS_CATALOG_V1 Markdown artifact whose YAML
+      frontmatter preserves the authoritative entity, relationship,
+      classification, profile_ref, access-confirmed, and uncertainty facts from
+      task-fixture/inventory.json.
+
+      - Preserve composite join-key pairings, relationship confidence, endpoint
+      minimums, stale or missing profile pointers, access gaps, and open
+      questions rather than smoothing them away.
+
+      - Keep column-level profile detail in the profile attachments; do not copy
+      it into the catalog.
+
+      - Include the contract-required human-readable sections, a text
+      relationship table covering every declared relationship, and the canonical
+      Data Science and Engineering Coaching disclaimer footer.
+
+      - You may use the supplied validator and references, but do not modify
+      task-fixture inputs.
+
+      - Do not start other agents or paid model sessions, access external
+      implementations, or inspect enclosing directories or other runs. Use only
+      the staged inputs and approved tools.
+
+
+      Public checks run:
+
+      - node task-fixture/check.mjs deliverable/northlake-ds-catalog.md
+    rubric:
+      - Preserves the authoritative privacy classifications, relationship
+        semantics, profile pointers, access-confirmation state, and uncertainty
+        from the supplied inventory without inventing confirmations or replacing
+        gaps.
+      - Produces a readable catalog whose narrative and relationship table
+        communicate the important access gaps, stale evidence, and valid
+        limitations to a rental-operations data team.
+      - Keeps the catalog durable and contract-faithful by following the
+        required structure, using the canonical disclaimer, and avoiding copied
+        column-level profile detail.
+    graders:
+      - type: completed
+      - type: file-exists
+        name: delivery
+        config:
+          path: deliverable/northlake-ds-catalog.md

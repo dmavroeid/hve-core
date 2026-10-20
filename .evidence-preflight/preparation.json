@@ -1,0 +1,1311 @@
+{
+  "archiveManifestSha256": "e35394a62b73a45acbccd4be6f9a3a4a8ea179c78f851749712b1da519b56a54",
+  "paidExecutionApproved": false,
+  "runtimePolicy": "No grants: useful-task policy and runtime preflight pending",
+  "cases": [
+    {
+      "id": "detailed-data-catalog",
+      "task": "data-catalog",
+      "framing": "detailed",
+      "stimulus": "northlake-ds-catalog",
+      "artifact": "deliverable/northlake-ds-catalog.md",
+      "sourceEval": "evidence/reproducibility/detailed/data-catalog/evals/northlake-ds-catalog.eval.yaml",
+      "promptSha256": "04ae5aa24401d8bc3b6800446a5d71dbe158494371897e235cd9a510e24a0ee0",
+      "originalDefaults": {
+        "runs": 1,
+        "timeout": "60m",
+        "executor": "copilot-sdk",
+        "model": "${AGENT_MODEL=MUST-SET-AGENT-MODEL}",
+        "judge_model": "${JUDGE_MODEL=MUST-SET-JUDGE-MODEL}"
+      },
+      "publicFixture": "fixtures\\detailed-data-catalog\\public",
+      "gradeAssets": "grading\\detailed-data-catalog",
+      "checkerSha256": "9ba23ab7945c018051f189d110a3d9f8845f91dc924fb96909d511ec306fa29e",
+      "executableChecker": {
+        "command": "node",
+        "args": [
+          "task-fixture/check.mjs",
+          "deliverable/northlake-ds-catalog.md"
+        ],
+        "expected_exit_code": 0,
+        "timeout": "3m"
+      },
+      "review": true,
+      "reviewGradersSha256": "2e736fb70d32dcef955db0b2c91496f482b2eb696b1d509c3128a8be602d7c18",
+      "rubricSha256": "861cb61b1cc9c4782fc1fcd1fd01de69105bbafd55dbb69f2a6141a802cdb4c0",
+      "remainingGates": [
+        "Useful-task policy, runtime image, credentials and egress validation",
+        "Actual task checker prerequisites and valid/invalid/error controls",
+        "Actual native saved-record/snapshot binding and output retention"
+      ]
+    },
+    {
+      "id": "detailed-analysis-authoring",
+      "task": "analysis-authoring",
+      "framing": "detailed",
+      "stimulus": "queue-delay-notebook",
+      "artifact": "deliverable/queue-delay-analysis.ipynb",
+      "sourceEval": "evidence/reproducibility/detailed/analysis-authoring/evals/queue-delay-notebook.eval.yaml",
+      "promptSha256": "2fb65337cd28131dde14c743832f9dda692ef93f929b1e15d200cbedd30ced66",
+      "originalDefaults": {
+        "runs": 1,
+        "timeout": "75m",
+        "executor": "copilot-sdk",
+        "model": "${AGENT_MODEL=MUST-SET-AGENT-MODEL}",
+        "judge_model": "${JUDGE_MODEL=MUST-SET-JUDGE-MODEL}"
+      },
+      "publicFixture": "fixtures\\detailed-analysis-authoring\\public",
+      "gradeAssets": "grading\\detailed-analysis-authoring",
+      "checkerSha256": "38e669f1ac09ba61e697271607e60d8ff6d33bd94cb85b6c72d0eeb0fc59209d",
+      "executableChecker": {
+        "command": "node",
+        "args": [
+          "task-fixture/check-notebook.mjs",
+          "deliverable/queue-delay-analysis.ipynb",
+          "deliverable/summary.md"
+        ],
+        "expected_exit_code": 0,
+        "timeout": "6m"
+      },
+      "review": true,
+      "reviewGradersSha256": "5438fc1a42695f0c749128ccb424986097546cef194c3dc4d161fe4ea6e68be4",
+      "rubricSha256": "ce880a8c59ef2f7f1d4ee1060d6464bb3ca703250316bd807509d25f6ae1d1ac",
+      "remainingGates": [
+        "Useful-task policy, runtime image, credentials and egress validation",
+        "Actual task checker prerequisites and valid/invalid/error controls",
+        "Actual native saved-record/snapshot binding and output retention"
+      ]
+    },
+    {
+      "id": "detailed-c4-architecture",
+      "task": "c4-architecture",
+      "framing": "detailed",
+      "stimulus": "dab-c4-architecture-pack",
+      "artifact": "deliverable/architecture-pack.md",
+      "sourceEval": "evidence/reproducibility/detailed/c4-architecture/evals/dab-c4-architecture-pack.eval.yaml",
+      "promptSha256": "c09cde68f8776abc1ab90462f3d1043b43c99a6f52e11115bf75b1df2fa20da0",
+      "originalDefaults": {
+        "runs": 1,
+        "timeout": "60m",
+        "executor": "copilot-sdk",
+        "model": "${AGENT_MODEL=MUST-SET-AGENT-MODEL}",
+        "judge_model": "${JUDGE_MODEL=MUST-SET-JUDGE-MODEL}"
+      },
+      "publicFixture": "fixtures\\detailed-c4-architecture\\public",
+      "gradeAssets": "grading\\detailed-c4-architecture",
+      "checkerSha256": "4cc12230463b5ff729b60ce1927266dd0c386a1dd3e969c350a99815e1d08804",
+      "executableChecker": {
+        "command": "node",
+        "args": [
+          "task-fixture/check.mjs",
+          "deliverable/architecture-pack.md"
+        ],
+        "expected_exit_code": 0,
+        "timeout": "5m"
+      },
+      "review": true,
+      "reviewGradersSha256": "d0e40e5ef203853c0bb25972edf0c0648d2f429d2f5528cbd59c27e4188290a9",
+      "rubricSha256": "de4bed3ab237ed93330b41bd65176743ddb20c5b3731684aed7dcb62e219a699",
+      "remainingGates": [
+        "Useful-task policy, runtime image, credentials and egress validation",
+        "Actual task checker prerequisites and valid/invalid/error controls",
+        "Renderer failures remain operationally unmeasured until classified",
+        "Actual native saved-record/snapshot binding and output retention"
+      ]
+    },
+    {
+      "id": "detailed-p-map",
+      "task": "p-map",
+      "framing": "detailed",
+      "stimulus": "ordered-concurrent-map",
+      "artifact": "deliverable/ordered-concurrent-map.mjs",
+      "sourceEval": "evidence/reproducibility/detailed/p-map/evals/ordered-concurrent-map.eval.yaml",
+      "promptSha256": "8f617afc976e6e4d93d9552fba9fad0a16c5abd7fe5cbcccf3c3705d75084c10",
+      "originalDefaults": {
+        "runs": 1,
+        "timeout": "45m",
+        "executor": "copilot-sdk",
+        "model": "${AGENT_MODEL=MUST-SET-AGENT-MODEL}"
+      },
+      "publicFixture": "fixtures\\detailed-p-map\\public",
+      "gradeAssets": "grading\\detailed-p-map",
+      "checkerSha256": "ffa10221672b62609c5283773f09751eb0e6067a887a6cde3cda7f07a59e7b2f",
+      "executableChecker": {
+        "command": "node",
+        "args": [
+          "task-fixture/check.mjs"
+        ],
+        "expected_exit_code": 0,
+        "timeout": "3m"
+      },
+      "review": false,
+      "reviewGradersSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "rubricSha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "remainingGates": [
+        "Useful-task policy, runtime image, credentials and egress validation",
+        "Actual task checker prerequisites and valid/invalid/error controls",
+        "Actual native saved-record/snapshot binding and output retention"
+      ]
+    },
+    {
+      "id": "generic-data-catalog",
+      "task": "data-catalog",
+      "framing": "generic",
+      "stimulus": "northlake-catalog",
+      "artifact": "deliverable/northlake-ds-catalog.md",
+      "sourceEval": "evidence/reproducibility/generic/data-catalog/evals/northlake-catalog.concise.execution.eval.yaml",
+      "promptSha256": "aec4ccecf4828a31ebc29b4528a4d983628ba955dc61a6f77ed2b628099fe4b5",
+      "originalDefaults": {
+        "runs": 1,
+        "timeout": "60m",
+        "executor": "copilot-sdk",
+        "model": "${AGENT_MODEL=MUST-SET-AGENT-MODEL}",
+        "judge_model": "${JUDGE_MODEL=MUST-SET-JUDGE-MODEL}"
+      },
+      "publicFixture": "fixtures\\generic-data-catalog\\public",
+      "gradeAssets": "grading\\generic-data-catalog",
+      "review": true,
+      "reviewGradersSha256": "42a2a5dbf54981113753b58168831721ebcd9a1cb1419d5d7f531340b61301b0",
+      "rubricSha256": "b9665e51d173d2f4136bd613ca83dab8b7b8e442523144c6f8ba4b67790e3080",
+      "remainingGates": [
+        "Useful-task policy, runtime image, credentials and egress validation",
+        "Actual task checker prerequisites and valid/invalid/error controls",
+        "Actual native saved-record/snapshot binding and output retention"
+      ]
+    },
+    {
+      "id": "generic-analysis-authoring",
+      "task": "analysis-authoring",
+      "framing": "generic",
+      "stimulus": "queue-delay-notebook",
+      "artifact": "deliverable/queue-delay-analysis.ipynb",
+      "sourceEval": "evidence/reproducibility/generic/analysis-authoring/evals/queue-delay-notebook.execution.eval.yaml",
+      "promptSha256": "45b44122a48b4a03dc61097cbc1141527a6a585b4abec287d5b2680ea7aa76f9",
+      "originalDefaults": {
+        "runs": 1,
+        "timeout": "75m",
+        "executor": "copilot-sdk",
+        "model": "${AGENT_MODEL=MUST-SET-AGENT-MODEL}",
+        "judge_model": "${JUDGE_MODEL=MUST-SET-JUDGE-MODEL}"
+      },
+      "publicFixture": "fixtures\\generic-analysis-authoring\\public",
+      "gradeAssets": "grading\\generic-analysis-authoring",
+      "checkerSha256": "38e669f1ac09ba61e697271607e60d8ff6d33bd94cb85b6c72d0eeb0fc59209d",
+      "executableChecker": {
+        "command": "node",
+        "args": [
+          "task-fixture/check-notebook.mjs",
+          "deliverable/queue-delay-analysis.ipynb",
+          "deliverable/summary.md"
+        ],
+        "expected_exit_code": 0,
+        "timeout": "6m"
+      },
+      "review": true,
+      "reviewGradersSha256": "5438fc1a42695f0c749128ccb424986097546cef194c3dc4d161fe4ea6e68be4",
+      "rubricSha256": "2251f1c89ad2d8666932da4e5e6adc99e38a5a1604eca6a00034576a53c0e3c1",
+      "remainingGates": [
+        "Useful-task policy, runtime image, credentials and egress validation",
+        "Actual task checker prerequisites and valid/invalid/error controls",
+        "Actual native saved-record/snapshot binding and output retention"
+      ]
+    },
+    {
+      "id": "generic-c4-architecture",
+      "task": "c4-architecture",
+      "framing": "generic",
+      "stimulus": "dab-c4-architecture-pack",
+      "artifact": "deliverable/architecture-pack.md",
+      "sourceEval": "evidence/reproducibility/generic/c4-architecture/evals/dab-c4-architecture-pack.execution.eval.yaml",
+      "promptSha256": "31b0fb5185f3a103d3acb2a4f8b4ec568bb3f37d0b15383c48ba83db9015990d",
+      "originalDefaults": {
+        "runs": 1,
+        "timeout": "60m",
+        "executor": "copilot-sdk",
+        "model": "${AGENT_MODEL=MUST-SET-AGENT-MODEL}",
+        "judge_model": "${JUDGE_MODEL=MUST-SET-JUDGE-MODEL}"
+      },
+      "publicFixture": "fixtures\\generic-c4-architecture\\public",
+      "gradeAssets": "grading\\generic-c4-architecture",
+      "checkerSha256": "4cc12230463b5ff729b60ce1927266dd0c386a1dd3e969c350a99815e1d08804",
+      "executableChecker": {
+        "command": "node",
+        "args": [
+          "task-fixture/check.mjs",
+          "deliverable/architecture-pack.md"
+        ],
+        "expected_exit_code": 0,
+        "timeout": "5m"
+      },
+      "review": true,
+      "reviewGradersSha256": "d0e40e5ef203853c0bb25972edf0c0648d2f429d2f5528cbd59c27e4188290a9",
+      "rubricSha256": "de4bed3ab237ed93330b41bd65176743ddb20c5b3731684aed7dcb62e219a699",
+      "remainingGates": [
+        "Useful-task policy, runtime image, credentials and egress validation",
+        "Actual task checker prerequisites and valid/invalid/error controls",
+        "Renderer failures remain operationally unmeasured until classified",
+        "Actual native saved-record/snapshot binding and output retention"
+      ]
+    },
+    {
+      "id": "generic-p-map",
+      "task": "p-map",
+      "framing": "generic",
+      "stimulus": "ordered-concurrent-map",
+      "artifact": "deliverable/ordered-concurrent-map.mjs",
+      "sourceEval": "evidence/reproducibility/generic/p-map/evals/ordered-concurrent-map.execution.eval.yaml",
+      "promptSha256": "7e18aea1c859a88bc00c215a6a0e121c79570dd9004693b378225c99be26d652",
+      "originalDefaults": {
+        "runs": 1,
+        "timeout": "45m",
+        "executor": "copilot-sdk",
+        "model": "${AGENT_MODEL=MUST-SET-AGENT-MODEL}"
+      },
+      "publicFixture": "fixtures\\generic-p-map\\public",
+      "gradeAssets": "grading\\generic-p-map",
+      "checkerSha256": "ffa10221672b62609c5283773f09751eb0e6067a887a6cde3cda7f07a59e7b2f",
+      "executableChecker": {
+        "command": "node",
+        "args": [
+          "task-fixture/check.mjs"
+        ],
+        "expected_exit_code": 0,
+        "timeout": "3m"
+      },
+      "review": false,
+      "reviewGradersSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "rubricSha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "remainingGates": [
+        "Useful-task policy, runtime image, credentials and egress validation",
+        "Actual task checker prerequisites and valid/invalid/error controls",
+        "Actual native saved-record/snapshot binding and output retention"
+      ]
+    }
+  ],
+  "preservedFiles": [
+    {
+      "path": "fixtures/detailed-data-catalog/public/BRIEF.txt",
+      "sha256": "0ea6de44ff9516e3a6634d133745be5debefa467e7fd2eb6faec6bc52966276a"
+    },
+    {
+      "path": "fixtures/detailed-data-catalog/public/check.mjs",
+      "sha256": "85f8ad6b91d892756e32d7cbf96dcdabae122f137240180f8be1cb6d19682a2b"
+    },
+    {
+      "path": "fixtures/detailed-data-catalog/public/contract/assets/ds-catalog-v1.schema.json",
+      "sha256": "a95f92da02abf0d8b18df3502220b4d20f73b95a4d0ef5997ab5519a1ebaaae2"
+    },
+    {
+      "path": "fixtures/detailed-data-catalog/public/contract/disclaimer-language.instructions.md",
+      "sha256": "c100a5d70086e6efc36956cb2e51c806868eda5650a7c0c94cfb5a53ec49e2fa"
+    },
+    {
+      "path": "fixtures/detailed-data-catalog/public/contract/references/catalog-contract.md",
+      "sha256": "e666ad87f0a43af5d99724cce9c303cf7fd247327ed9002f10e74e18bce349c7"
+    },
+    {
+      "path": "fixtures/detailed-data-catalog/public/contract/references/dcat-crosswalk.md",
+      "sha256": "60c88092ecd21e4c16f83fde6d249b307dd95ff1a4487ef7efdb9f9a62eee84a"
+    },
+    {
+      "path": "fixtures/detailed-data-catalog/public/contract/references/provenance.md",
+      "sha256": "2d65634c0ce342f75acd46b16382d5477093a34a143c45c911de0da16dbde34b"
+    },
+    {
+      "path": "fixtures/detailed-data-catalog/public/contract/scripts/validate_catalog.py",
+      "sha256": "255ebcd4b01a426452af68df8358f96d7af82b7aa58fa907801fb2ed83f54e47"
+    },
+    {
+      "path": "fixtures/detailed-data-catalog/public/inventory.json",
+      "sha256": "d5e28dc59aa3e51300fdaa0a2ad4b2e47d0b7221175463d2fc82a602fe7891c2"
+    },
+    {
+      "path": "fixtures/detailed-data-catalog/public/profiles/asset.json",
+      "sha256": "835686b404782c59c9f5cffd9abb0ff4cf48757a340dbb373c64253fdff3fdba"
+    },
+    {
+      "path": "fixtures/detailed-data-catalog/public/profiles/reservation.json",
+      "sha256": "b2534d16b638f95438107aadd9337bb21ae7a5b9655417badc0046b98b9f3c40"
+    },
+    {
+      "path": "fixtures/detailed-data-catalog/public/PROVENANCE.json",
+      "sha256": "bf0eaceda413ebbf3b3459c412c60047a1659de761067e48aa9c3bf93e0a29c0"
+    },
+    {
+      "path": "fixtures/detailed-data-catalog/public/TOOLS.txt",
+      "sha256": "14723aa2842d84d41ee5a2a45b23b636dd376173f2d1d2a25e2a3f3be3013d6a"
+    },
+    {
+      "path": "skills/detailed-data-catalog/data-catalog/assets/ds-catalog-v1.schema.json",
+      "sha256": "a95f92da02abf0d8b18df3502220b4d20f73b95a4d0ef5997ab5519a1ebaaae2"
+    },
+    {
+      "path": "skills/detailed-data-catalog/data-catalog/examples/northwind-catalog.md",
+      "sha256": "7ee852675acc38cc194bbcbcbef7e650cbde2f8c40257fe21217df06e1f03218"
+    },
+    {
+      "path": "skills/detailed-data-catalog/data-catalog/pyproject.toml",
+      "sha256": "ec4f3ffdec68824f17899c9d1d4ce607cb80bd3c236337c792cb72ba91157c62"
+    },
+    {
+      "path": "skills/detailed-data-catalog/data-catalog/references/catalog-contract.md",
+      "sha256": "e666ad87f0a43af5d99724cce9c303cf7fd247327ed9002f10e74e18bce349c7"
+    },
+    {
+      "path": "skills/detailed-data-catalog/data-catalog/references/dcat-crosswalk.md",
+      "sha256": "60c88092ecd21e4c16f83fde6d249b307dd95ff1a4487ef7efdb9f9a62eee84a"
+    },
+    {
+      "path": "skills/detailed-data-catalog/data-catalog/references/provenance.md",
+      "sha256": "2d65634c0ce342f75acd46b16382d5477093a34a143c45c911de0da16dbde34b"
+    },
+    {
+      "path": "skills/detailed-data-catalog/data-catalog/scripts/validate_catalog.py",
+      "sha256": "255ebcd4b01a426452af68df8358f96d7af82b7aa58fa907801fb2ed83f54e47"
+    },
+    {
+      "path": "skills/detailed-data-catalog/data-catalog/SKILL.md",
+      "sha256": "e687c3f6c8caabb7e64b8686b9d1528aa37b1453c85fddf46c33cdeec52406d5"
+    },
+    {
+      "path": "skills/detailed-data-catalog/data-catalog/templates/ds-catalog-v1.md",
+      "sha256": "4028b0cb4db4474f5b4def78cc5692ed1934ea96c72c35d0959fa7ada09f1925"
+    },
+    {
+      "path": "skills/detailed-data-catalog/data-catalog/tests/corpus/0_valid_frontmatter",
+      "sha256": "83d256638412b3b7afa747a1b6a8125a2e9e94bf855068e33ad7f07bdc5ba0a5"
+    },
+    {
+      "path": "skills/detailed-data-catalog/data-catalog/tests/corpus/1_empty_frontmatter",
+      "sha256": "16dfbc309d687ae53a0ce8841d0151805cdb95d0e349d3717be18a29885b7f81"
+    },
+    {
+      "path": "skills/detailed-data-catalog/data-catalog/tests/corpus/2_unclosed_sequence",
+      "sha256": "4c8b50e2b18502ccc00958d1f6d91671afc8ad44bc2f1f904d0d7f261d9a797d"
+    },
+    {
+      "path": "skills/detailed-data-catalog/data-catalog/tests/corpus/3_duplicate_key",
+      "sha256": "05c9e2a2a4d9412065cd5ef6d0fb78363017737721143f93523e1a12f4c92d60"
+    },
+    {
+      "path": "skills/detailed-data-catalog/data-catalog/tests/corpus/4_no_frontmatter",
+      "sha256": "3613de6807f0ad8d52747aec56cd3e77714d6213245d14a1ff1f9b070a0c42e2"
+    },
+    {
+      "path": "skills/detailed-data-catalog/data-catalog/tests/corpus/README.md",
+      "sha256": "2ceaaf65c51580a695e399b63f4ca6dda0cd77b3bc2c8857bf332919c6d67ca3"
+    },
+    {
+      "path": "skills/detailed-data-catalog/data-catalog/tests/fuzz_harness.py",
+      "sha256": "086b7bbbe35f079830c59fa3c2f1803c0b23d076738a3c3957d90dec6406f793"
+    },
+    {
+      "path": "skills/detailed-data-catalog/data-catalog/tests/test_validate_catalog.py",
+      "sha256": "66ce9f97c32accf6813f0b3c0d5d18f69a2527b092dae21f7a7341e17711b05e"
+    },
+    {
+      "path": "skills/detailed-data-catalog/data-catalog/uv.lock",
+      "sha256": "1b5da4cb4a5379d9e4e78d35991b3ea1592273e7db5032046031c9abe22e38cc"
+    },
+    {
+      "path": "grading/detailed-data-catalog/task-fixture/BRIEF.txt",
+      "sha256": "0ea6de44ff9516e3a6634d133745be5debefa467e7fd2eb6faec6bc52966276a"
+    },
+    {
+      "path": "grading/detailed-data-catalog/task-fixture/check.mjs",
+      "sha256": "85f8ad6b91d892756e32d7cbf96dcdabae122f137240180f8be1cb6d19682a2b"
+    },
+    {
+      "path": "grading/detailed-data-catalog/task-fixture/contract/assets/ds-catalog-v1.schema.json",
+      "sha256": "a95f92da02abf0d8b18df3502220b4d20f73b95a4d0ef5997ab5519a1ebaaae2"
+    },
+    {
+      "path": "grading/detailed-data-catalog/task-fixture/contract/disclaimer-language.instructions.md",
+      "sha256": "c100a5d70086e6efc36956cb2e51c806868eda5650a7c0c94cfb5a53ec49e2fa"
+    },
+    {
+      "path": "grading/detailed-data-catalog/task-fixture/contract/references/catalog-contract.md",
+      "sha256": "e666ad87f0a43af5d99724cce9c303cf7fd247327ed9002f10e74e18bce349c7"
+    },
+    {
+      "path": "grading/detailed-data-catalog/task-fixture/contract/references/dcat-crosswalk.md",
+      "sha256": "60c88092ecd21e4c16f83fde6d249b307dd95ff1a4487ef7efdb9f9a62eee84a"
+    },
+    {
+      "path": "grading/detailed-data-catalog/task-fixture/contract/references/provenance.md",
+      "sha256": "2d65634c0ce342f75acd46b16382d5477093a34a143c45c911de0da16dbde34b"
+    },
+    {
+      "path": "grading/detailed-data-catalog/task-fixture/contract/scripts/validate_catalog.py",
+      "sha256": "255ebcd4b01a426452af68df8358f96d7af82b7aa58fa907801fb2ed83f54e47"
+    },
+    {
+      "path": "grading/detailed-data-catalog/task-fixture/inventory.json",
+      "sha256": "d5e28dc59aa3e51300fdaa0a2ad4b2e47d0b7221175463d2fc82a602fe7891c2"
+    },
+    {
+      "path": "grading/detailed-data-catalog/task-fixture/profiles/asset.json",
+      "sha256": "835686b404782c59c9f5cffd9abb0ff4cf48757a340dbb373c64253fdff3fdba"
+    },
+    {
+      "path": "grading/detailed-data-catalog/task-fixture/profiles/reservation.json",
+      "sha256": "b2534d16b638f95438107aadd9337bb21ae7a5b9655417badc0046b98b9f3c40"
+    },
+    {
+      "path": "grading/detailed-data-catalog/task-fixture/PROVENANCE.json",
+      "sha256": "bf0eaceda413ebbf3b3459c412c60047a1659de761067e48aa9c3bf93e0a29c0"
+    },
+    {
+      "path": "grading/detailed-data-catalog/task-fixture/TOOLS.txt",
+      "sha256": "14723aa2842d84d41ee5a2a45b23b636dd376173f2d1d2a25e2a3f3be3013d6a"
+    },
+    {
+      "path": "fixtures/detailed-analysis-authoring/public/BRIEF.txt",
+      "sha256": "31dda5fa896951c5e88f28ff881af9bca84be79ce748e28dc923a1e56b1040e3"
+    },
+    {
+      "path": "fixtures/detailed-analysis-authoring/public/check-notebook.mjs",
+      "sha256": "7b85fc39e4e878a642950eb3363c688742de57ec43d46f41b063e8e5dab4411f"
+    },
+    {
+      "path": "fixtures/detailed-analysis-authoring/public/checker-lib.mjs",
+      "sha256": "45a0f87682f2a304e7c0b96673a9c9bec9c255564dde6f6d417ef212d54c492b"
+    },
+    {
+      "path": "fixtures/detailed-analysis-authoring/public/execute-notebook.py",
+      "sha256": "1dba082d5cf5e34f0e65f29f369981921879d1f90f040bc634fe142d049bb187"
+    },
+    {
+      "path": "fixtures/detailed-analysis-authoring/public/profile.json",
+      "sha256": "d13334e6909d15aa8f98be350fc98b192617d4e314bf7cd4c2d956e7fe8583e3"
+    },
+    {
+      "path": "fixtures/detailed-analysis-authoring/public/PROVENANCE.json",
+      "sha256": "227b14d7c122d83c84eea11bc9e7db0fd549f1ae2e3794634db73e9585794b36"
+    },
+    {
+      "path": "fixtures/detailed-analysis-authoring/public/sessions.csv",
+      "sha256": "30336adf063606819b564b6aaadfd7313682555e257c54c621e2cfede8dcd426"
+    },
+    {
+      "path": "fixtures/detailed-analysis-authoring/public/TOOLS.txt",
+      "sha256": "3366cf9461fce93a24ca47cf0ad8b2ccfe224fb073c2d32f77c516af2ed34c55"
+    },
+    {
+      "path": "skills/detailed-analysis-authoring/analysis-authoring/references/dashboard-authoring-and-validation.md",
+      "sha256": "a32be32dd4994ff5fca546ceeb4f0f2464caab301ea1d11233966347d0951a5c"
+    },
+    {
+      "path": "skills/detailed-analysis-authoring/analysis-authoring/references/eda-notebook-authoring.md",
+      "sha256": "bbc92e15f11978d210d1932c097e013271b5627b0af956ebb7c7903d69826bb3"
+    },
+    {
+      "path": "skills/detailed-analysis-authoring/analysis-authoring/SKILL.md",
+      "sha256": "c3eb8a71998f77248472c8e0accb9b420de612b0c7e91a199207a6a60c82abfd"
+    },
+    {
+      "path": "grading/detailed-analysis-authoring/task-fixture/BRIEF.txt",
+      "sha256": "31dda5fa896951c5e88f28ff881af9bca84be79ce748e28dc923a1e56b1040e3"
+    },
+    {
+      "path": "grading/detailed-analysis-authoring/task-fixture/check-notebook.mjs",
+      "sha256": "7b85fc39e4e878a642950eb3363c688742de57ec43d46f41b063e8e5dab4411f"
+    },
+    {
+      "path": "grading/detailed-analysis-authoring/task-fixture/checker-lib.mjs",
+      "sha256": "45a0f87682f2a304e7c0b96673a9c9bec9c255564dde6f6d417ef212d54c492b"
+    },
+    {
+      "path": "grading/detailed-analysis-authoring/task-fixture/execute-notebook.py",
+      "sha256": "1dba082d5cf5e34f0e65f29f369981921879d1f90f040bc634fe142d049bb187"
+    },
+    {
+      "path": "grading/detailed-analysis-authoring/task-fixture/profile.json",
+      "sha256": "d13334e6909d15aa8f98be350fc98b192617d4e314bf7cd4c2d956e7fe8583e3"
+    },
+    {
+      "path": "grading/detailed-analysis-authoring/task-fixture/PROVENANCE.json",
+      "sha256": "227b14d7c122d83c84eea11bc9e7db0fd549f1ae2e3794634db73e9585794b36"
+    },
+    {
+      "path": "grading/detailed-analysis-authoring/task-fixture/sessions.csv",
+      "sha256": "30336adf063606819b564b6aaadfd7313682555e257c54c621e2cfede8dcd426"
+    },
+    {
+      "path": "grading/detailed-analysis-authoring/task-fixture/TOOLS.txt",
+      "sha256": "3366cf9461fce93a24ca47cf0ad8b2ccfe224fb073c2d32f77c516af2ed34c55"
+    },
+    {
+      "path": "fixtures/detailed-c4-architecture/public/bundle-provenance.json",
+      "sha256": "1fee6f1ccf76d4095b5fd6b8e6ef078a8c706bd7cafdd49ba7bf08ce9d0feecd"
+    },
+    {
+      "path": "fixtures/detailed-c4-architecture/public/check.mjs",
+      "sha256": "31b1f3b8b08f92fe0ebd59e5b67aeb9a82c45e46c7b7f356759929de1237120c"
+    },
+    {
+      "path": "fixtures/detailed-c4-architecture/public/source/docker/docker-compose-mssql.yml",
+      "sha256": "82535690a451c4458297e990d3139f427df47492911ef284428921462042e671"
+    },
+    {
+      "path": "fixtures/detailed-c4-architecture/public/source/Dockerfile",
+      "sha256": "9e96a4b4b279c2c4411684ffd3959706f8ef023e563450b7f072caf1b735bf64"
+    },
+    {
+      "path": "fixtures/detailed-c4-architecture/public/source/README.md",
+      "sha256": "8ad74bade953769cff9160c58a5b020ea393da40eefd05ed3adeb5cbcd555151"
+    },
+    {
+      "path": "fixtures/detailed-c4-architecture/public/source/src/Auth/Azure.DataApiBuilder.Auth.csproj",
+      "sha256": "c9208aa653648116adfae59810575997381216e91db8dfef7b6c647146b48840"
+    },
+    {
+      "path": "fixtures/detailed-c4-architecture/public/source/src/Cli/Cli.csproj",
+      "sha256": "1f4e78c6a5ead0e5be6917cdca7140182c5bbe1d8b0a9cea1f0afd9a0168e8ea"
+    },
+    {
+      "path": "fixtures/detailed-c4-architecture/public/source/src/Cli/Commands/StartOptions.cs",
+      "sha256": "b552148c2a58e5ead522a38a1eb72fbc58cc33f009e921c008978481396dbcca"
+    },
+    {
+      "path": "fixtures/detailed-c4-architecture/public/source/src/Cli/ConfigGenerator.cs",
+      "sha256": "6f7650183ca944f81ae16d1f036cb35ab4514e0f6839a300cb513d2142645ef0"
+    },
+    {
+      "path": "fixtures/detailed-c4-architecture/public/source/src/Cli/Program.cs",
+      "sha256": "771d14604fecf99275e5ab9a378c15fe8e34fe7a968a7121807823a4efb72323"
+    },
+    {
+      "path": "fixtures/detailed-c4-architecture/public/source/src/Config/Azure.DataApiBuilder.Config.csproj",
+      "sha256": "1667363ad7721dbce70e51783990118ddc38915f764f09ae4d59aaa0fedaa51f"
+    },
+    {
+      "path": "fixtures/detailed-c4-architecture/public/source/src/Config/FileSystemRuntimeConfigLoader.cs",
+      "sha256": "0cc38244e2603592f9fa199a37beb6734e4815c38bffd805ac1f099da937cb38"
+    },
+    {
+      "path": "fixtures/detailed-c4-architecture/public/source/src/Config/ObjectModel/AuthenticationOptions.cs",
+      "sha256": "8fc83d948d12a92150e6914664ee1b4277423886880894aac664356adbf7fa09"
+    },
+    {
+      "path": "fixtures/detailed-c4-architecture/public/source/src/Config/ObjectModel/RuntimeConfig.cs",
+      "sha256": "580d900ff7c516751d8f5f543d25851929fe42fc5efe77cd978894dd7c700182"
+    },
+    {
+      "path": "fixtures/detailed-c4-architecture/public/source/src/Config/RuntimeConfigLoader.cs",
+      "sha256": "b57992e4555161a140510abea727fb3e8bbbe5eac5e13e225e3ddae93f6cf134"
+    },
+    {
+      "path": "fixtures/detailed-c4-architecture/public/source/src/Core/Authorization/RestAuthorizationHandler.cs",
+      "sha256": "a97886549519718f83a77c3d9cae817356a0bc74172d4ccddeafea3da0e86200"
+    },
+    {
+      "path": "fixtures/detailed-c4-architecture/public/source/src/Core/Azure.DataApiBuilder.Core.csproj",
+      "sha256": "6516f2e94c12fba372d80ff3f3b58da29fe950a1a892ac8202309d0d932e8443"
+    },
+    {
+      "path": "fixtures/detailed-c4-architecture/public/source/src/Core/Resolvers/MsSqlQueryExecutor.cs",
+      "sha256": "387df3417951661a25081e7a4e4acd9d3bd23842ad4a745d9e5fe5e196252577"
+    },
+    {
+      "path": "fixtures/detailed-c4-architecture/public/source/src/Core/Resolvers/QueryExecutor.cs",
+      "sha256": "088d6de422e82dbca57a867338bea1e4bf7aef662965fb9360bfebae2b9c5d11"
+    },
+    {
+      "path": "fixtures/detailed-c4-architecture/public/source/src/Core/Resolvers/SqlQueryEngine.cs",
+      "sha256": "f07ad40796a7fb384fb5c1c2247cfcf6fafc8eec6b81b51c145d7410f0f292d0"
+    },
+    {
+      "path": "fixtures/detailed-c4-architecture/public/source/src/Core/Services/RestService.cs",
+      "sha256": "0dc66e1fafe8d220a8cf5070ecb1dbe3ea4194681dde577de81a31782bbcd890"
+    },
+    {
+      "path": "fixtures/detailed-c4-architecture/public/source/src/Service/appsettings.json",
+      "sha256": "7721c843a353781c27ac28dd5917a67292db652780c0173b14ad5e89c16cf412"
+    },
+    {
+      "path": "fixtures/detailed-c4-architecture/public/source/src/Service/Azure.DataApiBuilder.Service.csproj",
+      "sha256": "0c414eeb272cc072ec318ba41349caeb275e30031671f541243bd9ee20664e90"
+    },
+    {
+      "path": "fixtures/detailed-c4-architecture/public/source/src/Service/Controllers/RestController.cs",
+      "sha256": "971cccaf93783bdb7ed989696bb923d1b0b3390199706c6ee86954eed9b9fa37"
+    },
+    {
+      "path": "fixtures/detailed-c4-architecture/public/source/src/Service/dab-config.json",
+      "sha256": "e3edfa4b5ae5f87c119ea3f781bb1ef321759596c4f6d12c74ff098f6e84c1ec"
+    },
+    {
+      "path": "fixtures/detailed-c4-architecture/public/source/src/Service/Program.cs",
+      "sha256": "685beab3dc92f6f14a6674b29015d66b2a653f04d4dc23bade514859ee45d52a"
+    },
+    {
+      "path": "fixtures/detailed-c4-architecture/public/source/src/Service/Startup.cs",
+      "sha256": "25129ab7e6788551cc1b034e5d07920d3052a90702c3fecc6ecbc72dbf266ee5"
+    },
+    {
+      "path": "fixtures/detailed-c4-architecture/public/source/src/Service/Utilities/RuntimeInitializationHelper.cs",
+      "sha256": "9b86197f49ca6a5e18a39e35d2d21428e3363e573c199a16ff1f9939a302fdb5"
+    },
+    {
+      "path": "fixtures/detailed-c4-architecture/public/source-provenance.json",
+      "sha256": "e10c90958c9b84ae9d19e3a51893c32cce3b89ffefc81a7675fd2a0f73b4f460"
+    },
+    {
+      "path": "fixtures/detailed-c4-architecture/public/TOOLS.txt",
+      "sha256": "b2f9e279afe51000a9281410e776e61c349ee5afc058124b069d2e125db3d205"
+    },
+    {
+      "path": "skills/detailed-c4-architecture/c4-architecture/references/c4-modelling-instructions.md",
+      "sha256": "0558b1d0fc5c0042f92b6e05d054aeb928862e63bf7768a3cf7970887f308a99"
+    },
+    {
+      "path": "skills/detailed-c4-architecture/c4-architecture/references/renderer-mermaid.md",
+      "sha256": "c156f853cd150dcc6c8324ccc16a08e8fab81ccd91b2a362e0dfef29ec0c5a88"
+    },
+    {
+      "path": "skills/detailed-c4-architecture/c4-architecture/SKILL.md",
+      "sha256": "e3151740ef0ea4b9e58312098a4820d855b251d44d15741e9fb5b06de82d7cb8"
+    },
+    {
+      "path": "grading/detailed-c4-architecture/task-fixture/bundle-provenance.json",
+      "sha256": "1fee6f1ccf76d4095b5fd6b8e6ef078a8c706bd7cafdd49ba7bf08ce9d0feecd"
+    },
+    {
+      "path": "grading/detailed-c4-architecture/task-fixture/check.mjs",
+      "sha256": "31b1f3b8b08f92fe0ebd59e5b67aeb9a82c45e46c7b7f356759929de1237120c"
+    },
+    {
+      "path": "grading/detailed-c4-architecture/task-fixture/source/docker/docker-compose-mssql.yml",
+      "sha256": "82535690a451c4458297e990d3139f427df47492911ef284428921462042e671"
+    },
+    {
+      "path": "grading/detailed-c4-architecture/task-fixture/source/Dockerfile",
+      "sha256": "9e96a4b4b279c2c4411684ffd3959706f8ef023e563450b7f072caf1b735bf64"
+    },
+    {
+      "path": "grading/detailed-c4-architecture/task-fixture/source/README.md",
+      "sha256": "8ad74bade953769cff9160c58a5b020ea393da40eefd05ed3adeb5cbcd555151"
+    },
+    {
+      "path": "grading/detailed-c4-architecture/task-fixture/source/src/Auth/Azure.DataApiBuilder.Auth.csproj",
+      "sha256": "c9208aa653648116adfae59810575997381216e91db8dfef7b6c647146b48840"
+    },
+    {
+      "path": "grading/detailed-c4-architecture/task-fixture/source/src/Cli/Cli.csproj",
+      "sha256": "1f4e78c6a5ead0e5be6917cdca7140182c5bbe1d8b0a9cea1f0afd9a0168e8ea"
+    },
+    {
+      "path": "grading/detailed-c4-architecture/task-fixture/source/src/Cli/Commands/StartOptions.cs",
+      "sha256": "b552148c2a58e5ead522a38a1eb72fbc58cc33f009e921c008978481396dbcca"
+    },
+    {
+      "path": "grading/detailed-c4-architecture/task-fixture/source/src/Cli/ConfigGenerator.cs",
+      "sha256": "6f7650183ca944f81ae16d1f036cb35ab4514e0f6839a300cb513d2142645ef0"
+    },
+    {
+      "path": "grading/detailed-c4-architecture/task-fixture/source/src/Cli/Program.cs",
+      "sha256": "771d14604fecf99275e5ab9a378c15fe8e34fe7a968a7121807823a4efb72323"
+    },
+    {
+      "path": "grading/detailed-c4-architecture/task-fixture/source/src/Config/Azure.DataApiBuilder.Config.csproj",
+      "sha256": "1667363ad7721dbce70e51783990118ddc38915f764f09ae4d59aaa0fedaa51f"
+    },
+    {
+      "path": "grading/detailed-c4-architecture/task-fixture/source/src/Config/FileSystemRuntimeConfigLoader.cs",
+      "sha256": "0cc38244e2603592f9fa199a37beb6734e4815c38bffd805ac1f099da937cb38"
+    },
+    {
+      "path": "grading/detailed-c4-architecture/task-fixture/source/src/Config/ObjectModel/AuthenticationOptions.cs",
+      "sha256": "8fc83d948d12a92150e6914664ee1b4277423886880894aac664356adbf7fa09"
+    },
+    {
+      "path": "grading/detailed-c4-architecture/task-fixture/source/src/Config/ObjectModel/RuntimeConfig.cs",
+      "sha256": "580d900ff7c516751d8f5f543d25851929fe42fc5efe77cd978894dd7c700182"
+    },
+    {
+      "path": "grading/detailed-c4-architecture/task-fixture/source/src/Config/RuntimeConfigLoader.cs",
+      "sha256": "b57992e4555161a140510abea727fb3e8bbbe5eac5e13e225e3ddae93f6cf134"
+    },
+    {
+      "path": "grading/detailed-c4-architecture/task-fixture/source/src/Core/Authorization/RestAuthorizationHandler.cs",
+      "sha256": "a97886549519718f83a77c3d9cae817356a0bc74172d4ccddeafea3da0e86200"
+    },
+    {
+      "path": "grading/detailed-c4-architecture/task-fixture/source/src/Core/Azure.DataApiBuilder.Core.csproj",
+      "sha256": "6516f2e94c12fba372d80ff3f3b58da29fe950a1a892ac8202309d0d932e8443"
+    },
+    {
+      "path": "grading/detailed-c4-architecture/task-fixture/source/src/Core/Resolvers/MsSqlQueryExecutor.cs",
+      "sha256": "387df3417951661a25081e7a4e4acd9d3bd23842ad4a745d9e5fe5e196252577"
+    },
+    {
+      "path": "grading/detailed-c4-architecture/task-fixture/source/src/Core/Resolvers/QueryExecutor.cs",
+      "sha256": "088d6de422e82dbca57a867338bea1e4bf7aef662965fb9360bfebae2b9c5d11"
+    },
+    {
+      "path": "grading/detailed-c4-architecture/task-fixture/source/src/Core/Resolvers/SqlQueryEngine.cs",
+      "sha256": "f07ad40796a7fb384fb5c1c2247cfcf6fafc8eec6b81b51c145d7410f0f292d0"
+    },
+    {
+      "path": "grading/detailed-c4-architecture/task-fixture/source/src/Core/Services/RestService.cs",
+      "sha256": "0dc66e1fafe8d220a8cf5070ecb1dbe3ea4194681dde577de81a31782bbcd890"
+    },
+    {
+      "path": "grading/detailed-c4-architecture/task-fixture/source/src/Service/appsettings.json",
+      "sha256": "7721c843a353781c27ac28dd5917a67292db652780c0173b14ad5e89c16cf412"
+    },
+    {
+      "path": "grading/detailed-c4-architecture/task-fixture/source/src/Service/Azure.DataApiBuilder.Service.csproj",
+      "sha256": "0c414eeb272cc072ec318ba41349caeb275e30031671f541243bd9ee20664e90"
+    },
+    {
+      "path": "grading/detailed-c4-architecture/task-fixture/source/src/Service/Controllers/RestController.cs",
+      "sha256": "971cccaf93783bdb7ed989696bb923d1b0b3390199706c6ee86954eed9b9fa37"
+    },
+    {
+      "path": "grading/detailed-c4-architecture/task-fixture/source/src/Service/dab-config.json",
+      "sha256": "e3edfa4b5ae5f87c119ea3f781bb1ef321759596c4f6d12c74ff098f6e84c1ec"
+    },
+    {
+      "path": "grading/detailed-c4-architecture/task-fixture/source/src/Service/Program.cs",
+      "sha256": "685beab3dc92f6f14a6674b29015d66b2a653f04d4dc23bade514859ee45d52a"
+    },
+    {
+      "path": "grading/detailed-c4-architecture/task-fixture/source/src/Service/Startup.cs",
+      "sha256": "25129ab7e6788551cc1b034e5d07920d3052a90702c3fecc6ecbc72dbf266ee5"
+    },
+    {
+      "path": "grading/detailed-c4-architecture/task-fixture/source/src/Service/Utilities/RuntimeInitializationHelper.cs",
+      "sha256": "9b86197f49ca6a5e18a39e35d2d21428e3363e573c199a16ff1f9939a302fdb5"
+    },
+    {
+      "path": "grading/detailed-c4-architecture/task-fixture/source-provenance.json",
+      "sha256": "e10c90958c9b84ae9d19e3a51893c32cce3b89ffefc81a7675fd2a0f73b4f460"
+    },
+    {
+      "path": "grading/detailed-c4-architecture/task-fixture/TOOLS.txt",
+      "sha256": "b2f9e279afe51000a9281410e776e61c349ee5afc058124b069d2e125db3d205"
+    },
+    {
+      "path": "fixtures/detailed-p-map/public/check.mjs",
+      "sha256": "b6f2f0374cc38e934637d463147bc8ca10fd59d6a80c3006f6c743cf0a9c8c2b"
+    },
+    {
+      "path": "fixtures/detailed-p-map/public/checks/ordered-concurrent-map.test.mjs",
+      "sha256": "29cb1d4e305b3585923220b7a34aad597ca550929dd50eebf68f6fbb5d22289d"
+    },
+    {
+      "path": "fixtures/detailed-p-map/public/REQUEST.md",
+      "sha256": "8501fda5843d53d527446d97caa545b49c2858f20406be8cf669528380bfd668"
+    },
+    {
+      "path": "skills/detailed-p-map/p-map-ordered-stream-enrichment/references/provenance.md",
+      "sha256": "209c657c615805e01a7f258de8d4ad8a371baaa41fadd63e66f41123b7be8223"
+    },
+    {
+      "path": "skills/detailed-p-map/p-map-ordered-stream-enrichment/SKILL.md",
+      "sha256": "27290c3704c86e34cae7e2bb75236ea9fe61dd22096ea9e7273329a12475b9c4"
+    },
+    {
+      "path": "grading/detailed-p-map/task-fixture/check.mjs",
+      "sha256": "b6f2f0374cc38e934637d463147bc8ca10fd59d6a80c3006f6c743cf0a9c8c2b"
+    },
+    {
+      "path": "grading/detailed-p-map/task-fixture/checks/ordered-concurrent-map.test.mjs",
+      "sha256": "29cb1d4e305b3585923220b7a34aad597ca550929dd50eebf68f6fbb5d22289d"
+    },
+    {
+      "path": "grading/detailed-p-map/task-fixture/REQUEST.md",
+      "sha256": "8501fda5843d53d527446d97caa545b49c2858f20406be8cf669528380bfd668"
+    },
+    {
+      "path": "fixtures/generic-data-catalog/public/inventory.json",
+      "sha256": "d5e28dc59aa3e51300fdaa0a2ad4b2e47d0b7221175463d2fc82a602fe7891c2"
+    },
+    {
+      "path": "fixtures/generic-data-catalog/public/profiles/asset.json",
+      "sha256": "835686b404782c59c9f5cffd9abb0ff4cf48757a340dbb373c64253fdff3fdba"
+    },
+    {
+      "path": "fixtures/generic-data-catalog/public/profiles/reservation.json",
+      "sha256": "b2534d16b638f95438107aadd9337bb21ae7a5b9655417badc0046b98b9f3c40"
+    },
+    {
+      "path": "fixtures/generic-data-catalog/public/PROVENANCE.json",
+      "sha256": "18840177b5abd184a7f1e95ff11abf354152ba07422d426aada78c2b5e15cde7"
+    },
+    {
+      "path": "fixtures/generic-data-catalog/public/TOOLS.txt",
+      "sha256": "91ea877073a36cdafb32befb0b6886ebb3d48b3dc2651938324bb378ce8874a7"
+    },
+    {
+      "path": "skills/generic-data-catalog/data-catalog/assets/ds-catalog-v1.schema.json",
+      "sha256": "a95f92da02abf0d8b18df3502220b4d20f73b95a4d0ef5997ab5519a1ebaaae2"
+    },
+    {
+      "path": "skills/generic-data-catalog/data-catalog/examples/northwind-catalog.md",
+      "sha256": "7ee852675acc38cc194bbcbcbef7e650cbde2f8c40257fe21217df06e1f03218"
+    },
+    {
+      "path": "skills/generic-data-catalog/data-catalog/pyproject.toml",
+      "sha256": "ec4f3ffdec68824f17899c9d1d4ce607cb80bd3c236337c792cb72ba91157c62"
+    },
+    {
+      "path": "skills/generic-data-catalog/data-catalog/references/catalog-contract.md",
+      "sha256": "e666ad87f0a43af5d99724cce9c303cf7fd247327ed9002f10e74e18bce349c7"
+    },
+    {
+      "path": "skills/generic-data-catalog/data-catalog/references/dcat-crosswalk.md",
+      "sha256": "60c88092ecd21e4c16f83fde6d249b307dd95ff1a4487ef7efdb9f9a62eee84a"
+    },
+    {
+      "path": "skills/generic-data-catalog/data-catalog/references/provenance.md",
+      "sha256": "2d65634c0ce342f75acd46b16382d5477093a34a143c45c911de0da16dbde34b"
+    },
+    {
+      "path": "skills/generic-data-catalog/data-catalog/scripts/validate_catalog.py",
+      "sha256": "255ebcd4b01a426452af68df8358f96d7af82b7aa58fa907801fb2ed83f54e47"
+    },
+    {
+      "path": "skills/generic-data-catalog/data-catalog/SKILL.md",
+      "sha256": "e687c3f6c8caabb7e64b8686b9d1528aa37b1453c85fddf46c33cdeec52406d5"
+    },
+    {
+      "path": "skills/generic-data-catalog/data-catalog/templates/ds-catalog-v1.md",
+      "sha256": "4028b0cb4db4474f5b4def78cc5692ed1934ea96c72c35d0959fa7ada09f1925"
+    },
+    {
+      "path": "skills/generic-data-catalog/data-catalog/tests/corpus/0_valid_frontmatter",
+      "sha256": "83d256638412b3b7afa747a1b6a8125a2e9e94bf855068e33ad7f07bdc5ba0a5"
+    },
+    {
+      "path": "skills/generic-data-catalog/data-catalog/tests/corpus/1_empty_frontmatter",
+      "sha256": "16dfbc309d687ae53a0ce8841d0151805cdb95d0e349d3717be18a29885b7f81"
+    },
+    {
+      "path": "skills/generic-data-catalog/data-catalog/tests/corpus/2_unclosed_sequence",
+      "sha256": "4c8b50e2b18502ccc00958d1f6d91671afc8ad44bc2f1f904d0d7f261d9a797d"
+    },
+    {
+      "path": "skills/generic-data-catalog/data-catalog/tests/corpus/3_duplicate_key",
+      "sha256": "05c9e2a2a4d9412065cd5ef6d0fb78363017737721143f93523e1a12f4c92d60"
+    },
+    {
+      "path": "skills/generic-data-catalog/data-catalog/tests/corpus/4_no_frontmatter",
+      "sha256": "3613de6807f0ad8d52747aec56cd3e77714d6213245d14a1ff1f9b070a0c42e2"
+    },
+    {
+      "path": "skills/generic-data-catalog/data-catalog/tests/corpus/README.md",
+      "sha256": "2ceaaf65c51580a695e399b63f4ca6dda0cd77b3bc2c8857bf332919c6d67ca3"
+    },
+    {
+      "path": "skills/generic-data-catalog/data-catalog/tests/fuzz_harness.py",
+      "sha256": "086b7bbbe35f079830c59fa3c2f1803c0b23d076738a3c3957d90dec6406f793"
+    },
+    {
+      "path": "skills/generic-data-catalog/data-catalog/tests/test_validate_catalog.py",
+      "sha256": "66ce9f97c32accf6813f0b3c0d5d18f69a2527b092dae21f7a7341e17711b05e"
+    },
+    {
+      "path": "skills/generic-data-catalog/data-catalog/uv.lock",
+      "sha256": "1b5da4cb4a5379d9e4e78d35991b3ea1592273e7db5032046031c9abe22e38cc"
+    },
+    {
+      "path": "grading/generic-data-catalog/task-fixture/inventory.json",
+      "sha256": "d5e28dc59aa3e51300fdaa0a2ad4b2e47d0b7221175463d2fc82a602fe7891c2"
+    },
+    {
+      "path": "grading/generic-data-catalog/task-fixture/profiles/asset.json",
+      "sha256": "835686b404782c59c9f5cffd9abb0ff4cf48757a340dbb373c64253fdff3fdba"
+    },
+    {
+      "path": "grading/generic-data-catalog/task-fixture/profiles/reservation.json",
+      "sha256": "b2534d16b638f95438107aadd9337bb21ae7a5b9655417badc0046b98b9f3c40"
+    },
+    {
+      "path": "grading/generic-data-catalog/task-fixture/PROVENANCE.json",
+      "sha256": "18840177b5abd184a7f1e95ff11abf354152ba07422d426aada78c2b5e15cde7"
+    },
+    {
+      "path": "grading/generic-data-catalog/task-fixture/TOOLS.txt",
+      "sha256": "91ea877073a36cdafb32befb0b6886ebb3d48b3dc2651938324bb378ce8874a7"
+    },
+    {
+      "path": "fixtures/generic-analysis-authoring/public/BRIEF.txt",
+      "sha256": "31dda5fa896951c5e88f28ff881af9bca84be79ce748e28dc923a1e56b1040e3"
+    },
+    {
+      "path": "fixtures/generic-analysis-authoring/public/check-notebook.mjs",
+      "sha256": "7b85fc39e4e878a642950eb3363c688742de57ec43d46f41b063e8e5dab4411f"
+    },
+    {
+      "path": "fixtures/generic-analysis-authoring/public/checker-lib.mjs",
+      "sha256": "45a0f87682f2a304e7c0b96673a9c9bec9c255564dde6f6d417ef212d54c492b"
+    },
+    {
+      "path": "fixtures/generic-analysis-authoring/public/execute-notebook.py",
+      "sha256": "1dba082d5cf5e34f0e65f29f369981921879d1f90f040bc634fe142d049bb187"
+    },
+    {
+      "path": "fixtures/generic-analysis-authoring/public/profile.json",
+      "sha256": "d13334e6909d15aa8f98be350fc98b192617d4e314bf7cd4c2d956e7fe8583e3"
+    },
+    {
+      "path": "fixtures/generic-analysis-authoring/public/PROVENANCE.json",
+      "sha256": "227b14d7c122d83c84eea11bc9e7db0fd549f1ae2e3794634db73e9585794b36"
+    },
+    {
+      "path": "fixtures/generic-analysis-authoring/public/sessions.csv",
+      "sha256": "30336adf063606819b564b6aaadfd7313682555e257c54c621e2cfede8dcd426"
+    },
+    {
+      "path": "fixtures/generic-analysis-authoring/public/TOOLS.txt",
+      "sha256": "3366cf9461fce93a24ca47cf0ad8b2ccfe224fb073c2d32f77c516af2ed34c55"
+    },
+    {
+      "path": "skills/generic-analysis-authoring/analysis-authoring/references/dashboard-authoring-and-validation.md",
+      "sha256": "a32be32dd4994ff5fca546ceeb4f0f2464caab301ea1d11233966347d0951a5c"
+    },
+    {
+      "path": "skills/generic-analysis-authoring/analysis-authoring/references/eda-notebook-authoring.md",
+      "sha256": "bbc92e15f11978d210d1932c097e013271b5627b0af956ebb7c7903d69826bb3"
+    },
+    {
+      "path": "skills/generic-analysis-authoring/analysis-authoring/SKILL.md",
+      "sha256": "c3eb8a71998f77248472c8e0accb9b420de612b0c7e91a199207a6a60c82abfd"
+    },
+    {
+      "path": "grading/generic-analysis-authoring/task-fixture/BRIEF.txt",
+      "sha256": "31dda5fa896951c5e88f28ff881af9bca84be79ce748e28dc923a1e56b1040e3"
+    },
+    {
+      "path": "grading/generic-analysis-authoring/task-fixture/check-notebook.mjs",
+      "sha256": "7b85fc39e4e878a642950eb3363c688742de57ec43d46f41b063e8e5dab4411f"
+    },
+    {
+      "path": "grading/generic-analysis-authoring/task-fixture/checker-lib.mjs",
+      "sha256": "45a0f87682f2a304e7c0b96673a9c9bec9c255564dde6f6d417ef212d54c492b"
+    },
+    {
+      "path": "grading/generic-analysis-authoring/task-fixture/execute-notebook.py",
+      "sha256": "1dba082d5cf5e34f0e65f29f369981921879d1f90f040bc634fe142d049bb187"
+    },
+    {
+      "path": "grading/generic-analysis-authoring/task-fixture/profile.json",
+      "sha256": "d13334e6909d15aa8f98be350fc98b192617d4e314bf7cd4c2d956e7fe8583e3"
+    },
+    {
+      "path": "grading/generic-analysis-authoring/task-fixture/PROVENANCE.json",
+      "sha256": "227b14d7c122d83c84eea11bc9e7db0fd549f1ae2e3794634db73e9585794b36"
+    },
+    {
+      "path": "grading/generic-analysis-authoring/task-fixture/sessions.csv",
+      "sha256": "30336adf063606819b564b6aaadfd7313682555e257c54c621e2cfede8dcd426"
+    },
+    {
+      "path": "grading/generic-analysis-authoring/task-fixture/TOOLS.txt",
+      "sha256": "3366cf9461fce93a24ca47cf0ad8b2ccfe224fb073c2d32f77c516af2ed34c55"
+    },
+    {
+      "path": "fixtures/generic-c4-architecture/public/bundle-provenance.json",
+      "sha256": "1fee6f1ccf76d4095b5fd6b8e6ef078a8c706bd7cafdd49ba7bf08ce9d0feecd"
+    },
+    {
+      "path": "fixtures/generic-c4-architecture/public/check.mjs",
+      "sha256": "31b1f3b8b08f92fe0ebd59e5b67aeb9a82c45e46c7b7f356759929de1237120c"
+    },
+    {
+      "path": "fixtures/generic-c4-architecture/public/source/docker/docker-compose-mssql.yml",
+      "sha256": "82535690a451c4458297e990d3139f427df47492911ef284428921462042e671"
+    },
+    {
+      "path": "fixtures/generic-c4-architecture/public/source/Dockerfile",
+      "sha256": "9e96a4b4b279c2c4411684ffd3959706f8ef023e563450b7f072caf1b735bf64"
+    },
+    {
+      "path": "fixtures/generic-c4-architecture/public/source/README.md",
+      "sha256": "8ad74bade953769cff9160c58a5b020ea393da40eefd05ed3adeb5cbcd555151"
+    },
+    {
+      "path": "fixtures/generic-c4-architecture/public/source/src/Auth/Azure.DataApiBuilder.Auth.csproj",
+      "sha256": "c9208aa653648116adfae59810575997381216e91db8dfef7b6c647146b48840"
+    },
+    {
+      "path": "fixtures/generic-c4-architecture/public/source/src/Cli/Cli.csproj",
+      "sha256": "1f4e78c6a5ead0e5be6917cdca7140182c5bbe1d8b0a9cea1f0afd9a0168e8ea"
+    },
+    {
+      "path": "fixtures/generic-c4-architecture/public/source/src/Cli/Commands/StartOptions.cs",
+      "sha256": "b552148c2a58e5ead522a38a1eb72fbc58cc33f009e921c008978481396dbcca"
+    },
+    {
+      "path": "fixtures/generic-c4-architecture/public/source/src/Cli/ConfigGenerator.cs",
+      "sha256": "6f7650183ca944f81ae16d1f036cb35ab4514e0f6839a300cb513d2142645ef0"
+    },
+    {
+      "path": "fixtures/generic-c4-architecture/public/source/src/Cli/Program.cs",
+      "sha256": "771d14604fecf99275e5ab9a378c15fe8e34fe7a968a7121807823a4efb72323"
+    },
+    {
+      "path": "fixtures/generic-c4-architecture/public/source/src/Config/Azure.DataApiBuilder.Config.csproj",
+      "sha256": "1667363ad7721dbce70e51783990118ddc38915f764f09ae4d59aaa0fedaa51f"
+    },
+    {
+      "path": "fixtures/generic-c4-architecture/public/source/src/Config/FileSystemRuntimeConfigLoader.cs",
+      "sha256": "0cc38244e2603592f9fa199a37beb6734e4815c38bffd805ac1f099da937cb38"
+    },
+    {
+      "path": "fixtures/generic-c4-architecture/public/source/src/Config/ObjectModel/AuthenticationOptions.cs",
+      "sha256": "8fc83d948d12a92150e6914664ee1b4277423886880894aac664356adbf7fa09"
+    },
+    {
+      "path": "fixtures/generic-c4-architecture/public/source/src/Config/ObjectModel/RuntimeConfig.cs",
+      "sha256": "580d900ff7c516751d8f5f543d25851929fe42fc5efe77cd978894dd7c700182"
+    },
+    {
+      "path": "fixtures/generic-c4-architecture/public/source/src/Config/RuntimeConfigLoader.cs",
+      "sha256": "b57992e4555161a140510abea727fb3e8bbbe5eac5e13e225e3ddae93f6cf134"
+    },
+    {
+      "path": "fixtures/generic-c4-architecture/public/source/src/Core/Authorization/RestAuthorizationHandler.cs",
+      "sha256": "a97886549519718f83a77c3d9cae817356a0bc74172d4ccddeafea3da0e86200"
+    },
+    {
+      "path": "fixtures/generic-c4-architecture/public/source/src/Core/Azure.DataApiBuilder.Core.csproj",
+      "sha256": "6516f2e94c12fba372d80ff3f3b58da29fe950a1a892ac8202309d0d932e8443"
+    },
+    {
+      "path": "fixtures/generic-c4-architecture/public/source/src/Core/Resolvers/MsSqlQueryExecutor.cs",
+      "sha256": "387df3417951661a25081e7a4e4acd9d3bd23842ad4a745d9e5fe5e196252577"
+    },
+    {
+      "path": "fixtures/generic-c4-architecture/public/source/src/Core/Resolvers/QueryExecutor.cs",
+      "sha256": "088d6de422e82dbca57a867338bea1e4bf7aef662965fb9360bfebae2b9c5d11"
+    },
+    {
+      "path": "fixtures/generic-c4-architecture/public/source/src/Core/Resolvers/SqlQueryEngine.cs",
+      "sha256": "f07ad40796a7fb384fb5c1c2247cfcf6fafc8eec6b81b51c145d7410f0f292d0"
+    },
+    {
+      "path": "fixtures/generic-c4-architecture/public/source/src/Core/Services/RestService.cs",
+      "sha256": "0dc66e1fafe8d220a8cf5070ecb1dbe3ea4194681dde577de81a31782bbcd890"
+    },
+    {
+      "path": "fixtures/generic-c4-architecture/public/source/src/Service/appsettings.json",
+      "sha256": "7721c843a353781c27ac28dd5917a67292db652780c0173b14ad5e89c16cf412"
+    },
+    {
+      "path": "fixtures/generic-c4-architecture/public/source/src/Service/Azure.DataApiBuilder.Service.csproj",
+      "sha256": "0c414eeb272cc072ec318ba41349caeb275e30031671f541243bd9ee20664e90"
+    },
+    {
+      "path": "fixtures/generic-c4-architecture/public/source/src/Service/Controllers/RestController.cs",
+      "sha256": "971cccaf93783bdb7ed989696bb923d1b0b3390199706c6ee86954eed9b9fa37"
+    },
+    {
+      "path": "fixtures/generic-c4-architecture/public/source/src/Service/dab-config.json",
+      "sha256": "e3edfa4b5ae5f87c119ea3f781bb1ef321759596c4f6d12c74ff098f6e84c1ec"
+    },
+    {
+      "path": "fixtures/generic-c4-architecture/public/source/src/Service/Program.cs",
+      "sha256": "685beab3dc92f6f14a6674b29015d66b2a653f04d4dc23bade514859ee45d52a"
+    },
+    {
+      "path": "fixtures/generic-c4-architecture/public/source/src/Service/Startup.cs",
+      "sha256": "25129ab7e6788551cc1b034e5d07920d3052a90702c3fecc6ecbc72dbf266ee5"
+    },
+    {
+      "path": "fixtures/generic-c4-architecture/public/source/src/Service/Utilities/RuntimeInitializationHelper.cs",
+      "sha256": "9b86197f49ca6a5e18a39e35d2d21428e3363e573c199a16ff1f9939a302fdb5"
+    },
+    {
+      "path": "fixtures/generic-c4-architecture/public/source-provenance.json",
+      "sha256": "e10c90958c9b84ae9d19e3a51893c32cce3b89ffefc81a7675fd2a0f73b4f460"
+    },
+    {
+      "path": "fixtures/generic-c4-architecture/public/TOOLS.txt",
+      "sha256": "b2f9e279afe51000a9281410e776e61c349ee5afc058124b069d2e125db3d205"
+    },
+    {
+      "path": "skills/generic-c4-architecture/c4-architecture/references/c4-modelling-instructions.md",
+      "sha256": "0558b1d0fc5c0042f92b6e05d054aeb928862e63bf7768a3cf7970887f308a99"
+    },
+    {
+      "path": "skills/generic-c4-architecture/c4-architecture/references/renderer-mermaid.md",
+      "sha256": "c156f853cd150dcc6c8324ccc16a08e8fab81ccd91b2a362e0dfef29ec0c5a88"
+    },
+    {
+      "path": "skills/generic-c4-architecture/c4-architecture/SKILL.md",
+      "sha256": "e3151740ef0ea4b9e58312098a4820d855b251d44d15741e9fb5b06de82d7cb8"
+    },
+    {
+      "path": "grading/generic-c4-architecture/task-fixture/bundle-provenance.json",
+      "sha256": "1fee6f1ccf76d4095b5fd6b8e6ef078a8c706bd7cafdd49ba7bf08ce9d0feecd"
+    },
+    {
+      "path": "grading/generic-c4-architecture/task-fixture/check.mjs",
+      "sha256": "31b1f3b8b08f92fe0ebd59e5b67aeb9a82c45e46c7b7f356759929de1237120c"
+    },
+    {
+      "path": "grading/generic-c4-architecture/task-fixture/source/docker/docker-compose-mssql.yml",
+      "sha256": "82535690a451c4458297e990d3139f427df47492911ef284428921462042e671"
+    },
+    {
+      "path": "grading/generic-c4-architecture/task-fixture/source/Dockerfile",
+      "sha256": "9e96a4b4b279c2c4411684ffd3959706f8ef023e563450b7f072caf1b735bf64"
+    },
+    {
+      "path": "grading/generic-c4-architecture/task-fixture/source/README.md",
+      "sha256": "8ad74bade953769cff9160c58a5b020ea393da40eefd05ed3adeb5cbcd555151"
+    },
+    {
+      "path": "grading/generic-c4-architecture/task-fixture/source/src/Auth/Azure.DataApiBuilder.Auth.csproj",
+      "sha256": "c9208aa653648116adfae59810575997381216e91db8dfef7b6c647146b48840"
+    },
+    {
+      "path": "grading/generic-c4-architecture/task-fixture/source/src/Cli/Cli.csproj",
+      "sha256": "1f4e78c6a5ead0e5be6917cdca7140182c5bbe1d8b0a9cea1f0afd9a0168e8ea"
+    },
+    {
+      "path": "grading/generic-c4-architecture/task-fixture/source/src/Cli/Commands/StartOptions.cs",
+      "sha256": "b552148c2a58e5ead522a38a1eb72fbc58cc33f009e921c008978481396dbcca"
+    },
+    {
+      "path": "grading/generic-c4-architecture/task-fixture/source/src/Cli/ConfigGenerator.cs",
+      "sha256": "6f7650183ca944f81ae16d1f036cb35ab4514e0f6839a300cb513d2142645ef0"
+    },
+    {
+      "path": "grading/generic-c4-architecture/task-fixture/source/src/Cli/Program.cs",
+      "sha256": "771d14604fecf99275e5ab9a378c15fe8e34fe7a968a7121807823a4efb72323"
+    },
+    {
+      "path": "grading/generic-c4-architecture/task-fixture/source/src/Config/Azure.DataApiBuilder.Config.csproj",
+      "sha256": "1667363ad7721dbce70e51783990118ddc38915f764f09ae4d59aaa0fedaa51f"
+    },
+    {
+      "path": "grading/generic-c4-architecture/task-fixture/source/src/Config/FileSystemRuntimeConfigLoader.cs",
+      "sha256": "0cc38244e2603592f9fa199a37beb6734e4815c38bffd805ac1f099da937cb38"
+    },
+    {
+      "path": "grading/generic-c4-architecture/task-fixture/source/src/Config/ObjectModel/AuthenticationOptions.cs",
+      "sha256": "8fc83d948d12a92150e6914664ee1b4277423886880894aac664356adbf7fa09"
+    },
+    {
+      "path": "grading/generic-c4-architecture/task-fixture/source/src/Config/ObjectModel/RuntimeConfig.cs",
+      "sha256": "580d900ff7c516751d8f5f543d25851929fe42fc5efe77cd978894dd7c700182"
+    },
+    {
+      "path": "grading/generic-c4-architecture/task-fixture/source/src/Config/RuntimeConfigLoader.cs",
+      "sha256": "b57992e4555161a140510abea727fb3e8bbbe5eac5e13e225e3ddae93f6cf134"
+    },
+    {
+      "path": "grading/generic-c4-architecture/task-fixture/source/src/Core/Authorization/RestAuthorizationHandler.cs",
+      "sha256": "a97886549519718f83a77c3d9cae817356a0bc74172d4ccddeafea3da0e86200"
+    },
+    {
+      "path": "grading/generic-c4-architecture/task-fixture/source/src/Core/Azure.DataApiBuilder.Core.csproj",
+      "sha256": "6516f2e94c12fba372d80ff3f3b58da29fe950a1a892ac8202309d0d932e8443"
+    },
+    {
+      "path": "grading/generic-c4-architecture/task-fixture/source/src/Core/Resolvers/MsSqlQueryExecutor.cs",
+      "sha256": "387df3417951661a25081e7a4e4acd9d3bd23842ad4a745d9e5fe5e196252577"
+    },
+    {
+      "path": "grading/generic-c4-architecture/task-fixture/source/src/Core/Resolvers/QueryExecutor.cs",
+      "sha256": "088d6de422e82dbca57a867338bea1e4bf7aef662965fb9360bfebae2b9c5d11"
+    },
+    {
+      "path": "grading/generic-c4-architecture/task-fixture/source/src/Core/Resolvers/SqlQueryEngine.cs",
+      "sha256": "f07ad40796a7fb384fb5c1c2247cfcf6fafc8eec6b81b51c145d7410f0f292d0"
+    },
+    {
+      "path": "grading/generic-c4-architecture/task-fixture/source/src/Core/Services/RestService.cs",
+      "sha256": "0dc66e1fafe8d220a8cf5070ecb1dbe3ea4194681dde577de81a31782bbcd890"
+    },
+    {
+      "path": "grading/generic-c4-architecture/task-fixture/source/src/Service/appsettings.json",
+      "sha256": "7721c843a353781c27ac28dd5917a67292db652780c0173b14ad5e89c16cf412"
+    },
+    {
+      "path": "grading/generic-c4-architecture/task-fixture/source/src/Service/Azure.DataApiBuilder.Service.csproj",
+      "sha256": "0c414eeb272cc072ec318ba41349caeb275e30031671f541243bd9ee20664e90"
+    },
+    {
+      "path": "grading/generic-c4-architecture/task-fixture/source/src/Service/Controllers/RestController.cs",
+      "sha256": "971cccaf93783bdb7ed989696bb923d1b0b3390199706c6ee86954eed9b9fa37"
+    },
+    {
+      "path": "grading/generic-c4-architecture/task-fixture/source/src/Service/dab-config.json",
+      "sha256": "e3edfa4b5ae5f87c119ea3f781bb1ef321759596c4f6d12c74ff098f6e84c1ec"
+    },
+    {
+      "path": "grading/generic-c4-architecture/task-fixture/source/src/Service/Program.cs",
+      "sha256": "685beab3dc92f6f14a6674b29015d66b2a653f04d4dc23bade514859ee45d52a"
+    },
+    {
+      "path": "grading/generic-c4-architecture/task-fixture/source/src/Service/Startup.cs",
+      "sha256": "25129ab7e6788551cc1b034e5d07920d3052a90702c3fecc6ecbc72dbf266ee5"
+    },
+    {
+      "path": "grading/generic-c4-architecture/task-fixture/source/src/Service/Utilities/RuntimeInitializationHelper.cs",
+      "sha256": "9b86197f49ca6a5e18a39e35d2d21428e3363e573c199a16ff1f9939a302fdb5"
+    },
+    {
+      "path": "grading/generic-c4-architecture/task-fixture/source-provenance.json",
+      "sha256": "e10c90958c9b84ae9d19e3a51893c32cce3b89ffefc81a7675fd2a0f73b4f460"
+    },
+    {
+      "path": "grading/generic-c4-architecture/task-fixture/TOOLS.txt",
+      "sha256": "b2f9e279afe51000a9281410e776e61c349ee5afc058124b069d2e125db3d205"
+    },
+    {
+      "path": "fixtures/generic-p-map/public/check.mjs",
+      "sha256": "b6f2f0374cc38e934637d463147bc8ca10fd59d6a80c3006f6c743cf0a9c8c2b"
+    },
+    {
+      "path": "fixtures/generic-p-map/public/checks/ordered-concurrent-map.test.mjs",
+      "sha256": "29cb1d4e305b3585923220b7a34aad597ca550929dd50eebf68f6fbb5d22289d"
+    },
+    {
+      "path": "fixtures/generic-p-map/public/REQUEST.md",
+      "sha256": "8501fda5843d53d527446d97caa545b49c2858f20406be8cf669528380bfd668"
+    },
+    {
+      "path": "skills/generic-p-map/p-map-ordered-stream-enrichment/references/provenance.md",
+      "sha256": "209c657c615805e01a7f258de8d4ad8a371baaa41fadd63e66f41123b7be8223"
+    },
+    {
+      "path": "skills/generic-p-map/p-map-ordered-stream-enrichment/SKILL.md",
+      "sha256": "27290c3704c86e34cae7e2bb75236ea9fe61dd22096ea9e7273329a12475b9c4"
+    },
+    {
+      "path": "grading/generic-p-map/task-fixture/check.mjs",
+      "sha256": "b6f2f0374cc38e934637d463147bc8ca10fd59d6a80c3006f6c743cf0a9c8c2b"
+    },
+    {
+      "path": "grading/generic-p-map/task-fixture/checks/ordered-concurrent-map.test.mjs",
+      "sha256": "29cb1d4e305b3585923220b7a34aad597ca550929dd50eebf68f6fbb5d22289d"
+    },
+    {
+      "path": "grading/generic-p-map/task-fixture/REQUEST.md",
+      "sha256": "8501fda5843d53d527446d97caa545b49c2858f20406be8cf669528380bfd668"
+    },
+    {
+      "path": "review-criteria/analysis-authoring.md",
+      "sha256": "20f8398b30dbf31babe84fb2eac8e4d5786b426230f3fe2eecb691f75434798d"
+    },
+    {
+      "path": "review-criteria/c4-architecture.md",
+      "sha256": "52909f73dc5fa85fac0370994d706b491536e18ba970c9cfde6bfbe345fc960a"
+    },
+    {
+      "path": "review-criteria/data-catalog.md",
+      "sha256": "c3544768f53e15dba3f3e2421a54d14eef370ba23216c25e9a44ecc2f1f6f9d9"
+    },
+    {
+      "path": "review-criteria/p-map.md",
+      "sha256": "c062dabb8db82436ae4dbbde57d344bdaf1ab267a3f82b2091e23af163ab5371"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+name: generic-analysis-authoring-queue-delay-notebook-baseline-first
+evals:
+  - ../evals/generic-analysis-authoring.eval.yaml
+vary:
+  - /environment/skills
+baseline: a-baseline
+variants:
+  a-baseline:
+    environment:
+      skills: []
+  b-treatment:
+    environment:
+      skills:
+        - ../skills/generic-analysis-authoring/analysis-authoring
+execution:
+  workers: 1
+overrides:
+  runs: 1

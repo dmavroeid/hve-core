@@ -1,0 +1,132 @@
+name: dab-c4-architecture-pack
+description: "Saved task-quality assessment: Create a source-grounded C4
+  architecture pack for Azure Data API builder from a bounded source bundle."
+version: 1.0.0
+type: capability
+defaults:
+  timeout: 3m
+  judge_model: ${JUDGE_MODEL=MUST-SET-JUDGE-MODEL}
+scoring: {}
+stimuli:
+  - name: dab-c4-architecture-pack
+    prompt: >
+      You are helping a new engineer understand Azure Data API builder from a
+      bounded public source bundle.
+
+
+      Use only the files under `task-fixture\source` plus the provenance/tool
+      notes in `task-fixture`.
+
+      Reconcile code, configuration, project dependencies, and deployment
+      artifacts rather than paraphrasing the README.
+
+
+      Save one Markdown document to `deliverable\architecture-pack.md` that
+      includes:
+
+
+      - a short onboarding-oriented overview
+
+      - one Mermaid legend
+
+      - one System Context diagram
+
+      - one Container diagram
+
+      - one Component diagram for the HTTP service/runtime path that handles an
+      authenticated SQL Server-backed REST read
+
+      - one Deployment diagram for the evidenced local Docker deployment
+
+      - brief evidence notes with source paths for the major claims and the
+      pinned provenance/commit
+
+
+      The pack must explicitly:
+
+
+      - explain the CLI-to-runtime configuration path
+
+      - explain the authenticated REST read path to SQL Server
+
+      - explain the local Docker deployment evidenced by the supplied artifacts
+
+      - state whether the supplied sample runtime config is itself authenticated
+      and, if not, where the authenticated path is implemented in code
+
+      - keep unknowns explicit instead of inventing unsupported ownership,
+      deployment, or authentication claims
+
+
+      Use renderable Mermaid flowcharts. Public checks render the Mermaid blocks
+      and run:
+
+      `node task-fixture/check.mjs deliverable/architecture-pack.md`
+
+
+      Include exactly five Mermaid code blocks in this order: legend, System
+      Context,
+
+      Container, Component, Deployment. Headings, diagram directions and node
+      IDs
+
+      are your choice. The checker retains PNG images under
+      `deliverable/rendered`.
+
+      Content correctness and visual usefulness are assessed separately from
+      rendering.
+
+
+      Approved local tool paths are listed in `task-fixture/TOOLS.txt`.
+    rubric:
+      - The pack is useful to a new engineer and accurately explains the
+        CLI-to-runtime configuration path, authenticated REST read path, and
+        evidenced local deployment.
+      - The pack distinguishes current sample configuration from broader runtime
+        capability, especially around authentication, without making unsupported
+        claims.
+      - The diagrams and notes use coherent C4 decomposition and source-grounded
+        naming/boundaries; valid alternative layouts are acceptable.
+    graders:
+      - type: prompt
+        name: task-quality
+        config:
+          evidence:
+            - repo
+          scoring: scale_1_5
+          threshold: 0.5
+          prompt: >
+            Assess the actual `deliverable/architecture-pack.md` against the
+            bounded source bundle and the task, not the candidate's claims of
+            success.
+
+
+            Focus on:
+
+            - whether a new engineer would understand the main architecture and
+            boundaries
+
+            - whether the CLI-to-runtime configuration path is correct and
+            source-grounded
+
+            - whether the authenticated SQL Server-backed REST read path is
+            described accurately
+
+            - whether the writeup correctly distinguishes the bundled sample
+            config (`src/Service/dab-config.json`) from general authenticated
+            runtime capability
+
+            - whether the deployment diagram and notes stay within the Docker
+            evidence actually supplied
+
+
+            Accept valid alternative decompositions and layouts when they remain
+            source-grounded.
+
+            Cite concrete supporting or contradicting evidence from the
+            deliverable and bundled sources.
+
+            Explain important omissions and any unavailable evidence.
+
+            Do not infer executed behavior beyond the checker, and do not reward
+            resemblance to the skill for its own sake.

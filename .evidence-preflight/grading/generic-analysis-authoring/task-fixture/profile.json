@@ -1,0 +1,20 @@
+{
+  "grain": "One row per charging session",
+  "rows": 60000,
+  "stations": 80,
+  "columns": {
+    "session_id": "identifier",
+    "station_id": "station identifier",
+    "region": "region category",
+    "date": "session date",
+    "queue_minutes": "minutes waiting before charging",
+    "energy_kwh": "delivered energy in kWh",
+    "duration_minutes": "charging duration, excluding waiting",
+    "temperature_c": "ambient Celsius, missing for some records"
+  },
+  "limitations": [
+    "Synthetic observational data",
+    "No intervention assignment or equipment-fault labels",
+    "Repeated observations per station"
+  ]
+}

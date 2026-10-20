@@ -1,0 +1,88 @@
+name: dab-c4-architecture-pack
+description: "Saved task-quality assessment: Create a source-grounded C4
+  architecture pack for Azure Data API builder from a bounded source bundle."
+version: 1.0.0
+type: capability
+defaults:
+  timeout: 3m
+  judge_model: ${JUDGE_MODEL=MUST-SET-JUDGE-MODEL}
+scoring: {}
+stimuli:
+  - name: dab-c4-architecture-pack
+    prompt: >
+      Please create a source-grounded C4 onboarding pack for a new engineer
+      working on Data API builder. Help them understand how configuration, an
+      authenticated SQL Server-backed REST read, and the local Docker deployment
+      fit together. Use the supplied source bundle rather than assuming details
+      that are not evidenced.
+
+
+      Save the pack to deliverable/architecture-pack.md, with a short overview
+      and source references including the pinned commit. Include exactly five
+      renderable Mermaid flowcharts in this order: legend, System Context,
+      Container, Component for the HTTP service/runtime path, and Deployment for
+      the local Docker setup. Choose useful boundaries and layouts and explain
+      important uncertainty.
+
+
+      Inputs are task-fixture/source and the provenance notes in task-fixture.
+      Approved tools are in task-fixture/TOOLS.txt. Public checks: node
+      task-fixture/check.mjs deliverable/architecture-pack.md. The checker saves
+      PNGs under deliverable/rendered for separate visual review.
+
+
+      Do not modify task inputs, start nested agents or paid model sessions, use
+      the network, or inspect enclosing directories, external implementations or
+      other runs.
+    rubric:
+      - The pack is useful to a new engineer and accurately explains the
+        CLI-to-runtime configuration path, authenticated REST read path, and
+        evidenced local deployment.
+      - The pack distinguishes current sample configuration from broader runtime
+        capability, especially around authentication, without making unsupported
+        claims.
+      - The diagrams and notes use coherent C4 decomposition and source-grounded
+        naming/boundaries; valid alternative layouts are acceptable.
+    graders:
+      - type: prompt
+        name: task-quality
+        config:
+          evidence:
+            - repo
+          scoring: scale_1_5
+          threshold: 0.5
+          prompt: >
+            Assess the actual `deliverable/architecture-pack.md` against the
+            bounded source bundle and the task, not the candidate's claims of
+            success.
+
+
+            Focus on:
+
+            - whether a new engineer would understand the main architecture and
+            boundaries
+
+            - whether the CLI-to-runtime configuration path is correct and
+            source-grounded
+
+            - whether the authenticated SQL Server-backed REST read path is
+            described accurately
+
+            - whether the writeup correctly distinguishes the bundled sample
+            config (`src/Service/dab-config.json`) from general authenticated
+            runtime capability
+
+            - whether the deployment diagram and notes stay within the Docker
+            evidence actually supplied
+
+
+            Accept valid alternative decompositions and layouts when they remain
+            source-grounded.
+
+            Cite concrete supporting or contradicting evidence from the
+            deliverable and bundled sources.
+
+            Explain important omissions and any unavailable evidence.
+
+            Do not infer executed behavior beyond the checker, and do not reward
+            resemblance to the skill for its own sake.

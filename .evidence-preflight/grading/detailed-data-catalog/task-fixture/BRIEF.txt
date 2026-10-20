@@ -1,0 +1,1 @@
+A rental-operations data team needs a durable, readable DS_CATALOG_V1 catalog from the supplied inventory. Preserve authoritative privacy classifications, composite relationship semantics, access gaps and uncertainty. The public contract and profile attachments are supplied.

@@ -1,0 +1,6 @@
+{
+  "dataset": "Northlake Equipment Rentals",
+  "kind": "Synthetic rental-operations inventory and profile attachments",
+  "authority": "inventory.json contains the supplied inventory facts. profiles contains the available profile attachments; not every referenced profile is present.",
+  "profilePaths": "Profile references in the inventory are relative to the deliverable directory."
+}

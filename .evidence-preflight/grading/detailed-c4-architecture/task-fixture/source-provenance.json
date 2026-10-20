@@ -1,0 +1,14 @@
+{
+  "repository": "https://github.com/Azure/data-api-builder",
+  "commit": "adcc678bfce34a10abdfac83fd676d1e84c14b5a",
+  "selectedDirectories": [
+    "src/Cli",
+    "src/Config",
+    "src/Core",
+    "src/Auth",
+    "src/Service",
+    "docker",
+    "schemas"
+  ],
+  "exclusions": "Git metadata, repository agent instructions, other implementations/tests and deployment samples are not included. Referenced excluded projects are out of inspection scope."
+}

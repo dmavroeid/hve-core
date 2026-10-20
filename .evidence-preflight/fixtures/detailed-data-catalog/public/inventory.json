@@ -1,0 +1,215 @@
+{
+  "engagement": "Northlake Equipment Rentals",
+  "entities": [
+    {
+      "id": "asset",
+      "name": "Asset Register",
+      "description": "Northlake asset register inventory.",
+      "grain": "One row per region_id and asset_id",
+      "source": {
+        "system": "rental-operations",
+        "location": "connections/asset-readonly",
+        "format": "table",
+        "access_confirmed": true
+      },
+      "tier": "silver",
+      "volume": {
+        "row_estimate": 1200,
+        "period_covered": "2026-07-01/2026-09-30",
+        "update_frequency": "daily"
+      },
+      "profile_ref": "../task-fixture/profiles/asset.json",
+      "classification": {
+        "sensitivity": "internal",
+        "contains_personal_data": false,
+        "data_categories": [],
+        "gdpr_article": null,
+        "ccpa_section": null,
+        "nist_pf_category": null,
+        "nistir8062_objective": null,
+        "owasp_privacy_id": null,
+        "dpia_ref": null
+      },
+      "lineage": {
+        "derived_from": [],
+        "transform_ref": null
+      },
+      "open_questions": []
+    },
+    {
+      "id": "reservation",
+      "name": "Reservation",
+      "description": "Northlake reservation inventory.",
+      "grain": "One row per region_id and reservation_id",
+      "source": {
+        "system": "rental-operations",
+        "location": "connections/reservation-readonly",
+        "format": "table",
+        "access_confirmed": true
+      },
+      "tier": "silver",
+      "volume": {
+        "row_estimate": 1200,
+        "period_covered": "2026-07-01/2026-09-30",
+        "update_frequency": "daily"
+      },
+      "profile_ref": "../task-fixture/profiles/reservation.json",
+      "classification": {
+        "sensitivity": "confidential",
+        "contains_personal_data": true,
+        "data_categories": [
+          "customer-reference"
+        ],
+        "gdpr_article": null,
+        "ccpa_section": null,
+        "nist_pf_category": null,
+        "nistir8062_objective": null,
+        "owasp_privacy_id": null,
+        "dpia_ref": null
+      },
+      "lineage": {
+        "derived_from": [],
+        "transform_ref": null
+      },
+      "open_questions": []
+    },
+    {
+      "id": "inspection",
+      "name": "Inspection Event",
+      "description": "Northlake inspection event inventory.",
+      "grain": "One row per region_id, asset_id and inspection_id",
+      "source": {
+        "system": "rental-operations",
+        "location": "connections/inspection-readonly",
+        "format": "table",
+        "access_confirmed": false
+      },
+      "tier": "bronze",
+      "volume": {
+        "row_estimate": null,
+        "period_covered": "2026-07-01/2026-09-30",
+        "update_frequency": "unknown"
+      },
+      "profile_ref": "../task-fixture/profiles/inspection-2025.json",
+      "classification": {
+        "sensitivity": "internal",
+        "contains_personal_data": false,
+        "data_categories": [],
+        "gdpr_article": null,
+        "ccpa_section": null,
+        "nist_pf_category": null,
+        "nistir8062_objective": null,
+        "owasp_privacy_id": null,
+        "dpia_ref": null
+      },
+      "lineage": {
+        "derived_from": [],
+        "transform_ref": null
+      },
+      "open_questions": [
+        "Access is not confirmed; the 2025 profile is stale and unavailable in this bundle."
+      ]
+    },
+    {
+      "id": "daily-availability",
+      "name": "Daily Availability",
+      "description": "Northlake daily availability inventory.",
+      "grain": "One row per region_id, asset_id and calendar_date",
+      "source": {
+        "system": "rental-operations",
+        "location": "connections/daily-availability-readonly",
+        "format": "table",
+        "access_confirmed": true
+      },
+      "tier": "silver",
+      "volume": {
+        "row_estimate": 1200,
+        "period_covered": "2026-07-01/2026-09-30",
+        "update_frequency": "daily"
+      },
+      "profile_ref": null,
+      "classification": {
+        "sensitivity": "internal",
+        "contains_personal_data": false,
+        "data_categories": [],
+        "gdpr_article": null,
+        "ccpa_section": null,
+        "nist_pf_category": null,
+        "nistir8062_objective": null,
+        "owasp_privacy_id": null,
+        "dpia_ref": null
+      },
+      "lineage": {
+        "derived_from": [
+          "asset",
+          "reservation"
+        ],
+        "transform_ref": "pipelines/daily-availability.sql"
+      },
+      "open_questions": []
+    }
+  ],
+  "relationships": [
+    {
+      "id": "rel-asset-reservation",
+      "from": "asset",
+      "to": "reservation",
+      "cardinality": "one-to-many",
+      "from_minimum": "one",
+      "to_minimum": "zero",
+      "join_keys": {
+        "from_field": [
+          "region_id",
+          "asset_id"
+        ],
+        "to_field": [
+          "region_id",
+          "asset_id"
+        ]
+      },
+      "confidence": "confirmed",
+      "basis": "The rental domain owner confirmed every reservation references one asset; an asset may have no reservations."
+    },
+    {
+      "id": "rel-asset-inspection",
+      "from": "asset",
+      "to": "inspection",
+      "cardinality": "one-to-many",
+      "from_minimum": "one",
+      "to_minimum": "zero",
+      "join_keys": {
+        "from_field": [
+          "region_id",
+          "asset_id"
+        ],
+        "to_field": [
+          "region_id",
+          "asset_id"
+        ]
+      },
+      "confidence": "assumed",
+      "basis": "Workshop proposal with explicit one-asset/zero-or-more-inspections minima; source access and owner confirmation are outstanding."
+    },
+    {
+      "id": "rel-asset-availability",
+      "from": "asset",
+      "to": "daily-availability",
+      "cardinality": "one-to-many",
+      "from_minimum": "one",
+      "to_minimum": "zero",
+      "join_keys": {
+        "from_field": [
+          "region_id",
+          "asset_id"
+        ],
+        "to_field": [
+          "region_id",
+          "asset_id"
+        ]
+      },
+      "confidence": "inferred",
+      "basis": "Technical lineage and sampled composite key matches support the link; domain owner confirmation is pending."
+    }
+  ],
+  "notes": "All records are synthetic. Profile references are relative to the catalog's deliverable directory. Entity counts and coverage must be derived."
+}

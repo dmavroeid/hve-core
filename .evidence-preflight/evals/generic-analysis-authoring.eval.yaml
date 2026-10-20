@@ -1,0 +1,67 @@
+name: queue-delay-notebook
+description: Exploratory notebook and summary for investigating fleet-charging
+  queue delays without overclaiming maintenance causality
+version: 2.0.0
+type: capability
+defaults:
+  runs: 1
+  timeout: 75m
+  executor:
+    name: restricted-copilot-sdk
+    config:
+      sessionPolicy:
+        availableTools: []
+        permissions:
+          allow: []
+          deny: []
+  model: ${AGENT_MODEL=MUST-SET-AGENT-MODEL}
+agent_environment:
+  env:
+    DO_NOT_TRACK: "1"
+  skills: []
+  files:
+    - src: ../fixtures/generic-analysis-authoring/public
+      dest: task-fixture
+scoring: {}
+stimuli:
+  - name: queue-delay-notebook
+    constraints:
+      max_agent_duration: 20m
+      max_duration: 75m
+    artifacts:
+      include:
+        - deliverable/**
+    prompt: >
+      Please investigate queue delays for our fleet-charging operations team.
+      Where should we investigate first, and what can this data tell us about
+      whether a maintenance change is justified?
+
+
+      Use the supplied synthetic observational data in
+      task-fixture/sessions.csv, with its profile, brief and provenance. Produce
+      an executable notebook at deliverable/queue-delay-analysis.ipynb and a
+      concise recommendation for the operations lead at deliverable/summary.md.
+      Choose the analysis and charts that best answer the question, and be clear
+      about important limitations.
+
+
+      Export every substantive chart as a PNG under deliverable/figures/ for
+      visual review. Use relative notebook paths. Installed tools, the Jupyter
+      kernel and execution directory are described in task-fixture/TOOLS.txt.
+      Public checks: node task-fixture/check-notebook.mjs
+      deliverable/queue-delay-analysis.ipynb deliverable/summary.md.
+
+
+      Do not modify task inputs, start nested agents or paid model sessions, use
+      the network, or inspect enclosing directories, external implementations or
+      other runs.
+    graders:
+      - type: completed
+      - type: file-exists
+        name: notebook-delivery
+        config:
+          path: deliverable/queue-delay-analysis.ipynb
+      - type: file-exists
+        name: summary-delivery
+        config:
+          path: deliverable/summary.md

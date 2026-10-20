@@ -1,0 +1,55 @@
+name: northlake-catalog-concise
+description: Format-neutral Northlake catalog with a concise user request.
+version: 2.0.0
+type: capability
+defaults:
+  runs: 1
+  timeout: 60m
+  executor:
+    name: restricted-copilot-sdk
+    config:
+      sessionPolicy:
+        availableTools: []
+        permissions:
+          allow: []
+          deny: []
+  model: ${AGENT_MODEL=MUST-SET-AGENT-MODEL}
+agent_environment:
+  env:
+    DO_NOT_TRACK: "1"
+  skills: []
+  files:
+    - src: ../fixtures/generic-data-catalog/public
+      dest: task-fixture
+scoring: {}
+stimuli:
+  - name: northlake-catalog
+    constraints:
+      max_agent_duration: 20m
+      max_duration: 60m
+    artifacts:
+      include:
+        - deliverable/**
+    prompt: >
+      Please turn the supplied Northlake Equipment Rentals inventory and
+      profiles into a readable data catalog for our rental-operations team. It
+      should help colleagues understand what data we have, how it relates, what
+      is usable, and where evidence or access is incomplete. Keep it faithful to
+      the supplied records, including their privacy information.
+
+
+      Save the catalog as deliverable/northlake-ds-catalog.md. Choose a document
+      structure that works for the team.
+
+
+      Inputs are task-fixture/inventory.json and task-fixture/profiles/*.json.
+      See task-fixture/TOOLS.txt for installed tools and
+      task-fixture/PROVENANCE.json for source provenance. Do not modify task
+      inputs, start nested agents or paid model sessions, use the network, or
+      inspect enclosing directories, external implementations or other runs.
+    graders:
+      - type: completed
+      - type: file-exists
+        name: delivery
+        config:
+          path: deliverable/northlake-ds-catalog.md

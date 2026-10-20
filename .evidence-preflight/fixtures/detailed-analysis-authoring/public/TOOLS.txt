@@ -1,0 +1,6 @@
+Use installed Node.js 24+ and the Python interpreter configured in QUEUE_DELAY_NOTEBOOK_PYTHON (also available on PATH).
+Python provides pandas, numpy, matplotlib, seaborn, nbformat, nbconvert and Pillow.
+Use the hve-simplified-pilot Jupyter kernel on this host; other hosts can set QUEUE_DELAY_NOTEBOOK_KERNEL.
+Execute notebooks with workspace-root working directory so task-fixture and deliverable are relative siblings.
+The public checker retains a separately executed notebook and verifies PNG exports; it does not certify interpretation or visual quality.
+No network, paid model calls, nested agents, shared-installation modifications or browsing enclosing directories and other runs.

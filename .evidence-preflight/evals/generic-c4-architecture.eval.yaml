@@ -1,0 +1,64 @@
+name: dab-c4-architecture-pack
+description: Create a source-grounded C4 architecture pack for Azure Data API
+  builder from a bounded source bundle.
+version: 2.0.0
+type: capability
+defaults:
+  runs: 1
+  timeout: 60m
+  executor:
+    name: restricted-copilot-sdk
+    config:
+      sessionPolicy:
+        availableTools: []
+        permissions:
+          allow: []
+          deny: []
+  model: ${AGENT_MODEL=MUST-SET-AGENT-MODEL}
+agent_environment:
+  env:
+    DO_NOT_TRACK: "1"
+  skills: []
+  files:
+    - src: ../fixtures/generic-c4-architecture/public
+      dest: task-fixture
+scoring: {}
+stimuli:
+  - name: dab-c4-architecture-pack
+    constraints:
+      max_agent_duration: 20m
+      max_duration: 60m
+    artifacts:
+      include:
+        - deliverable/**
+    prompt: >
+      Please create a source-grounded C4 onboarding pack for a new engineer
+      working on Data API builder. Help them understand how configuration, an
+      authenticated SQL Server-backed REST read, and the local Docker deployment
+      fit together. Use the supplied source bundle rather than assuming details
+      that are not evidenced.
+
+
+      Save the pack to deliverable/architecture-pack.md, with a short overview
+      and source references including the pinned commit. Include exactly five
+      renderable Mermaid flowcharts in this order: legend, System Context,
+      Container, Component for the HTTP service/runtime path, and Deployment for
+      the local Docker setup. Choose useful boundaries and layouts and explain
+      important uncertainty.
+
+
+      Inputs are task-fixture/source and the provenance notes in task-fixture.
+      Approved tools are in task-fixture/TOOLS.txt. Public checks: node
+      task-fixture/check.mjs deliverable/architecture-pack.md. The checker saves
+      PNGs under deliverable/rendered for separate visual review.
+
+
+      Do not modify task inputs, start nested agents or paid model sessions, use
+      the network, or inspect enclosing directories, external implementations or
+      other runs.
+    graders:
+      - type: completed
+      - type: file-exists
+        name: delivery
+        config:
+          path: deliverable/architecture-pack.md

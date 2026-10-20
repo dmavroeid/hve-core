@@ -1,0 +1,18 @@
+name: generic-p-map-ordered-concurrent-map-treatment-first
+evals:
+  - ../evals/generic-p-map.eval.yaml
+vary:
+  - /environment/skills
+baseline: b-baseline
+variants:
+  b-baseline:
+    environment:
+      skills: []
+  a-treatment:
+    environment:
+      skills:
+        - ../skills/generic-p-map/p-map-ordered-stream-enrichment
+execution:
+  workers: 1
+overrides:
+  runs: 1

@@ -1,0 +1,18 @@
+name: detailed-p-map-ordered-concurrent-map-baseline-first
+evals:
+  - ../evals/detailed-p-map.eval.yaml
+vary:
+  - /environment/skills
+baseline: a-baseline
+variants:
+  a-baseline:
+    environment:
+      skills: []
+  b-treatment:
+    environment:
+      skills:
+        - ../skills/detailed-p-map/p-map-ordered-stream-enrichment
+execution:
+  workers: 1
+overrides:
+  runs: 1

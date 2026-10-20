@@ -1,0 +1,4 @@
+Installed tools: Node.js 24+ and Python configured through CATALOG_PYTHON.
+Python has PyYAML and jsonschema available if needed. No package installation is necessary.
+No supplied catalog validator is required by this task.
+Do not modify task inputs or shared installations, start nested agents or paid model sessions, use the network, or inspect enclosing directories, external implementations or other runs.

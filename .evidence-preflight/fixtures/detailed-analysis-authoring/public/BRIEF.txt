@@ -1,0 +1,1 @@
+A fleet-charging operations lead needs exploratory analysis of queue delays: where should the team investigate, and what evidence is insufficient to recommend a maintenance change? The supplied 60,000-session dataset is synthetic observational data, not an intervention or fault-labelled experiment.
