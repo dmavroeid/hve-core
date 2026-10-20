@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { spawn, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
-import { cpSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { after, before, test } from "node:test";
 
@@ -49,6 +49,7 @@ const snapshots = new Map();
 const volumes = new Set();
 const inspected = new Set();
 const verified = new Set();
+const outputCases = new Map();
 let valid;
 let wrong;
 
@@ -147,7 +148,32 @@ function observe(name, selectedImage) {
     assert.equal(host.PidsLimit, 128);
     assert.equal(host.Memory, 536870912);
     assert.equal(host.NanoCpus, 1000000000);
+    assert.equal(host.Tmpfs["/tmp"], "rw,nosuid,nodev,noexec,size=67108864");
     assert.ok(container.Mounts.every(mount => mount.Destination !== "/var/run/docker.sock"));
+    const outputCase = outputCases.get(name);
+    const outputMounts = container.Mounts.filter(mount => mount.Destination === "/grade-output");
+    if (outputCase && outputCase.mode !== "absent") {
+      assert.equal(outputMounts.length, 1);
+      assert.equal(outputMounts[0].Type, "bind");
+      assert.equal(outputMounts[0].Source, outputCase.directory);
+      assert.equal(outputMounts[0].RW, outputCase.mode === "writable");
+    } else {
+      assert.equal(outputMounts.length, 0);
+    }
+    assert.ok(container.Mounts.filter(mount => mount.Type === "bind").every(mount =>
+      ["/run/vally/control", "/ipc-grade", "/grade-output"].includes(mount.Destination)),
+    "No additional host bind mounts are allowed");
+    for (const mount of container.Mounts.filter(mount => mount.Type === "bind" &&
+      mount.Destination !== "/grade-output")) {
+      assert.match(mount.Source, /^\/tmp\/vally-docker-grade-[^/]+\/grade-(control|ipc)$/);
+      assert.equal(mount.RW, mount.Destination === "/ipc-grade");
+    }
+    const references = container.Mounts.filter(mount => mount.Destination.startsWith("/var/lib/vally-host/"));
+    assert.equal(references.length, 2);
+    assert.ok(references.every(mount => mount.Type === "volume" && mount.RW === false),
+      "Both original references must remain readonly");
+    assert.ok(container.Mounts.filter(mount => mount.Type === "volume" && mount.RW)
+      .every(mount => mount.Destination === "/workspace"));
     assert.ok(container.Config.Env.every(value =>
       !/^(GITHUB_TOKEN|GH_TOKEN|COPILOT_GITHUB_TOKEN|OPENAI_API_KEY|ANTHROPIC_API_KEY|AZURE_OPENAI_API_KEY)=/.test(value)));
     for (const mount of container.Mounts) if (mount.Type === "volume") volumes.add(mount.Name);
@@ -162,7 +188,8 @@ function observe(name, selectedImage) {
 }
 
 async function grade(name, selected, snapshot, t,
-  { badDigest = false, missingPython = false, probe = false, selectedImage = image } = {}) {
+  { badDigest = false, missingPython = false, probe = false, selectedImage = image,
+    outputMode } = {}) {
   const directory = join(safe, "grades", name);
   mkdirSync(directory, { recursive: true });
   const scratch = join(root, "scratch", name);
@@ -175,11 +202,40 @@ async function grade(name, selected, snapshot, t,
     writeFileSync(spec, stringify(changed));
   }
   if (probe) spec = join(root, "module-probe.eval.yaml");
+  let composeFile = join(root, "hardening.yml");
+  if (outputMode) {
+    const parent = join(safe, "output-storage", name);
+    mkdirSync(parent, { recursive: true, mode: 0o700 });
+    const outputDirectory = join(parent, "generated");
+    mkdirSync(outputDirectory, { mode: 0o700 });
+    // Only this disposable directory needs cross-UID writes; its host parent stays private.
+    chmodSync(outputDirectory, 0o777);
+    const sibling = join(parent, "unmounted-sibling.txt");
+    writeFileSync(sibling, "host-only boundary canary\n");
+    const compose = parse(readFileSync(composeFile, "utf8"));
+    if (outputMode !== "absent") {
+      compose.services.grade.volumes = [{
+        type: "bind", source: outputDirectory, target: "/grade-output",
+        read_only: outputMode === "readonly", bind: { create_host_path: false },
+      }];
+    }
+    composeFile = join(directory, "output-compose.yml");
+    writeFileSync(composeFile, stringify(compose));
+    const outputSpec = structuredClone(definition);
+    outputSpec.stimuli[0].graders[0].config.args = [
+      "--input-type=module", "-e",
+      readFileSync(new URL("./output-probe.mjs", import.meta.url), "utf8"), sibling,
+    ];
+    spec = join(directory, "output.eval.yaml");
+    writeFileSync(spec, stringify(outputSpec));
+    outputCases.set(name, { mode: outputMode, directory: outputDirectory,
+      sibling, siblingBytes: readFileSync(sibling) });
+  }
   const args = ["grade", "--eval-spec", spec, "--output", "jsonl", "--require-pass",
     "--backend", "docker", "--backend-args", `task-image=${baseImage}`, "--backend-args", `grade-image=${selectedImage}`,
     "--backend-args", "task-network=none", "--backend-args", "grade-network=none",
-    "--backend-args", `compose-file=${join(root, "hardening.yml")}`,
-    "--workspace", scratch, "--assets-dir", probe ? join(root, "module-probe-assets") : assets,
+    "--backend-args", `compose-file=${composeFile}`,
+    "--workspace", scratch, "--assets-dir", probe || outputMode ? join(root, "module-probe-assets") : assets,
     "--artifact-dir", snapshot];
   if (missingPython) args.push("--backend-args", "grade-env=CATALOG_PYTHON");
   writeFileSync(join(directory, "selected-original-trial.jsonl"), selected.line);
@@ -321,6 +377,43 @@ test("native grade accepts an explicitly supplied different snapshot, exposing t
     persist();
   });
 
+test("grade-only output bind retains actual generated bytes after native cleanup",
+  { timeout: 300000 }, async t => {
+    const result = await grade("output-writable", valid, valid.snapshot, t, { outputMode: "writable" });
+    assert.equal(result.code, 0, result.stderr + result.stdout);
+    assert.equal(result.outcome.passed, true);
+    const entry = outputCases.get("output-writable");
+    assert.deepEqual(readdirSync(entry.directory), ["derived.json"]);
+    const output = JSON.parse(readFileSync(join(entry.directory, "derived.json"), "utf8"));
+    const input = readFileSync(join(valid.snapshot, "deliverable", "northlake-ds-catalog.md"));
+    assert.deepEqual(output, {
+      kind: "trusted-model-free-derived-output", inputSha256: hash(input), inputBytes: input.length,
+      nonemptyLines: input.toString("utf8").split(/\r?\n/).filter(line => line.trim()).length,
+      readonlyInputChecks: 2,
+    });
+    entry.outputSha256 = hash(readFileSync(join(entry.directory, "derived.json")));
+    summary.outputStorage = {
+      scope: "Synthetic generated-file persistence only; not notebook/C4 task qualification",
+      containerTarget: "/grade-output", outputSha256: entry.outputSha256,
+      survivesNativeCleanup: true, originalWriteDenials: 2,
+      operatorHostBoundary: "Fresh per-grade writable directory under a private parent; no task execution",
+    };
+    verified.add("output-writable");
+    persist();
+  });
+
+for (const mode of ["readonly", "absent"]) {
+  test(`${mode} output storage is an explicit native operational error without fallback`,
+    { timeout: 300000 }, async t => {
+      const result = await grade(`output-${mode}`, valid, valid.snapshot, t, { outputMode: mode });
+      assert.equal(result.code, 1);
+      assert.equal(result.outcome.status, "error");
+      assert.match(JSON.stringify(result.outcome), mode === "readonly" ? /EROFS|EACCES|EPERM/ : /ENOENT/);
+      assert.deepEqual(readdirSync(outputCases.get(`output-${mode}`).directory), []);
+      verified.add(`output-${mode}`);
+    });
+}
+
 after(() => {
   let checksPassed = false;
   try {
@@ -329,10 +422,16 @@ after(() => {
       assert.equal(hash(readFileSync(join(snapshot, "deliverable", "northlake-ds-catalog.md"))), digest);
     }
     assert.deepEqual(readFileSync(gradeSpec), gradeBytes);
+    for (const entry of outputCases.values()) {
+      assert.deepEqual(readFileSync(entry.sibling), entry.siblingBytes);
+      if (entry.outputSha256) {
+        assert.equal(hash(readFileSync(join(entry.directory, "derived.json"))), entry.outputSha256);
+      }
+    }
     summary.originalsPreserved = true;
     assert.ok(summary.containers.length > 0, "At least one actual native grade container must be inspected");
-    assert.equal(summary.cases.length, 8);
-    assert.equal(verified.size, 8);
+    assert.equal(summary.cases.length, 11);
+    assert.equal(verified.size, 11);
     assert.equal(summary.nativeGradeRecordRetained, true);
     assert.equal(summary.mismatchedSnapshotAccepted, true);
     checksPassed = true;

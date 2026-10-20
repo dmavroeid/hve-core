@@ -60,7 +60,7 @@ jobs:
             -f .github/validation/skill-effectiveness/native-catalog/Dockerfile . \
             2>&1 | tee "$RUNNER_TEMP/native-catalog-qualification/safe/grade-image-build.log"
           echo "TASK_RUNTIME_IMAGE=$(cat "$RUNNER_TEMP/native-catalog-qualification/safe/image-id")" >> "$GITHUB_ENV"
-      - name: Exercise native catalog grades, startup errors and preserved raw records
+      - name: Exercise native catalog controls and approved synthetic grade-output storage
         working-directory: .github/skills/hve-core/skill-effectiveness
         run: |
           set -euo pipefail
