@@ -60,6 +60,21 @@ jobs:
           set -euo pipefail
           unset SKILL_EFFECTIVENESS_NATIVE_PREFLIGHT SKILL_EVAL_INVENTORY_DIR NODE_OPTIONS NODE_TEST_CONTEXT
           npm test 2>&1 | tee evidence-validation.log
+      - name: Inspect existing task-checker Python prerequisites
+        working-directory: .evidence-preflight
+        timeout-minutes: 1
+        run: |
+          set -euo pipefail
+          python3 -c 'import importlib.util as u, importlib.metadata as m, json, platform; packages={"yaml":"PyYAML","jsonschema":"jsonschema","nbformat":"nbformat","nbconvert":"nbconvert","ipykernel":"ipykernel","PIL":"Pillow","matplotlib":"matplotlib","pandas":"pandas"}; print(json.dumps({"python":platform.python_version(),"packages":{package: m.version(package) if u.find_spec(module) else None for module,package in packages.items()}},indent=2))' | tee task-runtime-prerequisites.json
+      - name: Qualify catalog controls through the real checker and native grader
+        working-directory: .evidence-preflight
+        timeout-minutes: 3
+        env:
+          CATALOG_PYTHON: python3
+        run: |
+          set -euo pipefail
+          unset SKILL_EFFECTIVENESS_NATIVE_PREFLIGHT SKILL_EVAL_INVENTORY_DIR NODE_OPTIONS NODE_TEST_CONTEXT
+          node --test validation/catalog-controls.mjs 2>&1 | tee catalog-controls.log
       - name: Retain generated lock and model-free validation evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -68,5 +83,7 @@ jobs:
           path: |
             .evidence-preflight/package-lock.json
             .evidence-preflight/evidence-validation.log
+            .evidence-preflight/task-runtime-prerequisites.json
+            .evidence-preflight/catalog-controls.log
           retention-days: 7
           if-no-files-found: error
