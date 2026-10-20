@@ -105,6 +105,7 @@ test("copied native templates lint and dry-run both role orders without capture 
       "--output-dir", output, "--workspace", join(f.temporary, "workspaces", experiment.name)]);
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.ok(result.stdout.includes(experiment.name));
+    for (const variant of Object.keys(experiment.variants)) assert.ok(result.stdout.includes(variant));
   }
   assert.equal(existsSync(join(f.root, "inventories")), false);
   assert.equal(existsSync(join(f.root, "RESULTS.md")), false);
@@ -133,27 +134,6 @@ test("native staging templates separate public inputs, offline checkers and save
   assert.deepEqual(review.stimuli[0].graders[0].config.evidence, ["repo"]);
   for (const key of ["agent_environment", "grading_environment", "executor_plugins"]) assert.equal(review[key], undefined);
   assert.equal(review.defaults.executor, undefined);
-});
-
-test("native staging specs pass available CLI lint and mock experiment dry-run without SDK startup", { timeout: 180000 }, t => {
-  const f = fixture(t);
-  const cli = join(dirname(findPackageJSON("@microsoft/vally-cli", import.meta.url)), "dist", "index.js");
-  for (const spec of ["evals/task.eval.yaml", "evals/task.grade.eval.yaml", "evals/task.review.eval.yaml"]) {
-    const result = f.run([cli, "lint", "--strict", "--eval-spec", spec]);
-    assert.equal(result.status, 0, result.stdout + result.stderr);
-  }
-  f.spec.defaults.executor = "mock";
-  f.write("evals/task.eval.yaml", stringify(f.spec));
-  const reversed = { ...f.experiment, name: "treatment-first", baseline: "b-baseline", variants: {
-    "a-treatment": f.experiment.variants["b-treatment"], "b-baseline": f.experiment.variants["a-baseline"],
-  } };
-  for (const experiment of [f.experiment, reversed]) {
-    f.write("experiments/task.experiment.yaml", stringify(experiment));
-    const result = f.run([cli, "experiment", "run", "--dry-run", "experiments/task.experiment.yaml",
-      "--param", "AGENT_MODEL=mock", "--output-dir", join(f.temporary, experiment.name)]);
-    assert.equal(result.status, 0, result.stdout + result.stderr);
-    for (const variant of Object.keys(experiment.variants)) assert.ok(result.stdout.includes(variant));
-  }
 });
 
 test("native candidate staging preserves both complete skill arms without private checkers", async t => {

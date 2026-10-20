@@ -20,20 +20,12 @@ benefit, not obtain a universal one-shot verdict.
 
 **Execution status:** the current templates do not enforce candidate or grader
 containment. Authoring and model-free validation remain available; do not start
-untrusted execution through the current local path. The
+untrusted execution through the current local path. Read the
 [restricted execution profile](references/experiment-method.md#restricted-execution-profile)
-includes a released-API session-policy plugin for fresh environment-scoped
-sessions only. Default-mode and resume requests reject. Development/generated
-pins and the canonical lockfile match the target stack. Model-free Ubuntu
-checks passed frozen restore, copied-package tests and image decoding.
-Later model-free checks on a separately built pinned public-stack image passed
-SDK tool/permission enforcement and synthetic task/grader containment for the
-tested hardened Linux Docker profile. Actual no-prompt sessions also retained
-startup inventories, independent backups and completion verification through
-native workspace preservation. See the execution guide for evidence and limits.
-These results do not validate arbitrary images, native Windows, successful
-model-driven tasks or the current revision's full native regression. Generated
-YAML alone does not establish the required backend controls.
+before selecting a runtime. Its adapter supports fresh environment-scoped
+sessions only and rejects default/resume requests. Completed model-free checks
+qualify tested Linux profiles, not arbitrary images, native Windows or successful
+model-driven tasks; see [evidence and limits](references/experiment-method.md#completed-model-free-evidence-and-limits).
 
 ## Success Criteria
 
@@ -206,30 +198,13 @@ for fresh candidate trials to examine whether the observed difference recurs.
 Repetition does not repair an irrelevant measure or prove general effectiveness.
 
 **Paid trials and model reviews require explicit approval of the run plan and
-budget.** Include models, tasks, variants, repetitions, prompt graders, image
-reviews and native retry/reminder behavior. Authoring and model-free validation
-do not authorize these calls. Obtain fresh approval for expanded scope or manual
-reruns, including failed attempts.
-
-Use available native execution limits and provider spending controls, disclose
-their limits, and inspect reported usage before authorizing the next invocation.
-Record whether the budget is a supervised target or a required enforced maximum.
-The selected Vally execution profile and helpers do not enforce a hard credit ceiling;
-timeouts and usage reports are not financial guarantees. If the operator requires
-an enforced ceiling, stop until the selected provider or runtime supplies it.
-Keep spending enforcement with that owner rather than adding a custom controller.
-Stop before the next invocation when scope or reported usage reaches its agreed
-limit; this does not promise cancellation of an in-flight call or native retry.
-Missing or incomparable usage requires explicit continuation unless existing
-approval already covers that specific bounded unknown-usage scope. Spending
-approval never waives the separate security prerequisites.
-
-The generated `study:dry-run` script inspects the native experiment plan.
-The package omits `study:run` and `review:images` paid convenience scripts.
-The retained `vally` passthrough and image helper can still be invoked manually;
-omitting aliases does not enforce a spending ceiling or disable paid execution.
-Paid execution remains deferred until its separate security, spending and
-operational prerequisites are satisfied; see the execution guide.
+budget.** Before any paid invocation, read and apply
+[the supervised run policy](references/experiment-method.md#execute-an-approved-run-plan),
+including retry/rerun scope, unknown usage and security prerequisites.
+Authoring and model-free validation do not authorize calls. Neither timeouts nor
+omitted paid aliases enforce a credit ceiling; when an enforced maximum is
+required but unavailable, stop. Keep spending enforcement with the provider or
+native runtime, not a custom controller.
 
 Inspect inventories, session identities and access traces before interpreting
 results. Pair by native task/trial identity and declared experiment pairing,

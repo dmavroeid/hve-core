@@ -66,10 +66,11 @@ submission's images. The reviewer has no tools, so material absent from the
 prompt/images cannot be inspected. Avoid identifying condition labels in the
 prompt or pixels. Attachment display names are neutral; keep role mapping outside.
 
-Paid image review remains deferred until the separate security, spending and
-operational prerequisites in the
+Before a paid image review, read and apply the security, spending and operational
+prerequisites in the
 [supervised run policy](experiment-method.md#execute-an-approved-run-plan)
-are satisfied. Human visual inspection remains available without a model call.
+and obtain approval for that invocation. Human visual inspection remains
+available without a model call.
 For separately authorized manual use, the helper takes the judge model,
 approved-copy root, relative prompt path, fresh output directory and relative
 image paths as positional arguments. It does not supply financial enforcement.
@@ -111,13 +112,10 @@ Deadlines do not cancel underlying operations or prove a late-created runtime
 stopped. Inspect unconfirmed shutdown before another invocation.
 This is not a hard credit limit or an OS sandbox. Review recorded usage before
 authorizing another invocation; a failed review needs fresh approval to rerun.
-Distinguish an agreed target from a required enforced maximum. Do not start the
-next invocation once the approved scope or reported-usage target is reached;
-this is not a promise to cancel an in-flight request. Missing or incomparable
-usage requires explicit continuation unless prior approval covers that specific
-bounded unknown-usage scope. Do not run it when a required enforced credit cap
-is unavailable. Financial approval does not waive the independent requirement
-that this reviewer cannot execute submissions or expose protected credentials.
+Stop at approved scope/usage limits or when a required enforced cap is unavailable.
+Apply the run policy's unknown-usage continuation rule; approval never waives the
+requirement that this reviewer cannot execute submissions or expose protected
+credentials.
 Runtime files under the review directory's
 `.copilot/` are local session data, not material to publish automatically.
 

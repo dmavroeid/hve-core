@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MIT
 
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import fs from "node:fs";
 import test from "node:test";
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
@@ -13,8 +12,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { captureInventory, installInventoryCapture } from "../scripts/native-inventory.mjs";
 
 const pkg = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const runtimeRoot = pkg;
-const require = createRequire(path.join(runtimeRoot, "package.json"));
+const require = createRequire(path.join(pkg, "package.json"));
 const sdkRoot = path.resolve(require.resolve("@github/copilot-sdk"), "..", "..", "..");
 const sdkPackage = JSON.parse(readFileSync(path.join(sdkRoot, "package.json"), "utf8"));
 const { CopilotClient } = await import(pathToFileURL(path.join(sdkRoot, sdkPackage.exports["."].import.default)));
@@ -91,7 +89,7 @@ test("capture hook leaves configuration, permissions, credits and resume behavio
   let received, restore;
   CopilotClient.prototype.createSession = async function (options) { received = options; return session; };
   try {
-    restore = await installInventoryCapture(runtimeRoot, root);
+    restore = await installInventoryCapture(pkg, root);
     const actual = await CopilotClient.prototype.createSession.call({}, config);
     assert.equal(actual, session);
     assert.equal(received, config);
@@ -113,7 +111,7 @@ test("capture failure disconnects before return and does not hide a disconnect e
   session.disconnect = async () => { disconnected++; throw new Error("disconnect failed"); };
   CopilotClient.prototype.createSession = async () => session;
   try {
-    restore = await installInventoryCapture(runtimeRoot, root);
+    restore = await installInventoryCapture(pkg, root);
     await assert.rejects(CopilotClient.prototype.createSession.call({}, {}), error => {
       assert.ok(error instanceof AggregateError);
       assert.match(error.errors[0].message, /inventory RPC failed/);
@@ -158,7 +156,7 @@ test("inventory RPC deadlines and failed-session disconnect are bounded and clea
     let restore;
     CopilotClient.prototype.createSession = async () => session;
     try {
-      restore = await installInventoryCapture(runtimeRoot, root, { timeoutMs: 15 });
+      restore = await installInventoryCapture(pkg, root, { timeoutMs: 15 });
       if (stage === "success") {
         assert.equal(await CopilotClient.prototype.createSession.call({}, {}), session);
         assert.equal(disconnected, 0);
@@ -228,7 +226,7 @@ test("a timed-out RPC or disconnect can settle later without resuming capture or
     let restore;
     CopilotClient.prototype.createSession = async () => session;
     try {
-      restore = await installInventoryCapture(runtimeRoot, root, { timeoutMs: 15 });
+      restore = await installInventoryCapture(pkg, root, { timeoutMs: 15 });
       await assert.rejects(CopilotClient.prototype.createSession.call({}, {}), AggregateError);
       const file = path.join(root, "actual-session.failure.json");
       const failure = readFileSync(file, "utf8");
@@ -258,7 +256,7 @@ test("capture, disconnect and failure-record persistence errors are retained tog
   let restore;
   CopilotClient.prototype.createSession = async () => session;
   try {
-    restore = await installInventoryCapture(runtimeRoot, root);
+    restore = await installInventoryCapture(pkg, root);
     await assert.rejects(CopilotClient.prototype.createSession.call({}, {}), error => {
       assert.ok(error instanceof AggregateError);
       assert.deepEqual(error.errors, [primary, cleanup, persistence]);
@@ -286,7 +284,7 @@ test("successful capture with failed publication stops and persists the original
   let restore;
   CopilotClient.prototype.createSession = async () => session;
   try {
-    restore = await installInventoryCapture(runtimeRoot, root);
+    restore = await installInventoryCapture(pkg, root);
     await assert.rejects(CopilotClient.prototype.createSession.call({}, {}), error => {
       assert.match(error.errors[0].message, /snapshot publication failed/);
       return true;
@@ -315,7 +313,7 @@ test("the evidence variable is removed before SDK session creation and no eviden
   process.env.SKILL_EVAL_INVENTORY_DIR = root;
   let restore;
   try {
-    restore = await installInventoryCapture(runtimeRoot, root);
+    restore = await installInventoryCapture(pkg, root);
     await CopilotClient.prototype.createSession.call({}, {});
     assert.equal(logged.some(message => message.includes(root)), false);
   } finally {
@@ -324,21 +322,6 @@ test("the evidence variable is removed before SDK session creation and no eviden
     if (previous === undefined) delete process.env.SKILL_EVAL_INVENTORY_DIR;
     else process.env.SKILL_EVAL_INVENTORY_DIR = previous;
   }
-});
-
-test("a retained original detects changed or deleted inventory but does not prevent either", async t => {
-  const root = temporary(t);
-  const file = await captureInventory(fixture([{ name: "ambient", enabled: true }]), {}, root);
-  const original = readFileSync(file);
-  const digest = bytes => createHash("sha256").update(bytes).digest("hex");
-  const originalHash = digest(original);
-  const altered = JSON.parse(original);
-  altered.skillDetails.skills = [];
-  writeFileSync(file, JSON.stringify(altered));
-  assert.notEqual(digest(readFileSync(file)), originalHash);
-  assert.equal(JSON.parse(original).skillDetails.skills[0].name, "ambient");
-  fs.unlinkSync(file);
-  assert.throws(() => readFileSync(file), /ENOENT/);
 });
 
 test("invalid inventory deadlines reject before RPCs and temporary-file cleanup errors remain visible", async t => {

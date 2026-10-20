@@ -3,7 +3,7 @@ title: Skill Effectiveness Skill Security Model
 description: "STRIDE model for tool-using intake, native candidate and grader gaps, inventory capture, and no-tools image review"
 author: microsoft/hve-core
 ms.topic: reference
-ms.date: 2026-10-19
+ms.date: 2026-10-20
 keywords:
   - security
   - STRIDE
@@ -41,14 +41,12 @@ public-factory adapter. Its source validates policy, injects explicit tools and
 managed permissions, denies host approval requests and checks tool metadata
 before returning a session. Only fresh environment-scoped sessions are supported;
 default-mode and resume requests reject. Registration rejects older installed
-package versions. Model-free Ubuntu restore, copied-package checks and actual
-image decoding passed. Later actual SDK policy and synthetic task/grader
-containment checks passed on separately built pinned public-stack Linux images.
-Actual no-prompt production sessions passed startup backup, completion comparison
-and native workspace retention. The incompatible default-image attempt is not
-the latest result. These checks do not qualify arbitrary images, native Windows,
-successful model-driven execution or every subsequent source revision; see the
-execution guide's evidence links and limitations.
+package versions. Completed model-free checks cover Ubuntu package mechanics,
+actual decoding, SDK policy, synthetic role containment and no-prompt startup
+retention on tested profiles. They do not qualify arbitrary images, native
+Windows, successful model-driven execution or every subsequent source revision.
+The [execution evidence and limits](references/experiment-method.md#completed-model-free-evidence-and-limits)
+retain exact run results and profile qualifications.
 Tool-using intake, candidate tools, executable graders and no-tools review have
 different authority; a reviewer restriction does not protect the other roles.
 Untrusted execution remains blocked until required boundaries are implemented
@@ -117,7 +115,8 @@ and observed. Financial approval cannot waive those prerequisites.
    to Vally through its public environment-aware client factory. Per-run policy
    context and bounded SDK preflight do not supply OS containment or authoritative
    host evidence. Pins match its registration gate and model-free Ubuntu
-   package checks passed; actual runtime policy enforcement remains unverified.
+   package checks passed. Actual SDK policy enforcement passed on the tested
+   hardened Linux profile, not arbitrary task policies or native Windows.
 
 ### Data Flow
 
@@ -202,22 +201,24 @@ flowchart TD
 
 ### Boundary Descriptions
 
-| Boundary                      | Assets Protected                                         | Controls Enforced                                                                                                                                        |
-|-------------------------------|----------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Input to helper               | Selected prompt and images                               | Approved root; detected-link rejection; opened-file identity; byte/count/pixel/base64 limits; strict local decode wired, actual codec validation pending |
-| SDK to inventory              | Session identity and inventory                           | Required identity and enabled-state fields; capture before return; disconnect on failure                                                                 |
-| Helper to filesystem          | Prior evidence                                           | Exclusive complete writes; independent startup backup; bounded selected-log snapshots; image-review destination must be new                              |
-| Runtime to model              | Project content and account usage                        | Empty-mode image reviewer, no tools, rejected permissions, response timeout; no hard credit cap                                                          |
-| Repository to authoring tools | Authoring context and host authority                     | Imported content is untrusted; no helper-enforced intake sandbox                                                                                         |
-| Candidate to grader           | Checker integrity, host files, credentials and execution | No enforced candidate/grader OS separation; reviewer no-tools settings do not apply here                                                                 |
-| Candidate to startup evidence | Inventory provenance and comparison integrity            | In-memory startup digest checks both independent copies after execution; supervised detection, not an independent authority                              |
+| Boundary                      | Assets Protected                                         | Controls Enforced                                                                                                                          |
+|-------------------------------|----------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------|
+| Input to helper               | Selected prompt and images                               | Approved root; detected-link rejection; opened-file identity; byte/count/pixel/base64 limits; actual Ubuntu decode passed; Windows pending |
+| SDK to inventory              | Session identity and inventory                           | Required identity and enabled-state fields; capture before return; disconnect on failure                                                   |
+| Helper to filesystem          | Prior evidence                                           | Exclusive complete writes; independent startup backup; bounded selected-log snapshots; image-review destination must be new                |
+| Runtime to model              | Project content and account usage                        | Empty-mode image reviewer, no tools, rejected permissions, response timeout; no hard credit cap                                            |
+| Repository to authoring tools | Authoring context and host authority                     | Imported content is untrusted; no helper-enforced intake sandbox                                                                           |
+| Candidate to grader           | Checker integrity, host files, credentials and execution | No enforced candidate/grader OS separation; reviewer no-tools settings do not apply here                                                   |
+| Candidate to startup evidence | Inventory provenance and comparison integrity            | In-memory startup digest checks both independent copies after execution; supervised detection, not an independent authority                |
 
 The diagrams and controls above describe current mechanics. The planned native
 boundary has separate candidate, offline executable-grading and online saved-review
-roles. Its adapter must apply explicit tool visibility,
-native managed permission rules and an explicit deny fallback on both fresh and
-resumed sessions through both public factories. Runtime enforcement remains
-unverified; the SDK warns that older runtimes can ignore injected managed policy.
+roles. Its adapter applies explicit tool visibility,
+native managed permission rules and an explicit deny fallback on supported fresh
+environment-scoped sessions. Default-mode and resume requests reject before SDK
+startup. Actual policy enforcement passed on the tested hardened Linux profile;
+this does not qualify arbitrary task policies or older runtimes, which can
+ignore injected managed policy.
 Offline grading needs readonly executed inputs, an immediate pre-use checker
 hash, a scrubbed credential-free environment and no egress. Online review must
 not execute submissions. Stronger host-attested startup records, when required,
@@ -306,8 +307,9 @@ image count, individual/aggregate bytes, decoded dimensions/pixels and base64
 size before SDK contact. Stable opened bytes are decoded, copied and attached.
 Windows change time alone is not content identity; device/inode, size and
 modification time are checked before/after reads. These checks do not establish
-hostile same-user race immunity. Sharp full-decode wiring still awaits actual
-codec validation and a clean standalone restore.
+hostile same-user race immunity. Actual Sharp full decode and clean frozen
+standalone restore passed on Ubuntu; native Windows and model vision remain
+unverified.
 Inventory initialization, listing and failure-path disconnect each have a
 ten-second deadline with cleared timers. A deadline does not cancel the RPC or
 prove shutdown. The diagnostic preload retains failure records; the scoped
@@ -337,7 +339,7 @@ and protected checker/submission paths.
 |-------------------------------------|------------|--------|---------------|----------------------------------------------------------------------------|
 | Sensitive local evidence exposed    | Med        | High   | Med           | Partially mitigated; operator-controlled storage                           |
 | Evidence or checkers changed        | Med        | High   | High          | Open; entry authentication does not enforce readonly inputs or arm binding |
-| Oversized inputs exhaust memory     | Med        | Med    | Med           | Open; no input-size limit                                                  |
+| Oversized inputs exhaust memory     | Med        | Med    | Med           | Partially mitigated; local input bounds do not limit SDK response memory   |
 | Grader code inherits host authority | Med        | High   | High          | Open; no verified credential-free, egress-denied grading boundary          |
 
 ## Bucket B2: Copilot Runtime and Model
@@ -418,9 +420,11 @@ The built-in candidate executor's approving permission path is not deny-by-defau
 The distinct adapter source replaces that handler with explicit tools, native
 managed rules and the canonical `{ kind: "reject" }` denial callback. Malformed
 permission responses are operational failures, not verified policy denials.
-Its exact-stack integration, runtime support and OS containment are unverified.
-No gap is closed by mocked wiring. Broad
-shell/interpreter access is not safe merely because a session is fresh.
+Actual SDK policy and synthetic native-role containment passed on the tested
+public-stack Linux profile. These results do not qualify arbitrary task
+policies, authenticated model-task boundaries or native Windows. No gap is
+closed by mocked wiring. Broad shell/interpreter access is not safe merely
+because a session is fresh.
 
 ### Risk Rating
 

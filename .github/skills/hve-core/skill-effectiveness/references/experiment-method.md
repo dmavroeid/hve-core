@@ -58,13 +58,17 @@ No private checkout, fork or unpublished Vally change is required by this design
   authentication, readonly checker/submission inputs, writable scratch and
   integrity-negative rejection on the tested public-stack profile. They do not
   establish real-candidate output provenance or automatic arm/snapshot binding.
+* [Final frozen-package regression](https://github.com/dmavroeid/hve-core/actions/runs/39328258326)
+  passed public frozen restore and the complete ordinary package suite after
+  paid-alias removal: 111 tests, 110 passed, none failed, one explicitly opt-in
+  native startup smoke skipped. It did not run Docker, startup probes or models.
 
 These are scoped historical results, not a green status for every later edit.
-The subsequent paid-alias omission passed focused local package/documentation
-checks; its full frozen native regression remains deferred. Windows, authenticated
-model-task execution, model judgment quality and final published-head validation
-remain unverified. Reuse completed controls as evidence, but qualify a materially
-different runtime/profile separately rather than inferring universal protection.
+The final package run qualifies its package snapshot, not new native execution
+routes or the final published PR merge. Windows, authenticated model-task
+execution and model judgment quality remain unverified. Reuse completed controls
+as evidence, but qualify a materially different runtime/profile separately
+rather than inferring universal protection.
 
 ### Public Release Basis
 
@@ -595,7 +599,8 @@ snapshot bound to offline grading or in blinded saved-evidence review inputs.
 These are ordinary supervised consistency checks, not an adversarial host-owned
 audit store. They do not stop a process with equivalent authority from changing
 code, memory or every persisted copy, and do not provide grader protection.
-Exact-stack native retention still needs its separately authorized runtime check.
+The actual no-prompt retention check above passed on its tested frozen profile;
+materially different native preservation layouts need their own verification.
 
 Initialization, skill listing and failure-path disconnect each have a bounded
 wait of at most ten seconds. A timeout does not cancel the RPC or prove shutdown.
