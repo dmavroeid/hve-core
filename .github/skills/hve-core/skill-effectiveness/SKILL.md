@@ -201,10 +201,12 @@ Repetition does not repair an irrelevant measure or prove general effectiveness.
 budget.** Before any paid invocation, read and apply
 [the supervised run policy](references/experiment-method.md#execute-an-approved-run-plan),
 including retry/rerun scope, unknown usage and security prerequisites.
-Authoring and model-free validation do not authorize calls. Neither timeouts nor
-omitted paid aliases enforce a credit ceiling; when an enforced maximum is
-required but unavailable, stop. Keep spending enforcement with the provider or
-native runtime, not a custom controller.
+Authoring and model-free validation do not authorize calls. The retained CLI and
+image helper still permit manual execution. The package omits paid aliases;
+this does not enforce a spending ceiling.
+Timeouts are not financial enforcement either. When an enforced
+maximum is required but unavailable, stop. Keep spending enforcement with the
+provider or native runtime, not a custom controller.
 
 Inspect inventories, session identities and access traces before interpreting
 results. Pair by native task/trial identity and declared experiment pairing,
