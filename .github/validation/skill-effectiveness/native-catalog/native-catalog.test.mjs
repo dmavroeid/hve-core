@@ -155,10 +155,11 @@ function observe(name, selectedImage) {
       assert.deepEqual(JSON.parse(seccomp[0].slice("seccomp=".length)),
         JSON.parse(readFileSync(join(safe, "renderer-profile", "renderer-seccomp.json"), "utf8")));
     } else assert.equal(seccomp.length, 0);
-    assert.equal(host.PidsLimit, 128);
-    assert.equal(host.Memory, 536870912);
-    assert.equal(host.NanoCpus, 1000000000);
-    assert.equal(host.Tmpfs["/tmp"], "rw,nosuid,nodev,noexec,size=67108864");
+    assert.equal(host.PidsLimit, renderer ? 512 : 128);
+    assert.equal(host.Memory, renderer ? 2147483648 : 536870912);
+    assert.equal(host.NanoCpus, renderer ? 2000000000 : 1000000000);
+    assert.equal(host.Tmpfs["/tmp"], renderer ?
+      "rw,nosuid,nodev,noexec,size=536870912" : "rw,nosuid,nodev,noexec,size=67108864");
     assert.ok(container.Mounts.every(mount => mount.Destination !== "/var/run/docker.sock"));
     const outputCase = outputCases.get(name);
     const outputMounts = container.Mounts.filter(mount => mount.Destination === "/grade-output");
@@ -233,8 +234,11 @@ async function grade(name, selected, snapshot, t,
     writeFileSync(sibling, "host-only boundary canary\n");
     const compose = parse(readFileSync(composeFile, "utf8"));
     const renderer = taskId?.endsWith("c4-architecture") ?? false;
-    if (renderer) compose.services.grade.security_opt =
-      ["seccomp=" + join(safe, "renderer-profile", "renderer-seccomp.json")];
+    if (renderer) Object.assign(compose.services.grade, {
+      security_opt: ["seccomp=" + join(safe, "renderer-profile", "renderer-seccomp.json")],
+      pids_limit: 512, mem_limit: "2g", cpus: 2,
+      tmpfs: ["/tmp:rw,nosuid,nodev,noexec,size=536870912"],
+    });
     if (outputMode !== "absent") {
       compose.services.grade.volumes = [{
         type: "bind", source: outputDirectory, target: "/grade-output",
@@ -521,8 +525,7 @@ for (const framing of ["detailed", "generic"]) {
         const directory = join(outputCases.get(id).directory, "execution", "deliverable");
         const images = files(directory).filter(file => file.endsWith(".png"));
         assert.equal(images.length, notebook ? 8 : 5);
-        const { default: sharp } = await import(
-          new URL("../../../../.evidence-preflight/node_modules/sharp/lib/index.js", import.meta.url));
+        const sharp = createRequire(join(skill, "package.json"))("sharp");
         for (const file of images) {
           const metadata = await sharp(readFileSync(file)).metadata();
           assert.equal(metadata.format, "png");
@@ -565,8 +568,9 @@ after(() => {
     }
     summary.originalsPreserved = true;
     assert.ok(summary.containers.length > 0, "At least one actual native grade container must be inspected");
-    assert.equal(summary.cases.length, taskOutputOnly ? 4 : 15);
-    assert.equal(verified.size, taskOutputOnly ? 4 : 15);
+    const expected = taskOutputOnly ? (process.env.NATIVE_TASK_OUTPUT_KIND === "c4" ? 2 : 4) : 15;
+    assert.equal(summary.cases.length, expected);
+    assert.equal(verified.size, expected);
     assert.equal(summary.nativeGradeRecordRetained, true);
     if (!taskOutputOnly) assert.equal(summary.mismatchedSnapshotAccepted, true);
     checksPassed = true;

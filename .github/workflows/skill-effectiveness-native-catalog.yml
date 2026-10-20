@@ -66,14 +66,15 @@ jobs:
             -f .github/validation/skill-effectiveness/native-catalog/Dockerfile . \
             2>&1 | tee "$RUNNER_TEMP/native-catalog-qualification/safe/grade-image-build.log"
           echo "TASK_RUNTIME_IMAGE=$(cat "$RUNNER_TEMP/native-catalog-qualification/safe/image-id")" >> "$GITHUB_ENV"
-      - name: Exercise actual notebook and C4 native output retention
+      - name: Exercise actual C4 native output retention with the qualified renderer profile
         working-directory: .github/skills/hve-core/skill-effectiveness
         env:
           NATIVE_TASK_OUTPUT_ONLY: '1'
+          NATIVE_TASK_OUTPUT_KIND: c4
         run: |
           set -euo pipefail
           unset NODE_OPTIONS NODE_TEST_CONTEXT SKILL_EVAL_INVENTORY_DIR
-          node --test --test-name-pattern "actual task output retention" \
+          node --test --test-name-pattern "c4-architecture: actual task output retention" \
             ../../../validation/skill-effectiveness/native-catalog/native-catalog.test.mjs \
             2>&1 | tee "$RUNNER_TEMP/native-catalog-qualification/safe/tests.log"
       - name: Verify preservation and complete owned resource cleanup
