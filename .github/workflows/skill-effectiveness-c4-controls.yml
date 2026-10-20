@@ -1,0 +1,73 @@
+# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# SPDX-License-Identifier: MIT
+name: Temporary trusted C4 renderer qualification
+on:
+  push:
+    branches: [automation/skill-effectiveness-validation-20261017]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  c4:
+    if: github.repository == 'dmavroeid/hve-core' && github.ref == 'refs/heads/automation/skill-effectiveness-validation-20261017'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      DO_NOT_TRACK: '1'
+      VALLY_TELEMETRY_OPTOUT: '1'
+      PUPPETEER_CACHE_DIR: ${{ github.workspace }}/.browser-cache
+    defaults:
+      run:
+        shell: bash
+        working-directory: .evidence-preflight
+    steps:
+      - name: Checkout exact control snapshot
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Set up exact Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.14.0'
+      - name: Restore frozen public evidence dependencies
+        run: npm ci --ignore-scripts --include=dev --no-audit --no-fund
+      - name: Generate public renderer lock and restore isolated dependencies
+        working-directory: .evidence-preflight/validation/mermaid-runtime
+        run: |
+          set -euo pipefail
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          npm ci --ignore-scripts --include=dev --no-audit --no-fund
+      - name: Install explicitly approved browser and bind its executable
+        working-directory: .evidence-preflight/validation/mermaid-runtime
+        run: |
+          set -euo pipefail
+          npm exec --no -- puppeteer browsers install chrome
+          node --input-type=module -e 'import fs from "node:fs"; import puppeteer from "puppeteer"; fs.writeFileSync("browser-config.json",JSON.stringify({executablePath:puppeteer.executablePath(),headless:true,args:["--disable-dev-shm-usage"]},null,2)+"\n"); console.log(JSON.stringify({node:process.version,cli:JSON.parse(fs.readFileSync("node_modules/@mermaid-js/mermaid-cli/package.json")).version,puppeteer:JSON.parse(fs.readFileSync("node_modules/puppeteer/package.json")).version,browser:puppeteer.executablePath()},null,2));' | tee renderer-runtime.json
+          echo "MERMAID_CLI=$PWD/node_modules/@mermaid-js/mermaid-cli/src/cli.js" >> "$GITHUB_ENV"
+          echo "MERMAID_BROWSER_CONFIG=$PWD/browser-config.json" >> "$GITHUB_ENV"
+          echo "C4_CONTROL_EVIDENCE_DIR=$GITHUB_WORKSPACE/.evidence-preflight/c4-control-images" >> "$GITHUB_ENV"
+      - name: Run real rendering and native program-grade controls
+        run: |
+          set -euo pipefail
+          unset SKILL_EFFECTIVENESS_NATIVE_PREFLIGHT SKILL_EVAL_INVENTORY_DIR NODE_OPTIONS NODE_TEST_CONTEXT
+          node --test validation/c4-controls.mjs 2>&1 | tee c4-controls.log
+          git diff --exit-code -- package-lock.json grading fixtures skills review-criteria review-instructions
+      - name: Retain renderer qualification evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: c4-controls
+          path: |
+            .evidence-preflight/c4-controls.log
+            .evidence-preflight/c4-control-images/
+            .evidence-preflight/validation/mermaid-runtime/package.json
+            .evidence-preflight/validation/mermaid-runtime/package-lock.json
+            .evidence-preflight/validation/mermaid-runtime/browser-config.json
+            .evidence-preflight/validation/mermaid-runtime/renderer-runtime.json
+          retention-days: 7
+          if-no-files-found: error
