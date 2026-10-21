@@ -52,7 +52,9 @@ const result = {
   scope: "Public lock generation and package-graph verification only; no browser, model or evaluation execution",
   renderer: compare(versions(npmEntries(oldRenderer)), versions(npmEntries(renderer)),
     { react: "19.3.0", "react-dom": "19.3.0", puppeteer: "25.13.0",
-      "puppeteer-core": "25.13.0", "@puppeteer/browsers": "3.2.4" }),
+      "puppeteer-core": "25.13.0", "@puppeteer/browsers": "3.2.4",
+      "@tanstack/react-virtual": "3.14.19", "@tanstack/virtual-core": "3.19.4",
+      cytoscape: "3.34.3", lilconfig: "3.1.3", "modern-tar": "0.8.5" }),
   python: {},
 };
 for (const name of ["catalog", "notebook"]) {
