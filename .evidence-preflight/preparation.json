@@ -41,7 +41,7 @@
       },
       "publicFixture": "fixtures/detailed-data-catalog/public",
       "gradeAssets": "grading/detailed-data-catalog",
-      "checkerSha256": "9ba23ab7945c018051f189d110a3d9f8845f91dc924fb96909d511ec306fa29e",
+      "checkerSha256": "1b608f54967fce16a132f8a6a5b1474447da20fc0a475a40d2218e4caef40c4b",
       "executableChecker": {
         "command": "node",
         "args": [

@@ -67,5 +67,19 @@ for (const name of ["catalog", "notebook"]) {
   };
 }
 result.rendererLockSha256 = hash(join(root, "renderer", "package-lock.json"));
+const prepared = resolve(root, "..", "..", "..", "..", ".evidence-preflight");
+const metadata = JSON.parse(readFileSync(join(prepared, "preparation.json")));
+result.protectedCheckers = [];
+for (const item of metadata.cases) {
+  if (!item.checkerSha256) continue;
+  const actual = hash(join(prepared, item.gradeAssets, "check-submission.mjs"));
+  assert.equal(item.checkerSha256, actual, "Stale checker metadata: " + item.id);
+  const pins = [...readFileSync(join(prepared, "evals", item.id + ".grade.eval.yaml"), "utf8")
+    .matchAll(/^\s*-\s*["']?([a-f0-9]{64})["']?\s*$/gm)];
+  assert.equal(pins.length, 1, "Exactly one protected checker digest is required");
+  assert.equal(pins[0][1], actual, "Protected grade digest mismatch: " + item.id);
+  result.protectedCheckers.push(item.id);
+}
+assert.equal(result.protectedCheckers.length, 7);
 writeFileSync(join(evidence, "result.json"), JSON.stringify(result, null, 2) + "\n");
 console.log(JSON.stringify(result));
