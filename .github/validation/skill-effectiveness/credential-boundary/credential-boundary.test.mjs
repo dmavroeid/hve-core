@@ -28,6 +28,7 @@ test("actual offered shell cannot read the synthetic runtime credential", { time
   const env = { PATH: process.env.PATH, HOME: home, COPILOT_HOME: configDirectory,
     DO_NOT_TRACK: "1", VALLY_TELEMETRY_OPTOUT: "1", CI: "1", COPILOT_GITHUB_TOKEN: canary };
   const record = { scope: "Synthetic credential only; actual SDK tool RPC; no prompt or inference",
+    measurement: "Exact COPILOT_GITHUB_TOKEN value/key match, not a marker anywhere in command metadata",
     offeredShell: false, positiveWrite: false, toolEnvCanary: null, procCanary: null,
     promptMethodsCalled: 0, modelEvents: 0, shutdown: "pending" };
   const bounded = async (operation, label) => {
@@ -70,11 +71,11 @@ test("actual offered shell cannot read the synthetic runtime credential", { time
       'const fs=require("node:fs");',
       'const marker="HVE_SYNTHETIC_CREDENTIAL_CANARY_NOT_A_REAL_TOKEN";',
       'fs.writeFileSync("positive-write.txt","synthetic-only");',
-      'const toolEnvCanary=Object.values(process.env).some(value=>value.includes(marker));',
+      'const toolEnvCanary=process.env.COPILOT_GITHUB_TOKEN===marker;',
       'let procCanary=false;',
       'for(const name of fs.readdirSync("/proc").filter(value=>/^\\d+$/.test(value))){',
       '  const file="/proc/"+name+"/environ";',
-      '  try{if(fs.readFileSync(file).includes(Buffer.from(marker)))procCanary=true;}',
+      '  try{if(fs.readFileSync(file,"utf8").split("\\0").includes("COPILOT_GITHUB_TOKEN="+marker))procCanary=true;}',
       '  catch(error){if(!["EACCES","EPERM","ENOENT","ESRCH"].includes(error.code))throw error;}',
       '}',
       'console.log(JSON.stringify({toolEnvCanary,procCanary}));',
