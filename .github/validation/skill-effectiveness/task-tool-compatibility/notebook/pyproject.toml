@@ -18,7 +18,12 @@ dependencies = [
 ]
 
 [tool.uv]
-constraint-dependencies = ["platformdirs==4.13.0"]
+constraint-dependencies = [
+    "platformdirs==4.13.0",
+    "pluggy==1.6.0",
+    "fonttools==4.66.1",
+    "mistune==3.3.4",
+]
 
 [[tool.uv.index]]
 name = "pypi"

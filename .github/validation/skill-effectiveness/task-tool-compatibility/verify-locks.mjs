@@ -51,14 +51,16 @@ const oldRenderer = JSON.parse(readFileSync(join(evidence, "renderer.before.json
 const result = {
   scope: "Public lock generation and package-graph verification only; no browser, model or evaluation execution",
   renderer: compare(versions(npmEntries(oldRenderer)), versions(npmEntries(renderer)),
-    { react: "19.3.0", "react-dom": "19.3.0" }),
+    { react: "19.3.0", "react-dom": "19.3.0", puppeteer: "25.13.0",
+      "puppeteer-core": "25.13.0", "@puppeteer/browsers": "3.2.4" }),
   python: {},
 };
 for (const name of ["catalog", "notebook"]) {
   const file = join(root, name, "uv.lock");
   result.python[name] = {
     changes: compare(versions(uvEntries(readFileSync(join(evidence, name + ".before.lock"), "utf8"))),
-      versions(uvEntries(readFileSync(file, "utf8"))), { platformdirs: "4.13.0" }),
+      versions(uvEntries(readFileSync(file, "utf8"))),
+      { platformdirs: "4.13.0", pluggy: "1.6.0", fonttools: "4.66.1", mistune: "3.3.4" }),
     sha256: hash(file),
   };
 }
