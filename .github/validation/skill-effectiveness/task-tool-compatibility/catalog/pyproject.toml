@@ -1,0 +1,24 @@
+[project]
+name = "skill-effectiveness-catalog-controls"
+version = "0.0.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "PyYAML==6.0.1",
+    "jsonschema==4.10.3",
+    "ipykernel==6.30.1",
+    "ipywidgets==8.1.7",
+    "pytest==8.4.2",
+    "ruff==0.13.1",
+    "tqdm==4.67.1",
+]
+
+[tool.uv]
+constraint-dependencies = ["platformdirs==4.13.0"]
+
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+default = true
+
+[tool.ruff]
+target-version = "py312"

@@ -1,0 +1,76 @@
+# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# SPDX-License-Identifier: MIT
+name: Temporary public task-tool lock compatibility
+on:
+  push:
+    branches: [automation/skill-effectiveness-validation-20261017]
+    paths:
+      - .github/validation/skill-effectiveness/task-tool-compatibility/**
+      - .github/workflows/skill-effectiveness-tool-locks.yml
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  locks:
+    if: github.repository == 'dmavroeid/hve-core' && github.ref == 'refs/heads/automation/skill-effectiveness-validation-20261017'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      UV_PYTHON_DOWNLOADS: never
+      DO_NOT_TRACK: '1'
+      VALLY_TELEMETRY_OPTOUT: '1'
+    steps:
+      - name: Checkout exact compatibility inputs
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Set up exact Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.14.0'
+      - name: Set up exact uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: '0.10.9'
+          enable-cache: false
+      - name: Generate public locks with only approved compatibility changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$GITHUB_WORKSPACE/.github/validation/skill-effectiveness/task-tool-compatibility"
+          evidence="$RUNNER_TEMP/task-tool-locks"
+          mkdir -p "$evidence"
+          cp "$root/renderer/package-lock.json" "$evidence/renderer.before.json"
+          for name in catalog notebook; do cp "$root/$name/uv.lock" "$evidence/$name.before.lock"; done
+          cd "$root/renderer"
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund \
+            --registry=https://registry.npmjs.org/ > "$evidence/npm-lock.log" 2>&1
+          for name in catalog notebook; do
+            uv lock --project "$root/$name" --python 3.12 \
+              --upgrade-package platformdirs==4.13.0 > "$evidence/$name-lock.log" 2>&1
+            uv export --project "$root/$name" --frozen --no-dev --no-emit-project \
+              --output-file "$evidence/$name-requirements.txt" > "$evidence/$name-export.log" 2>&1
+          done
+          node "$root/verify-locks.mjs" "$root" "$evidence"
+          for name in renderer catalog notebook; do
+            mkdir -p "$evidence/$name"
+            if [[ "$name" == renderer ]]; then
+              cp "$root/$name/package.json" "$root/$name/package-lock.json" "$root/$name/.npmrc" "$evidence/$name/"
+            else
+              cp "$root/$name/pyproject.toml" "$root/$name/uv.lock" "$evidence/$name/"
+            fi
+          done
+          git -C "$GITHUB_WORKSPACE" diff --exit-code -- .evidence-preflight .github/skills/hve-core/skill-effectiveness
+      - name: Preserve public locks and generation diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: public-task-tool-locks
+          path: ${{ runner.temp }}/task-tool-locks/
+          retention-days: 7
+          if-no-files-found: error
