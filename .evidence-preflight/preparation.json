@@ -77,7 +77,7 @@
       },
       "publicFixture": "fixtures/detailed-analysis-authoring/public",
       "gradeAssets": "grading/detailed-analysis-authoring",
-      "checkerSha256": "c01a90710ae1cbd67b53999d827cd8ca94179747d8fa530d62891898d00d7519",
+      "checkerSha256": "696f294373602e24fece8519996cbe562ecd3451463f89cae5925897406ac858",
       "executableChecker": {
         "command": "node",
         "args": [
@@ -114,7 +114,7 @@
       },
       "publicFixture": "fixtures/detailed-c4-architecture/public",
       "gradeAssets": "grading/detailed-c4-architecture",
-      "checkerSha256": "4cc12230463b5ff729b60ce1927266dd0c386a1dd3e969c350a99815e1d08804",
+      "checkerSha256": "f778e192eb55629bebb0a4cff85b2f762ec220bd6ee2f51642e517987547f763",
       "executableChecker": {
         "command": "node",
         "args": [
@@ -211,7 +211,7 @@
       },
       "publicFixture": "fixtures/generic-analysis-authoring/public",
       "gradeAssets": "grading/generic-analysis-authoring",
-      "checkerSha256": "c01a90710ae1cbd67b53999d827cd8ca94179747d8fa530d62891898d00d7519",
+      "checkerSha256": "696f294373602e24fece8519996cbe562ecd3451463f89cae5925897406ac858",
       "executableChecker": {
         "command": "node",
         "args": [
@@ -248,7 +248,7 @@
       },
       "publicFixture": "fixtures/generic-c4-architecture/public",
       "gradeAssets": "grading/generic-c4-architecture",
-      "checkerSha256": "4cc12230463b5ff729b60ce1927266dd0c386a1dd3e969c350a99815e1d08804",
+      "checkerSha256": "f778e192eb55629bebb0a4cff85b2f762ec220bd6ee2f51642e517987547f763",
       "executableChecker": {
         "command": "node",
         "args": [
@@ -1670,5 +1670,48 @@
         "evidence/cohorts/gpt54/generic/c4-architecture/pair-05/with-skill/assessments/instructions/prompt.md"
       ]
     }
-  ]
+  ],
+  "outputRetentionQualification": {
+    "parent": "prepared-evidence-v8",
+    "notebookRun": "https://github.com/dmavroeid/hve-core/actions/runs/39498612459",
+    "notebookLimit": "Native grades passed; overall workflow failed host decoding/C4. Downloaded notebooks and sixteen PNGs independently verified.",
+    "c4Run": "https://github.com/dmavroeid/hve-core/actions/runs/39499989717",
+    "c4Result": "Two actual native grades passed, ten retained PNGs independently decoded and hash-verified.",
+    "operatorSetting": "HVE_GRADE_OUTPUT_ROOT=/grade-output, grade role only, fresh dedicated bind mount",
+    "limits": "Trusted controls only; candidate credential isolation, useful tool policy and billing interpretation remain open."
+  },
+  "localToolQualification": {
+    "scope": "Trusted Windows-local controls only, not candidate/model quality or hostile-code containment",
+    "platform": "Windows",
+    "python": "3.12.10",
+    "mermaidCli": "12.0.0",
+    "puppeteer": "25.13.0",
+    "browser": "Chrome Headless Shell 155.0.8059.39",
+    "toolPins": {
+      "react": "19.3.0",
+      "react-dom": "19.3.0",
+      "@puppeteer/browsers": "3.2.4",
+      "@tanstack/react-virtual": "3.14.19",
+      "@tanstack/virtual-core": "3.19.4",
+      "cytoscape": "3.34.3",
+      "lilconfig": "3.1.3",
+      "modern-tar": "0.8.5",
+      "platformdirs": "4.13.0",
+      "pluggy": "1.6.0",
+      "fonttools": "4.66.1",
+      "mistune": "3.3.4"
+    },
+    "checks": {
+      "core": 65,
+      "catalog": 2,
+      "notebook": 6,
+      "c4": 10,
+      "c4SuccessfulFullRuns": 2
+    },
+    "publicLockRun": "https://github.com/dmavroeid/hve-core/actions/runs/39574233334",
+    "originalInputsChanged": false,
+    "corePackageDependenciesChanged": false,
+    "evaluationCalls": 0,
+    "executionAuthorized": false
+  }
 }

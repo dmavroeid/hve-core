@@ -57,10 +57,17 @@ jobs:
               --output-file "$evidence/$name-requirements.txt" > "$evidence/$name-export.log" 2>&1
           done
           node "$root/verify-locks.mjs" "$root" "$evidence"
+          npm ci --ignore-scripts --no-audit --no-fund \
+            --registry=https://registry.npmjs.org/ > "$evidence/npm-frozen-restore.log" 2>&1
+          node --check "$root/renderer/configure-browser.mjs"
+          for name in catalog notebook; do
+            uv sync --project "$root/$name" --frozen --python 3.12 > "$evidence/$name-frozen-restore.log" 2>&1
+          done
           for name in renderer catalog notebook; do
             mkdir -p "$evidence/$name"
             if [[ "$name" == renderer ]]; then
-              cp "$root/$name/package.json" "$root/$name/package-lock.json" "$root/$name/.npmrc" "$evidence/$name/"
+              cp "$root/$name/package.json" "$root/$name/package-lock.json" "$root/$name/.npmrc" \
+                "$root/$name/configure-browser.mjs" "$root/$name/.gitignore" "$evidence/$name/"
             else
               cp "$root/$name/pyproject.toml" "$root/$name/uv.lock" "$evidence/$name/"
             fi

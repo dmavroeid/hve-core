@@ -6,6 +6,10 @@
   "engines": {
     "node": ">=24"
   },
+  "scripts": {
+    "browser:install": "node node_modules/puppeteer/lib/puppeteer/node/cli.js browsers install chrome-headless-shell",
+    "browser:configure": "node configure-browser.mjs"
+  },
   "devDependencies": {
     "@mermaid-js/mermaid-cli": "12.0.0",
     "puppeteer": "25.13.0"

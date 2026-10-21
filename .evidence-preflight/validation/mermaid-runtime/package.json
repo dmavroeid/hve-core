@@ -6,8 +6,21 @@
   "engines": {
     "node": ">=24"
   },
+  "scripts": {
+    "browser:install": "node node_modules/puppeteer/lib/puppeteer/node/cli.js browsers install chrome-headless-shell",
+    "browser:configure": "node configure-browser.mjs"
+  },
   "devDependencies": {
     "@mermaid-js/mermaid-cli": "12.0.0",
-    "puppeteer": "25.15.0"
+    "puppeteer": "25.13.0"
+  },
+  "overrides": {
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "@tanstack/react-virtual": "3.14.19",
+    "@tanstack/virtual-core": "3.19.4",
+    "cytoscape": "3.34.3",
+    "lilconfig": "3.1.3",
+    "modern-tar": "0.8.5"
   }
 }

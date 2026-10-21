@@ -260,3 +260,67 @@ The 16 original order definitions are alternatives, not an execution schedule
 or approval for extra sessions. The historical primary design totals 160
 candidate sessions; exact models, repetitions, judge/image budgets, retry
 scope and order require a new approval before calls.
+
+
+## Validated native output retention update
+
+This working preparation copies only four qualified output-root adapters from
+the tested fork and updates their four protected digests and preparation metadata.
+All original prompts, complete skills, fixtures, task checkers and reviewer
+criteria remain byte-identical to frozen v8. The default candidate policy still
+has no grants. This is not a ready-to-run authenticated candidate configuration.
+
+For the four notebook/C4 offline grades only, the operator may set
+HVE_GRADE_OUTPUT_ROOT to /grade-output and pass its variable name through native
+grade-env. The setting accepts only that dedicated root. Use a fresh grade-only
+bind directory with a private host parent, not a broad host mount. Original
+checker/submission references stay readonly. No exporter or volume scraper is
+added. The native checker creates executed notebooks/charts or rendered PNGs
+directly there. Preserve those actual files and the original native grade report.
+
+Notebook controls used 128 pids, 512 MiB memory, one CPU and a 64 MiB noexec
+temporary filesystem. C4 requires the complete tested renderer-only profile:
+512 pids, 2 GiB memory, two CPUs, a 512 MiB noexec temporary filesystem and
+the separately qualified namespace seccomp profile. Both retain non-root,
+readonly root, no network, capability drops and no-new-privileges. Do not
+apply renderer exceptions to the candidate or general grading roles.
+
+Notebook native grading and independent retained-output verification:
+https://github.com/dmavroeid/hve-core/actions/runs/39498612459
+(the overall workflow remains failed). Corrected C4 native grading:
+https://github.com/dmavroeid/hve-core/actions/runs/39499989717.
+These are trusted-control mechanics, not skill-effectiveness or model quality.
+
+Any candidate/reviewer study requires a separately approved scope and budget.
+Credential isolation, useful policy, model-review qualification and budget-unit
+interpretation remain separate gates. No candidate or reviewer call is
+authorized by assembling this preparation; unavailable usage stays unknown.
+
+
+## Qualified local tool preparation
+
+This preparation adopts public-source compatibility locks and the native
+Chrome Headless Shell setup. The primary Vally/SDK/CLI dependency manifest
+and lock, all original task prompts, full skills, fixtures, checkers and
+assessment criteria remain unchanged. Only task-tool dependency metadata,
+browser configuration setup and these preparation notes changed from v9.
+
+Trusted Windows controls passed: 65 core, two catalog, six notebook and ten
+C4 tests. The complete C4 suite passed twice with Chrome Headless Shell
+155.0.8059.39 and Puppeteer 25.13.0. Full Chrome and pipe-transport attempts
+remain failed history; their navigation failures were not turned into
+successful results or hidden by longer checker timeouts.
+
+Use Python 3.12.10 and each Python project's own .venv. Runtime paths for
+CATALOG_PYTHON, QUEUE_DELAY_NOTEBOOK_PYTHON, JUPYTER_PATH, MERMAID_CLI and
+MERMAID_BROWSER_CONFIG are supplied by the operator, not copied into public
+fixtures. The renderer's browser:install and browser:configure commands select
+and configure the matching automation browser. Keep generated absolute paths
+out of source control. Restore through the existing approved channels when
+required, retaining the canonical public locks and artifact hashes.
+
+These are trusted-control mechanics, not fresh skill-effectiveness evidence.
+The conditional candidate/reviewer plan remains unstarted. The local execution
+profile, candidate code-execution approval, model review and spending-accounting
+requirements remain separate. This preparation adds no paid launcher or
+financial enforcement controller.
