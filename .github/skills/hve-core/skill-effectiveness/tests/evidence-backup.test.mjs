@@ -19,10 +19,12 @@ function temporary(t) {
 }
 
 function savedBytes(file) {
-  try { return fs.readFileSync(file); } catch (error) {
+  let handle;
+  try { handle = fs.openSync(file, "r"); } catch (error) {
     if (error.code !== "ENOENT") throw error;
     return null;
   }
+  try { return fs.readFileSync(handle); } finally { fs.closeSync(handle); }
 }
 
 async function startup(t) {
@@ -48,7 +50,7 @@ test("startup backup preserves complete bytes on an independent inode and verifi
   assert.equal(report.sessionId, "actual-session");
   assert.throws(() => backupInventory(file), /EEXIST/);
   assert.throws(() => verifyInventoryBackup(reference), /EEXIST/);
-  assert.deepEqual(fs.readFileSync(file), bytes);
+  assert.deepEqual(savedBytes(file), bytes);
 });
 
 test("startup verification detects mutation or loss without overwriting either copy", async t => {
@@ -151,6 +153,8 @@ test("evidence reads validate the opened descriptor and reject a replaced path b
   const directory = temporary(t);
   const source = path.join(directory, "events.jsonl"), output = path.join(directory, "snapshot");
   fs.writeFileSync(source, "original bytes\n");
+  const replacement = path.join(directory, "replacement.jsonl");
+  fs.writeFileSync(replacement, "replacement bytes\n");
   const open = fs.openSync, read = fs.readSync;
   let descriptor, reads = 0;
   t.mock.method(fs, "openSync", (file, ...args) => {
@@ -158,7 +162,7 @@ test("evidence reads validate the opened descriptor and reject a replaced path b
     if (file === source && descriptor === undefined) {
       descriptor = handle;
       fs.renameSync(source, path.join(directory, "original.jsonl"));
-      fs.writeFileSync(source, "replacement bytes\n");
+      fs.copyFileSync(replacement, source, fs.constants.COPYFILE_EXCL);
     }
     return handle;
   });

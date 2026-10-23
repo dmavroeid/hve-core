@@ -171,6 +171,8 @@ test("directory links/junctions and input replacement races reject before disclo
   f.input.imagePaths = ["linked/image.png"];
   await assert.rejects(preflightReview(f.input, decode), /Links and junctions/);
   f.input.imagePaths = ["source.png"];
+  const replacement = join(f.root, "replacement.png");
+  fs.writeFileSync(replacement, png);
   const open = fs.openSync;
   const read = fs.readSync;
   let descriptor, reads = 0;
@@ -179,7 +181,7 @@ test("directory links/junctions and input replacement races reject before disclo
     if (file === join(f.root, "source.png") && descriptor === undefined) {
       descriptor = handle;
       fs.renameSync(file, join(f.root, "original.png"));
-      fs.writeFileSync(file, png);
+      fs.copyFileSync(replacement, file, fs.constants.COPYFILE_EXCL);
     }
     return handle;
   });
