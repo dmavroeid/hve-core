@@ -479,8 +479,11 @@ npm test
 
 The test files validate packaging, native lint/dry-run/mock results,
 code-plus-prompt evidence wiring, inventory capture and SDK image attachments.
-Ordinary tests use mocked SDK sessions and do not require the optional Copilot
-binary. Native session-startup coverage is skipped unless explicitly selected.
+Ordinary tests mock model responses, but still require the optional platform
+packages: Vally/SDK setup can resolve the bundled Copilot executable, and image
+tests use the native Sharp decoder. Do not restore this suite with
+`--omit=optional`. Native session-startup coverage is skipped unless explicitly
+selected; installed runtime packages do not authorize model calls.
 These tests do not judge output quality or prove model vision. Coordinated
 dependency pins and the canonical lock have passed frozen Ubuntu and Windows
 restore and package tests on the pinned stack. Windows file-symlink coverage
