@@ -11,19 +11,47 @@ type: capability
 defaults:
   runs: 1
   timeout: 60m
-  executor: copilot-sdk
+  executor:
+    name: restricted-copilot-sdk
+    config:
+      # Absolute durable operator-owned path outside candidate workspaces.
+      # Native temporary session-log roots are deleted after events are exported.
+      auditDirectory: "${AUDIT_DIR=MUST-SET-AUDIT-DIR}"
+      # Optional explicit SDK context isolation for nested repository instructions.
+      # The empty-instruction startup guard remains mandatory in either mode.
+      # The adapter supplies the actual workspace/OS without ambient instructions.
+      # clientMode: empty
+      # Optional Windows-only candidate sandbox; requires normal local login.
+      # Copy scripts/native-windows-sandbox.mjs with the plugin.
+      # executionProfile:
+      #   name: windows-native
+      #   readonlyPaths: []
+      #   deniedPaths: []
+      # No-grants starting shape, not a runnable task policy.
+      # Include native skill when skills are supplied. Test legitimate directory
+      # listing and file operations as well as denials; do not grant broad reads.
+      sessionPolicy:
+        availableTools: []
+        permissions:
+          allow: []
+          deny: []
   model: "${AGENT_MODEL=MUST-SET-AGENT-MODEL}"
-  judge_model: "${JUDGE_MODEL=MUST-SET-JUDGE-MODEL}"
 
 agent_environment:
+  # Explicit native environment selects the environment-aware client factory.
+  env:
+    DO_NOT_TRACK: "1"
   skills: []
   files:
-    - src: ../fixtures/<task>
+    - src: ../fixtures/<task>/public
       dest: task-fixture
 
-# This example combines executable and semantic assessment. Adapt the task checks
-# and rubric, removing methods that do not fit. Prompt grading adds paid calls.
-# Delivery, execution and judged quality remain separately interpretable.
+# Collection and public delivery checks only, not private quality evidence.
+# Grade each original trial separately with the protected grade-only spec.
+# Generic backend containment remains separate. The optional native Windows
+# profile covers candidate commands, not offline graders or full task readiness.
+# Paid execution requires an explicit durable AUDIT_DIR, --output-dir and
+# --workspace; audit records never enter candidate listings or transient logs.
 # No aggregate threshold: native trial success requires every grader to pass.
 # Otherwise a mean score could hide a failed test or require a perfect judge score.
 scoring: {}
@@ -39,37 +67,12 @@ stimuli:
     prompt: |
       <real user request; disclose required interfaces without prescribing a method>
       Save the required output to deliverable/<artifact>.
-      Public checks run: node task-fixture/check.mjs deliverable/<artifact>.
-    rubric:
-      - <observable task-quality criterion grounded in the original inputs>
-      - <important limitation or valid-alternative criterion, not a formatting preference>
+      Public task inputs are in task-fixture.
+      <disclose the output contract and observable checks applied equally to both arms>
+      The private evaluator is unavailable during this task; do not try to run it.
     graders:
       - type: completed
       - type: file-exists
         name: delivery
         config:
           path: deliverable/<artifact>
-      - type: run-command
-        name: behavior
-        config:
-          command: node
-          args: ["task-fixture/check.mjs", "deliverable/<artifact>"]
-          expected_exit_code: 0
-          timeout: 3m
-      - type: prompt
-        name: task-quality
-        config:
-          evidence: ["repo"]
-          scoring: scale_1_5
-          threshold: 0.5
-          prompt: |
-            Assess the actual deliverable against the task and original source
-            evidence, not the candidate's claims of success. Cite concrete
-            supporting or contradicting evidence and accept valid alternatives.
-            Explain important omissions and unavailable evidence.
-            Do not infer executed behavior or visual quality from text alone.
-            Do not favor an implementation because it resembles a skill.
-          # repo is a bounded text snapshot of the workspace, not an image input.
-          # Inspect coverage and role leakage. It does not automatically contain
-          # results of another grader: graders need not run in sequence.
-          # Explain task-specific score anchors/thresholds in EVALS.md.

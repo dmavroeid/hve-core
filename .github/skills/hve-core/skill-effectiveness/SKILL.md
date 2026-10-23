@@ -1,22 +1,45 @@
 ---
 name: skill-effectiveness
-description: "Use when creating, reviewing or improving a native Vally A/B evaluation of whether an Agent Skill helps on a realistic task, including deriving a candidate skill from repository knowledge."
+description: "Use when authoring or reviewing a native Vally baseline-versus-with-skill evaluation, with separate protected offline grading and existing-skill or repository-derived candidate entry routes."
 license: MIT AND CC-BY-4.0
 user-invocable: true
-compatibility: "Node.js 24+, Vally 0.17.0, Copilot CLI 1.0.85 and SDK 1.0.14. Windows is the tested native platform."
+compatibility: "Node.js 24+, Vally 0.19.0, Copilot CLI 1.0.89 and SDK 1.0.15. Qualify the selected task/runtime policy separately; model-free checks do not establish containment."
 ---
 # Evaluate Skill Effectiveness
 
 ## Goal
 
 Help answer: **Does the same agent do the same task better with this skill?**
-Build one runnable native Vally 0.17.0 package. Start with the useful task,
+Author one native Vally A/B package. Start with the useful task,
 not a rubric or an evaluation framework.
 
 This is a supervised experimental authoring aid. Local tests establish mechanics,
 not judge accuracy, general skill value or reduced human effort.
 Help the publisher build and iterate a credible demonstration of a claimed
 benefit, not obtain a universal one-shot verdict.
+
+For a first use, read the
+[authoring-only walkthrough](references/first-evaluation.md): minimum inputs,
+a complete native pair, expected files and model-free plan inspection.
+
+**Execution status:** the default templates do not enforce candidate or grader
+containment. An optional Windows-native candidate profile applies the supported
+command sandbox without inherited Copilot authentication variables. Read the
+[restricted execution profile](references/experiment-method.md#restricted-execution-profile)
+before selecting a runtime. Its adapter supports fresh environment-scoped
+sessions only and rejects default/resume requests. Model-free checks cover tested
+Linux boundaries and the opt-in Windows command policy, not arbitrary tasks,
+grader containment or successful model-driven execution. Do not start untrusted
+execution until the selected task and grading route are qualified; see
+[evidence and limits](references/experiment-method.md#completed-model-free-evidence-and-limits).
+The reusable authoring package and generic adapter are cross-platform; the
+optional `windows-native` profile is Windows-only, not a portable sandbox.
+For separate Linux image rendering, use the
+[browser namespace profile](references/experiment-method.md#linux-browser-namespace-sandbox)
+and opt-in real rendering regression; it does not restrict candidate sessions.
+For full repository checkouts, qualify
+[explicit empty client mode](references/experiment-method.md#explicit-empty-client-mode-for-repository-workspaces)
+and inspect the actual instruction inventory before collecting outputs.
 
 ## Success Criteria
 
@@ -25,15 +48,18 @@ benefit, not obtain a universal one-shot verdict.
 * Keep conditions identical except for the complete focus skill, and disclose
   contamination, unavailable evidence, and development-example reuse.
 * Distinguish measured outcomes, assessment judgments, and operational errors.
-* Obtain explicit authorization and adequate spending controls before paid calls.
+* Obtain explicit approval for the paid scope and budget, and disclose which
+  spending limits the execution path can and cannot enforce.
 
 ## Discuss The Task
 
 Start from either an existing skill or a repository:
 
-- For an existing skill, use it directly; no extraction or preliminary baseline run
+* For an existing skill, use it directly; no extraction or preliminary baseline run
   is required.
-- For a repository, follow [repository intake](references/repository-intake.md) to
+* For a repository, first complete the required canonical policy activation in
+  [repository intake](references/repository-intake.md) before reading target
+  sources. If activation is unavailable, stop that route. Then
   identify useful knowledge, write a source-grounded candidate skill and check
   it. Keep the generated candidate outside this authoring skill's folder. If no
   candidate is defensible, explain why and stop. Otherwise continue below with
@@ -52,18 +78,26 @@ reasoned assessment of outputs, measured effort, or a combination.
 
 ## Keep The Comparison Fair
 
-- Use the same task, original inputs, model, tools, limits and checks in both
+Ground runtime capability claims in the pinned public Vally and SDK
+distributions and their supported interfaces.
+Public API declarations and package inspection do not prove runtime enforcement.
+
+* Use the same task, original inputs, model, tools, limits and checks in both
   arms. Add only the complete focus skill to treatment; shared skills go to both.
-- Disclose every required output and checker interface to both candidates.
+* Disclose every required output and checker interface to both candidates.
   Do not encode a preferred implementation or private requirement in scoring.
-- Pin sources and skill contents. Keep role mappings, author notes, prior
+* Pin sources and skill contents. Keep role mappings, author notes, prior
   outputs and judgments outside candidate and reviewer inputs.
-- Fix the task and interpretation rules before seeing outputs. Changes informed
+* Fix the task and interpretation rules before seeing outputs. Changes informed
   by results require a new run. Reused examples are development, not held out.
-- Use fresh candidate sessions and preserve failed/incomplete attempts.
-- Inspect actual startup skill inventories and native access traces. Capture
+* Use fresh candidate sessions and preserve failed/incomplete attempts.
+* Inspect actual startup skill inventories and native access traces. Capture
   does not enforce isolation; missing evidence remains unverified. Preserve
   contaminated attempts and apply exclusions equally, without silent retries.
+  Verify model-facing skill availability and activation as well as registration.
+  Include the native `skill` tool when skills are supplied; a runtime may omit
+  that tool when baseline has no skills. Disclose that native conditional
+  exposure and keep both requested tool lists identical.
 
 ## Choose The Evidence
 
@@ -71,7 +105,7 @@ Choose evidence for the claimed benefit, not whichever grader is easiest to add:
 
 | Claim                                                   | Evidence to generate                                                                    |
 |---------------------------------------------------------|-----------------------------------------------------------------------------------------|
-| Behavior, calculations or contract fidelity             | Native `run-command` with relevant tests or validators                                  |
+| Behavior, calculations or contract fidelity             | Protected native `program` grading of relevant tests or validators                      |
 | Source-grounded interpretation, omissions or usefulness | Native `prompt` assessment of actual artifacts and sources, or an explicit human review |
 | Legibility or visual communication                      | Rendered images inspected by a human or the supplied SDK image-review path              |
 
@@ -91,8 +125,11 @@ why the difference matters to the user, accept alternatives and allow a tie.
 If delivery itself is the claimed benefit, say so.
 
 For open-ended tasks, implement the assessment using [holistic review](references/holistic-review.md).
-The native template demonstrates executable checks plus a `prompt` grader; adapt
-or remove methods that do not fit. Give each review the same task, relevant
+The candidate template collects public task/delivery evidence only. A separate
+grade-only template authenticates a private checker against an operator-pinned
+digest and grades one bound submission through native protected-input paths.
+The optional saved-review template contains only a `prompt` grader;
+adapt or remove methods that do not fit. Give each review the same task, relevant
 original sources and criteria, but only its submission. Native `repo` evidence
 supplies bounded text snapshots, not pixels or automatic anonymity. Inspect what
 the judge actually receives; omitted sources and condition clues are limitations.
@@ -122,17 +159,39 @@ a panel or another deciding model without a reason.
 Follow [native execution](references/experiment-method.md). Vally owns candidate
 execution, workspaces, graders, native records and reports.
 
-| Asset                                                       | Generated-package destination                  |
-|-------------------------------------------------------------|------------------------------------------------|
-| [Package](assets/package.template.json)                     | `package.json`; generate an exact lockfile     |
-| [Registry configuration](.npmrc)                            | `.npmrc`; retain the canonical public registry |
-| [Native eval](assets/native-eval.template.yaml)             | `evals/<task>.eval.yaml`                       |
-| [Native experiment](assets/native-experiment.template.yaml) | `experiments/<task>.experiment.yaml`           |
-| [Inventory recorder](assets/native-inventory.mjs)           | `scripts/native-inventory.mjs`                 |
-| [SDK image review](assets/review-images.mjs)                | `scripts/review-images.mjs`                    |
-| [Evaluation notes](assets/EVALS.template.md)                | `EVALS.md`                                     |
+| Asset                                                             | Generated-package destination                  |
+|-------------------------------------------------------------------|------------------------------------------------|
+| [Package](assets/package.template.json)                           | `package.json`; generate an exact lockfile     |
+| [Registry configuration](.npmrc)                                  | `.npmrc`; retain the canonical public registry |
+| [MIT notice](LICENSE)                                             | `LICENSE`; retain with redistributed helpers   |
+| [License allocation and attribution](NOTICE)                      | `NOTICE`; retain with copied materials         |
+| [Native eval](assets/native-eval.template.yaml)                   | `evals/<task>.eval.yaml`                       |
+| [Protected offline grade](assets/native-grade-eval.template.yaml) | `evals/<task>.grade.eval.yaml`                 |
+| [Saved-evidence review](assets/native-review-eval.template.yaml)  | `evals/<task>.review.eval.yaml`; optional      |
+| [Native experiment](assets/native-experiment.template.yaml)       | `experiments/<task>.experiment.yaml`           |
+| [Inventory recorder](scripts/native-inventory.mjs)                | `scripts/native-inventory.mjs`                 |
+| [SDK image review](scripts/review-images.mjs)                     | `scripts/review-images.mjs`                    |
+| [Session-policy plugin](scripts/restricted-copilot-executor.mjs)  | `scripts/restricted-copilot-executor.mjs`      |
+| [Optional Windows profile](scripts/native-windows-sandbox.mjs)    | `scripts/native-windows-sandbox.mjs`           |
+| [Evaluation notes](assets/EVALS.template.md)                      | `EVALS.md`                                     |
 
-Include public fixtures, the focus skill and directly relevant task tests.
+Place public fixtures in `fixtures/<task>/public` and reviewed evaluator originals
+in `grading/<task>`. Only the former enters candidate staging. Keep the full
+focus skill intact, including legitimate public validation tools.
+Candidate and grader toolchains may differ: for example, candidates can use
+Node/Python while offline graders execute Jupyter notebooks and render Mermaid.
+Disclose that split to both arms, preserve identical candidate capabilities and
+retain full executable and visual evidence. A split is not permission to replace
+required grading with file-only checks.
+Use one original native trial record and one completed arm-bound snapshot per
+offline grade invocation. Keep trusted checker/dependency originals outside
+candidate mounts, bind their reviewed digest before execution and use fresh
+scratch/output locations. Preserve original native reports byte-for-byte;
+link every new grade explicitly in EVALS.md. A grade pass alone cannot prove
+correct arm binding, immutable inputs or credential/egress isolation.
+Keep review evidence and EVALS.md outside both candidate inputs and broad source
+copies. See the [staging contract](references/experiment-method.md#separate-public-grading-and-review-inputs)
+for grader-only dependencies, saved-result review and the remaining runtime gates.
 Do not add a launcher, second schedule/plan format, custom result converter,
 review framework or report generator.
 
@@ -144,6 +203,14 @@ repetitions; increasing it alone does not alternate order. Record total candidat
 sessions before spending. No custom repetition engine is needed.
 
 Before spending, run install, strict native lint, dry-run and focused tests.
+Exercise the actual native read/write/completion lifecycle with synthetic
+responses and task-specific positive/negative permission checks. Include
+ordinary directory listing; a denied legitimate operation can invalidate a pair.
+Keep native workspace paths short and verify that audit patches are retained.
+Retain startup audit records in an explicit durable operator audit directory, not inside
+candidate workspaces or their directory listings. Keep operator policy receipts
+there too; provide explicit, disjoint audit and workspace roots alongside native
+outputs. Native temporary log roots do not preserve extra audit files on export.
 Test valid alternatives, meaningful wrong results, missing inputs and actual
 checker startup errors. Validate a model judge on task-relevant good/weak examples
 within an agreed review budget; local mocks establish wiring, not judgment quality.
@@ -162,16 +229,16 @@ Once satisfied, agree a repeat count and keep the skill, task and assessment fix
 for fresh candidate trials to examine whether the observed difference recurs.
 Repetition does not repair an irrelevant measure or prove general effectiveness.
 
-**Paid trials and model reviews require explicit scope, budget and adequate
-spending controls.** Native Vally 0.17.0 does not expose the needed SDK credit
-limit. Do not start a paid path requiring that cap until it is available;
-timeouts and post-run audits are not substitutes. No new approval flags apply.
-Include native prompt-grader calls and SDK image reviews in the agreed scope;
-they are additional model usage, not free checks.
-
-The generated `study:dry-run` and `study:run` scripts call native Vally directly.
-They take an experiment path and native arguments, including `--param AGENT_MODEL=...`;
-use the environment setup and full commands in the execution guide.
+**Paid trials and model reviews require explicit approval of the run plan and
+budget.** Before any paid invocation, read and apply
+[the supervised run policy](references/experiment-method.md#execute-an-approved-run-plan),
+including retry/rerun scope, unknown usage and security prerequisites.
+Authoring and model-free validation do not authorize calls. The retained CLI and
+image helper still permit manual execution. The package omits paid aliases;
+this does not enforce a spending ceiling.
+Timeouts are not financial enforcement either. When an enforced
+maximum is required but unavailable, stop. Keep spending enforcement with the
+provider or native runtime, not a custom controller.
 
 Inspect inventories, session identities and access traces before interpreting
 results. Pair by native task/trial identity and declared experiment pairing,
@@ -188,14 +255,19 @@ favorable examples, and distinguish a curated demonstration from broader evidenc
 ## Stop Rules
 
 * Stop candidate creation when repository evidence does not justify a useful skill.
-* Stop paid execution when authorization, required spending controls, or required
-  comparison evidence is unavailable.
+* Stop execution when required candidate/grader containment is unavailable or
+  unverified; never fall back silently to unrestricted local execution.
+* Do not start the next paid invocation when approval or required comparison
+  evidence is missing, approved scope is complete, or reported usage reaches the
+  agreed target. Missing or incomparable usage needs explicit bounded
+  continuation approval. If a required enforced ceiling is unavailable, do not
+  start paid calls.
 * Report dependency, checker, runtime, and evidence failures explicitly; do not
   convert them into effectiveness scores or silently retry.
 
 ## Licensing
 
-Historical experiments and review attachments are not shipped in this package.
+The package contains reusable authoring materials, not evaluation results.
 
 | Material                                                                     | License   |
 |------------------------------------------------------------------------------|-----------|
@@ -206,5 +278,9 @@ License terms: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) and
 [MIT](https://github.com/microsoft/hve-core/blob/main/LICENSE).
 
 Dependencies retain their own licenses; no dependency source is vendored.
+Retain [NOTICE](NOTICE) and `LICENSE` in generated packages, including attribution
+and change notices for adapted evaluation notes. These terms cover copied HVE
+materials, not automatically user-authored content or the complete generated
+work. The generated manifest leaves that work's license to its author.
 Read [the security model](SECURITY.md) before changing executable helpers or
 authorizing their use with external content.

@@ -11,8 +11,10 @@ of assessment, not another grader type or mandatory review stage.
 ## Choose And Implement The Assessment
 
 Use native `prompt` grading for reasoned text assessment and `run-command` for
-executable claims. The [eval template](../assets/native-eval.template.yaml)
-demonstrates both. Keep only methods relevant to the task. For example:
+executable claims. The [candidate template](../assets/native-eval.template.yaml)
+keeps executable checks offline; the optional
+[saved-review template](../assets/native-review-eval.template.yaml) contains only
+native text review. Keep only methods relevant to the task. For example:
 
 - Analysis: execute calculations, assess whether conclusions follow from the
   data, and inspect the charts' pixels.
@@ -35,16 +37,26 @@ Do not interpret the displayed mean of unlike checks as a skill-value measure.
 
 For artifact tasks, native `evidence: ["repo"]` supplies a bounded text snapshot;
 the default trajectory-only evidence need not contain the deliverable. Inspect
-coverage before relying on it. Vally 0.17.0 omits binary contents and limits file
+coverage before relying on it. Native text evidence omits binary contents and limits file
 and total text size. It snapshots the workspace, not an automatically anonymous,
 immutable set of original inputs.
 
-Keep authoritative sources available. Native `grading_environment.files` can
-stage evaluator-only originals or reference facts; they must not introduce
-undisclosed task requirements. Verify candidate-visible inputs were not changed.
+Keep authoritative public sources available. Prepare the approved one-submission
+saved-review directory described in the
+[staging contract](experiment-method.md#separate-public-grading-and-review-inputs).
+Private `grading_environment.files` belong only to executable grading, not the
+review spec or its snapshot. They must not introduce undisclosed task requirements.
+Verify candidate-visible inputs against their originals.
 Do not place role mappings, prior judgments or author notes in judge evidence.
 Inspect for condition clues and disclose residual leakage. Native `repo`
-selection has no per-grader include/exclude setting in this pinned version.
+selection is not a per-grader include/exclude control.
+
+Use saved-result `grade --eval-spec` with the separate review spec and approved
+`--workspace`; feed one trial on stdin. Never run this spec as a candidate eval
+or feed the executable grading view to the online reviewer. The published 0.19.0
+package configures read/search and verdict tools for workspace text review;
+the candidate adapter does not restrict grader sessions. Verify the native review restrictions on the
+final stack before use. Do not execute or render submitted code in online review.
 
 Do not assume a prompt grader sees another grader's execution logs: graders need
 not run sequentially. If interpretation depends on completed execution, run it
