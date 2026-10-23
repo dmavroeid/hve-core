@@ -172,16 +172,24 @@ test("directory links/junctions and input replacement races reject before disclo
   await assert.rejects(preflightReview(f.input, decode), /Links and junctions/);
   f.input.imagePaths = ["source.png"];
   const open = fs.openSync;
-  let swapped = false;
+  const read = fs.readSync;
+  let descriptor, reads = 0;
   t.mock.method(fs, "openSync", (file, ...args) => {
-    if (file === join(f.root, "source.png") && !swapped) {
-      swapped = true;
+    const handle = open(file, ...args);
+    if (file === join(f.root, "source.png") && descriptor === undefined) {
+      descriptor = handle;
       fs.renameSync(file, join(f.root, "original.png"));
       fs.writeFileSync(file, png);
     }
-    return open(file, ...args);
+    return handle;
   });
-  await assert.rejects(preflightReview(f.input, decode), /changed before opening/);
+  t.mock.method(fs, "readSync", (...args) => {
+    if (args[0] === descriptor) reads++;
+    return read(...args);
+  });
+  await assert.rejects(preflightReview(f.input, decode), /changed before reading/);
+  assert.equal(reads, 0);
+  assert.throws(() => fs.fstatSync(descriptor), /EBADF/);
 });
 
 test("reading detects content mutation without treating change-time-only updates as replacement", async t => {
@@ -211,12 +219,20 @@ test("file links and unavailable file identities never silently fall back", asyn
       if (process.platform === "win32" && error.code === "EPERM") return child.skip("Windows file-symlink privilege unavailable");
       throw error;
     }
-    await assert.rejects(preflightReview({ ...f.input, imagePaths: ["link.png"] }, decode), /Links and junctions/);
+    await assert.rejects(preflightReview({ ...f.input, imagePaths: ["link.png"] }, decode), /Links and junctions|ELOOP/);
   });
   const lstat = fs.lstatSync;
-  t.mock.method(fs, "lstatSync", (file, options) => {
+  const missingPathIdentity = t.mock.method(fs, "lstatSync", (file, options) => {
     const result = lstat(file, options);
     if (options?.bigint && file === join(f.root, "source.png")) result.ino = 0n;
+    return result;
+  });
+  await assert.rejects(preflightReview(f.input, decode), /supported identity/);
+  missingPathIdentity.mock.restore();
+  const fstat = fs.fstatSync;
+  t.mock.method(fs, "fstatSync", (...args) => {
+    const result = fstat(...args);
+    result.ino = 0n;
     return result;
   });
   await assert.rejects(preflightReview(f.input, decode), /supported identity/);

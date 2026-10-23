@@ -73,8 +73,8 @@ test("standalone license matches the canonical notice and tests use the supporte
 test("copied materials retain scoped licensing without licensing independently authored outputs", t => {
   const notice = readFileSync(join(skillRoot, "NOTICE"), "utf8");
   assert.match(notice, /Copyright \(c\) Microsoft Corporation/);
-  assert.match(notice, /https:\/\/github\.com\/microsoft\/hve-core\/tree\/main\/\.github\/skills\/hve-core\/skill-effectiveness/);
-  assert.match(notice, /https:\/\/creativecommons\.org\/licenses\/by\/4\.0\//);
+  assert.ok(notice.includes("https://github.com/microsoft/hve-core/tree/main/.github/skills/hve-core/skill-effectiveness"));
+  assert.ok(notice.includes("https://creativecommons.org/licenses/by/4.0/"));
   assert.match(notice, /LICENSE contains the MIT terms/);
   assert.match(notice, /Indicate changes/);
   assert.match(notice, /not automatically to\s+operator-authored/);

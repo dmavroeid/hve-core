@@ -45,17 +45,20 @@ function readApproved(root, name, maximum) {
   const relative = path.relative(root, file);
   assert.ok(relative && relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative),
     "Review input must be inside the approved artifact root");
-  checkedPath(file);
-  const before = fs.lstatSync(file, { bigint: true });
-  assert.ok(before.isFile() && before.ino > 0n, "Review input requires a regular file with supported identity");
-  assert.ok(before.size > 0n && before.size <= BigInt(maximum), "Review input is empty or exceeds its byte limit");
+  checkedPath(path.dirname(file));
   const fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0));
   let bytes, failure;
   try {
+    const before = fs.fstatSync(fd, { bigint: true });
+    assert.ok(before.isFile() && before.ino > 0n, "Review input requires a regular file with supported identity");
+    assert.ok(before.size > 0n && before.size <= BigInt(maximum), "Review input is empty or exceeds its byte limit");
+    checkedPath(file);
+    const named = fs.lstatSync(file, { bigint: true });
+    assert.ok(named.isFile() && named.ino > 0n, "Review input requires a regular file with supported identity");
     // Windows change times can move during a read-only open; compare content metadata.
     const same = stat => stat.isFile() && stat.ino > 0n && stat.dev === before.dev && stat.ino === before.ino
       && stat.size === before.size && stat.mtimeNs === before.mtimeNs;
-    assert.ok(same(fs.fstatSync(fd, { bigint: true })), "Review input changed before opening");
+    assert.ok(same(named), "Review input changed before reading");
     bytes = Buffer.alloc(Number(before.size));
     let offset = 0;
     while (offset < bytes.length) {

@@ -3,7 +3,7 @@ title: Skill Effectiveness Skill Security Model
 description: "STRIDE model for tool-using intake, native candidate and grader gaps, inventory capture, and no-tools image review"
 author: microsoft/hve-core
 ms.topic: reference
-ms.date: 2026-10-22
+ms.date: 2026-10-23
 keywords:
   - security
   - STRIDE
@@ -351,7 +351,11 @@ reviewing saved text/pixels is not equivalent to safely executing that code.
 
 Missing or empty inputs fail explicitly. Media preflight bounds prompt bytes,
 image count, individual/aggregate bytes, decoded dimensions/pixels and base64
-size before SDK contact. Stable opened bytes are decoded, copied and attached.
+size before SDK contact. Read-only, nonblocking descriptor opens use no-follow
+where supported; descriptor type, size and identity are validated before bytes
+are read or buffers allocated. Canonical/link checks and path-to-descriptor
+identity comparisons reject substitutions after open and during reading.
+Stable opened bytes are decoded, copied and attached.
 Windows change time alone is not content identity; device/inode, size and
 modification time are checked before/after reads. These checks do not establish
 hostile same-user race immunity. Actual Sharp full decode and clean frozen
@@ -364,8 +368,9 @@ A deadline does not cancel the RPC or
 prove shutdown. The diagnostic preload retains failure records; the scoped
 factory propagates capture/backup and disconnect errors to native execution.
 Completion verification retains both execution and evidence errors.
-Startup-backup and optional log reads require nonempty regular files of at most
-16 MiB and check opened-file identity, size and modification time. This does
+Startup-backup and optional log reads validate the opened descriptor before
+reading, require nonempty regular files of at most 16 MiB and compare its
+identity, size and modification time with the named path. This does
 not establish hostile same-user race immunity or bound SDK response memory.
 Log backup never truncates a large file into a success-shaped partial history.
 Image decoder, client

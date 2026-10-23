@@ -69,16 +69,16 @@ const sameFile = (a, b) => a.dev === b.dev && a.ino === b.ino
 
 function readEvidence(file) {
   assert.ok(path.isAbsolute(file), "Evidence file must be absolute");
-  const before = fs.lstatSync(file, { bigint: true });
-  assert.ok(before.isFile() && !before.isSymbolicLink(), "Evidence must be a regular file, not a symbolic link");
-  assert.equal(normalizePath(fs.realpathSync(file)), normalizePath(path.resolve(file)),
-    "Evidence must not traverse symbolic links");
-  assert.ok(before.size > 0n && before.size <= BigInt(maxEvidenceBytes),
-    "Evidence must be nonempty and at most 16 MiB");
-  const handle = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
-  let bytes, failure;
+  const handle = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0));
+  let bytes, before, failure;
   try {
-    assert.ok(sameFile(before, fs.fstatSync(handle, { bigint: true })), "Evidence changed before reading");
+    before = fs.fstatSync(handle, { bigint: true });
+    assert.ok(before.isFile() && before.ino > 0n, "Evidence must be a regular file with supported identity");
+    assert.ok(before.size > 0n && before.size <= BigInt(maxEvidenceBytes),
+      "Evidence must be nonempty and at most 16 MiB");
+    assert.equal(normalizePath(fs.realpathSync(file)), normalizePath(path.resolve(file)),
+      "Evidence must not traverse symbolic links");
+    assert.ok(sameFile(before, fs.lstatSync(file, { bigint: true })), "Evidence changed before reading");
     bytes = Buffer.alloc(Number(before.size));
     let offset = 0;
     while (offset < bytes.length) {

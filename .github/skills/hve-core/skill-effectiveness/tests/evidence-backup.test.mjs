@@ -18,6 +18,13 @@ function temporary(t) {
   return directory;
 }
 
+function savedBytes(file) {
+  try { return fs.readFileSync(file); } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+    return null;
+  }
+}
+
 async function startup(t) {
   const directory = temporary(t);
   const session = { sessionId: "actual-session", rpc: {
@@ -56,13 +63,13 @@ test("startup verification detects mutation or loss without overwriting either c
         fs.unlinkSync(reference.backupFile);
         fs.linkSync(file, reference.backupFile);
       }
-      const before = [file, reference.backupFile].map(file => fs.existsSync(file) ? fs.readFileSync(file) : null);
+      const before = [file, reference.backupFile].map(savedBytes);
       assert.throws(() => verifyInventoryBackup(reference), /changed|ENOENT|share the original inode/);
       const report = JSON.parse(fs.readFileSync(path.join(directory, "actual-session.verification.json")));
       assert.equal(report.status, "error");
       assert.equal(report.expectedSha256, reference.sha256);
       assert.ok(report.error.message);
-      assert.deepEqual([file, reference.backupFile].map(file => fs.existsSync(file) ? fs.readFileSync(file) : null), before);
+      assert.deepEqual([file, reference.backupFile].map(savedBytes), before);
     });
   }
 });
@@ -120,7 +127,7 @@ test("selected log backup is exclusive, bounded and independent of later log gro
   assert.deepEqual(fs.readFileSync(boundaryOutput), fs.readFileSync(source));
   fs.truncateSync(source, 16 * 1024 * 1024 + 1);
   assert.throws(() => backupSessionLog(source, path.join(directory, "oversized-backup")), /16 MiB/);
-  assert.throws(() => backupSessionLog(directory, path.join(directory, "directory-backup")), /regular file/);
+  assert.throws(() => backupSessionLog(directory, path.join(directory, "directory-backup")), /regular file|EISDIR/);
   assert.throws(() => backupSessionLog(source, "relative-output"), /absolute/);
   assert.equal(fs.existsSync(path.join(directory, "oversized-backup")), false);
   if (process.platform !== "win32") assert.equal(fs.statSync(output).mode & 0o777, 0o600);
@@ -137,6 +144,31 @@ test("a log that changes while reading is not published", t => {
     return count;
   });
   assert.throws(() => backupSessionLog(source, output), /changed while reading/);
+  assert.equal(fs.existsSync(output), false);
+});
+
+test("evidence reads validate the opened descriptor and reject a replaced path before reading bytes", t => {
+  const directory = temporary(t);
+  const source = path.join(directory, "events.jsonl"), output = path.join(directory, "snapshot");
+  fs.writeFileSync(source, "original bytes\n");
+  const open = fs.openSync, read = fs.readSync;
+  let descriptor, reads = 0;
+  t.mock.method(fs, "openSync", (file, ...args) => {
+    const handle = open(file, ...args);
+    if (file === source && descriptor === undefined) {
+      descriptor = handle;
+      fs.renameSync(source, path.join(directory, "original.jsonl"));
+      fs.writeFileSync(source, "replacement bytes\n");
+    }
+    return handle;
+  });
+  t.mock.method(fs, "readSync", (...args) => {
+    if (args[0] === descriptor) reads++;
+    return read(...args);
+  });
+  assert.throws(() => backupSessionLog(source, output), /changed before reading/);
+  assert.equal(reads, 0);
+  assert.throws(() => fs.fstatSync(descriptor), /EBADF/);
   assert.equal(fs.existsSync(output), false);
 });
 
