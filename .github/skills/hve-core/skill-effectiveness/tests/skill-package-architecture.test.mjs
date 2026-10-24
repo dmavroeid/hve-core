@@ -96,7 +96,7 @@ test("copied materials retain scoped licensing without licensing independently a
 test("locked MCP and OpenTelemetry dependencies include the advisory fixes", () => {
   const lock = JSON.parse(readFileSync(join(skillRoot, "package-lock.json"), "utf8"));
   for (const [name, major, minor] of [
-    ["@modelcontextprotocol/sdk", 1, 31],
+    ["@modelcontextprotocol/sdk", 1, 32],
     ["@opentelemetry/core", 2, 8],
   ]) {
     const entries = Object.entries(lock.packages).filter(([key]) => key.endsWith(`node_modules/${name}`));

@@ -555,7 +555,12 @@ This smoke test creates real local SDK sessions but stops before any model promp
 It is not part of ordinary upstream validation.
 
 The development package and generated package pin the same direct dependencies
-and security overrides. MCP SDK 1.31.0 fixes GHSA-6qxp-vccf-f47h. Azure Monitor
+and security overrides. MCP SDK 1.32.1 includes the fixes for
+[GHSA-6qxp-vccf-f47h](https://github.com/advisories/GHSA-6qxp-vccf-f47h),
+[GHSA-22jm-h49p-29qw](https://github.com/advisories/GHSA-22jm-h49p-29qw),
+[GHSA-46jr-4wx8-v453](https://github.com/advisories/GHSA-46jr-4wx8-v453),
+[GHSA-6prh-2h8m-c8cw](https://github.com/advisories/GHSA-6prh-2h8m-c8cw)
+and [GHSA-rvq5-wwqv-78pq](https://github.com/advisories/GHSA-rvq5-wwqv-78pq). Azure Monitor
 exporter beta.46 replaces the old logging stack containing OpenTelemetry Core
 2.0.0 (GHSA-8988-4f7v-96qf); its compatible Core versions include the 2.8.0 fix.
 Keep these overrides when generating a package, since the exporter's `latest`

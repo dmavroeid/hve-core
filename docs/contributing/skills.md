@@ -3,7 +3,7 @@ title: Contributing Skills to HVE Core
 description: Requirements and standards for contributing skill packages to hve-core
 sidebar_position: 6
 author: Microsoft
-ms.date: 2026-10-23
+ms.date: 2026-10-24
 ms.topic: how-to
 keywords:
   - skills
@@ -501,7 +501,7 @@ Skills may include scripts in any of these supported languages. Each language ha
 | Language   | Script Extension | Test Framework | Linter / Analyzer                           | CI Coverage        |
 |------------|------------------|----------------|---------------------------------------------|--------------------|
 | Bash       | `.sh`            | N/A            | shellcheck                                  | Lint only          |
-| Node.js    | `.mjs`           | `node:test`    | `node --check`                              | Syntax + tests     |
+| Node.js    | `.mjs`           | `node:test`    | N/A                                         | Tests only         |
 | PowerShell | `.ps1`           | Pester 5.x     | PSScriptAnalyzer                            | Full (lint + test) |
 | Python     | `.py`            | pytest         | ruff (line-length=88, target-version=py311) | Full (lint + test) |
 
