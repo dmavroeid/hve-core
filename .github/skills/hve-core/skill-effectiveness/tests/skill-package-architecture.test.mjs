@@ -93,11 +93,13 @@ test("copied materials retain scoped licensing without licensing independently a
   assert.match(readFileSync(join(generated, "EVALS.md"), "utf8"), /CC BY 4\.0/);
 });
 
-test("locked MCP, OpenTelemetry and Zod dependencies include the advisory fixes", () => {
+test("locked dependencies include the required advisory fixes", () => {
   const lock = JSON.parse(readFileSync(join(skillRoot, "package-lock.json"), "utf8"));
   for (const [name, major, minor, patch = 0] of [
     ["@modelcontextprotocol/sdk", 1, 32],
     ["@opentelemetry/core", 2, 8],
+    ["body-parser", 2, 4],
+    ["fast-uri", 3, 1, 9],
     ["zod", 4, 6, 6],
   ]) {
     const entries = Object.entries(lock.packages).filter(([key]) => key.endsWith(`node_modules/${name}`));
