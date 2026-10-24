@@ -17,8 +17,8 @@ permissions:
 
 jobs:
   generate:
-    name: Generate and validate clean public npm resolution
-    if: github.repository == 'dmavroeid/hve-core'
+    name: Validate the frozen qs-compatible skill package
+    if: github.repository == 'dmavroeid/hve-core' && github.ref == 'refs/heads/automation/skill-effectiveness-audit-20261024'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -44,17 +44,16 @@ jobs:
           node-version-file: .node-version
           package-manager-cache: false
 
-      - name: Generate and verify the canonical public resolution
+      - name: Verify the exact frozen canonical resolution
         run: |
           set -euo pipefail
           output="$RUNNER_TEMP/skill-effectiveness-canonical"
           mkdir "$output"
-          cp package.json .npmrc "$output/"
+          cp package.json package-lock.json .npmrc "$output/"
           (
             cd "$output"
             node --version
             npm --version
-            npm install --package-lock-only --ignore-scripts --registry=https://registry.npmjs.org/ --no-audit --no-fund
             node --input-type=module <<'NODE'
           import assert from "node:assert/strict";
           import fs from "node:fs";
@@ -81,7 +80,6 @@ jobs:
           assert.equal(fs.existsSync("node_modules"), false);
           NODE
           )
-          cp "$output/package-lock.json" package-lock.json
           (cd "$output" && sha256sum package.json package-lock.json > SHA256SUMS)
 
       - name: Require a clean public npm audit
@@ -97,7 +95,7 @@ jobs:
           assert.equal(audit.metadata.vulnerabilities.total, 0);
           NODE
 
-      - name: Restore and test the generated dependency set
+      - name: Restore and test the exact frozen dependency set
         id: tests
         run: |
           set -euo pipefail

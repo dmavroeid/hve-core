@@ -114,6 +114,30 @@ test("locked dependencies include the required advisory fixes", () => {
   }
 });
 
+test("body-parser resolves a compatible qs version", () => {
+  const local = JSON.parse(readFileSync(join(skillRoot, "package.json"), "utf8"));
+  const lock = JSON.parse(readFileSync(join(skillRoot, "package-lock.json"), "utf8"));
+  const parser = lock.packages["node_modules/body-parser"];
+  const qs = lock.packages["node_modules/qs"];
+  assert.ok(parser, "body-parser must be present");
+  assert.ok(qs, "qs must be present");
+  const requirement = /^\^([1-9]\d*)\.(\d+)\.(\d+)$/.exec(parser.dependencies.qs);
+  assert.ok(requirement, "expected a stable positive-major caret requirement");
+  assert.match(qs.version, /^\d+\.\d+\.\d+$/);
+  const [major, minor, patch] = requirement.slice(1).map(Number);
+  const [actualMajor, actualMinor, actualPatch] = qs.version.split(".").map(Number);
+  assert.equal(actualMajor, major, "qs must remain within body-parser's required major");
+  assert.ok(actualMinor > minor || (actualMinor === minor && actualPatch >= patch),
+    `${qs.version} does not satisfy body-parser's ${parser.dependencies.qs} requirement`);
+  assert.equal(qs.version, local.overrides.qs);
+  const parserManifest = join(skillRoot, "node_modules", "body-parser", "package.json");
+  const installedParser = JSON.parse(readFileSync(parserManifest, "utf8"));
+  assert.equal(installedParser.version, parser.version);
+  assert.equal(installedParser.dependencies.qs, parser.dependencies.qs);
+  const installedQs = JSON.parse(readFileSync(createRequire(parserManifest).resolve("qs/package.json"), "utf8"));
+  assert.equal(installedQs.version, qs.version);
+});
+
 test("the SDK and Vally resolve the patched Zod override", () => {
   const local = JSON.parse(readFileSync(join(skillRoot, "package.json"), "utf8"));
   for (const name of ["@github/copilot-sdk", "@microsoft/vally"]) {

@@ -530,9 +530,9 @@ Do not regenerate the public lock, change versions, bypass hashes/TLS or fall
 back to a public download when local policy requires the approved source.
 
 The development package and generated template explicitly override `qs` to
-6.16.0. This compatible pin passed public and approved-registry frozen restores
-and model-free checks; it does not include the functional and robustness fixes
-in [6.16.1](https://github.com/ljharb/qs/blob/v6.16.1/CHANGELOG.md).
+[6.16.1](https://github.com/ljharb/qs/blob/v6.16.1/CHANGELOG.md), satisfying
+body-parser 2.4.0's `^6.16.1` requirement. The package regression checks both the
+locked caret range and body-parser's installed `qs` resolution.
 Reassess the pin when updating dependencies. This recipe does not approve
 packages, guarantee registry availability or authorize runtime startup.
 
