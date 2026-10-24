@@ -93,20 +93,31 @@ test("copied materials retain scoped licensing without licensing independently a
   assert.match(readFileSync(join(generated, "EVALS.md"), "utf8"), /CC BY 4\.0/);
 });
 
-test("locked MCP and OpenTelemetry dependencies include the advisory fixes", () => {
+test("locked MCP, OpenTelemetry and Zod dependencies include the advisory fixes", () => {
   const lock = JSON.parse(readFileSync(join(skillRoot, "package-lock.json"), "utf8"));
-  for (const [name, major, minor] of [
+  for (const [name, major, minor, patch = 0] of [
     ["@modelcontextprotocol/sdk", 1, 32],
     ["@opentelemetry/core", 2, 8],
+    ["zod", 4, 6, 6],
   ]) {
     const entries = Object.entries(lock.packages).filter(([key]) => key.endsWith(`node_modules/${name}`));
     assert.ok(entries.length > 0, `${name}: dependency must be present`);
     for (const [key, entry] of entries) {
       assert.match(entry.version, /^\d+\.\d+\.\d+$/);
-      const [actualMajor, actualMinor] = entry.version.split(".").map(Number);
-      assert.ok(actualMajor > major || (actualMajor === major && actualMinor >= minor),
+      const [actualMajor, actualMinor, actualPatch] = entry.version.split(".").map(Number);
+      assert.ok(actualMajor > major || (actualMajor === major &&
+        (actualMinor > minor || (actualMinor === minor && actualPatch >= patch))),
         `${key}: ${entry.version} predates the advisory fix`);
     }
+  }
+});
+
+test("the SDK and Vally resolve the patched Zod override", () => {
+  const local = JSON.parse(readFileSync(join(skillRoot, "package.json"), "utf8"));
+  for (const name of ["@github/copilot-sdk", "@microsoft/vally"]) {
+    const require = createRequire(join(skillRoot, "node_modules", ...name.split("/"), "package.json"));
+    const installed = JSON.parse(readFileSync(require.resolve("zod/package.json"), "utf8"));
+    assert.equal(installed.version, local.overrides.zod);
   }
 });
 

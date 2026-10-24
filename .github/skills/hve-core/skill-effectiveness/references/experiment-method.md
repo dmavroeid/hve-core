@@ -563,6 +563,8 @@ and security overrides. MCP SDK 1.32.1 includes the fixes for
 and [GHSA-rvq5-wwqv-78pq](https://github.com/advisories/GHSA-rvq5-wwqv-78pq). Azure Monitor
 exporter beta.46 replaces the old logging stack containing OpenTelemetry Core
 2.0.0 (GHSA-8988-4f7v-96qf); its compatible Core versions include the 2.8.0 fix.
+Zod 4.6.7 replaces the SDK's vulnerable 4.3.6 pin and fixes
+[GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5).
 Keep these overrides when generating a package, since the exporter's `latest`
 tag still selects the older release. No custom OAuth provider is supplied here;
 applications adding HTTP OAuth must also follow the MCP advisory's credential
