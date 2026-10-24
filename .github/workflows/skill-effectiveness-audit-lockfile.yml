@@ -1,0 +1,148 @@
+# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# SPDX-License-Identifier: MIT
+name: Skill Effectiveness Clean Audit Lockfile
+
+on:
+  push:
+    branches:
+      - automation/skill-effectiveness-audit-20261024
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    name: Generate and validate clean public npm resolution
+    if: github.repository == 'dmavroeid/hve-core'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: .github/skills/hve-core/skill-effectiveness
+        shell: bash
+    env:
+      NPM_CONFIG_REGISTRY: https://registry.npmjs.org/
+      NPM_CONFIG_IGNORE_SCRIPTS: "true"
+      SKILL_EFFECTIVENESS_NATIVE_PREFLIGHT: "0"
+      SKILL_EFFECTIVENESS_RUNTIME_TESTS: "0"
+    steps:
+      - name: Checkout the exact automation source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up the repository Node.js version
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+
+      - name: Generate and verify the canonical public resolution
+        run: |
+          set -euo pipefail
+          output="$RUNNER_TEMP/skill-effectiveness-canonical"
+          mkdir "$output"
+          cp package.json .npmrc "$output/"
+          (
+            cd "$output"
+            node --version
+            npm --version
+            npm install --package-lock-only --ignore-scripts --registry=https://registry.npmjs.org/ --no-audit --no-fund
+            node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import fs from "node:fs";
+          const manifest = JSON.parse(fs.readFileSync("package.json", "utf8"));
+          const lock = JSON.parse(fs.readFileSync("package-lock.json", "utf8"));
+          assert.deepEqual(lock.packages[""].devDependencies, manifest.devDependencies);
+          for (const [name, version] of Object.entries(manifest.devDependencies)) {
+            assert.equal(lock.packages[`node_modules/${name}`].version, version);
+          }
+          for (const [name, version] of Object.entries(manifest.overrides)) {
+            const entries = Object.entries(lock.packages).filter(([key]) => key.endsWith(`node_modules/${name}`));
+            assert.ok(entries.length > 0, name);
+            for (const [, entry] of entries) assert.equal(entry.version, version, name);
+          }
+          for (const [name, entry] of Object.entries(lock.packages)) {
+            if (!name) continue;
+            const url = new URL(entry.resolved);
+            assert.equal(url.protocol, "https:");
+            assert.equal(url.hostname, "registry.npmjs.org");
+            assert.equal(url.username, "");
+            assert.equal(url.password, "");
+            assert.match(entry.integrity, /^sha512-/, name);
+          }
+          assert.equal(fs.existsSync("node_modules"), false);
+          NODE
+          )
+          cp "$output/package-lock.json" package-lock.json
+          (cd "$output" && sha256sum package.json package-lock.json > SHA256SUMS)
+
+      - name: Require a clean public npm audit
+        id: audit
+        run: |
+          set -euo pipefail
+          npm audit --package-lock-only --ignore-scripts --audit-level=low --json > "$RUNNER_TEMP/skill-effectiveness-canonical/audit.json"
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import fs from "node:fs";
+          import path from "node:path";
+          const audit = JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, "skill-effectiveness-canonical", "audit.json"), "utf8"));
+          assert.equal(audit.metadata.vulnerabilities.total, 0);
+          NODE
+
+      - name: Restore and test the generated dependency set
+        id: tests
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts --include=dev --no-audit --no-fund
+          node --test --test-concurrency=1 --experimental-test-coverage \
+            --test-reporter=lcov --test-reporter-destination="$RUNNER_TEMP/skill-effectiveness-canonical/coverage-node.info" \
+            --test-reporter=junit --test-reporter-destination="$RUNNER_TEMP/skill-effectiveness-canonical/tests.xml" \
+            --test-reporter=spec --test-reporter-destination=stdout \
+            tests/*.test.mjs
+
+      - name: Validate canonical dependency sources
+        working-directory: .
+        run: npm run lint:public-dependency-feeds
+
+      - name: Record source and validation identities
+        if: always()
+        working-directory: .
+        env:
+          AUDIT_OUTCOME: ${{ steps.audit.outcome }}
+          TEST_OUTCOME: ${{ steps.tests.outcome }}
+        run: |
+          set -euo pipefail
+          output="$RUNNER_TEMP/skill-effectiveness-canonical"
+          test -d "$output"
+          git ls-files -z -- .github/skills/hve-core/skill-effectiveness LICENSE .node-version |
+            xargs -0 sha256sum > "$output/SOURCE-SHA256SUMS"
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          import path from "node:path";
+          const receipt = {
+            repository: process.env.GITHUB_REPOSITORY,
+            sourceCommit: process.env.GITHUB_SHA,
+            runId: process.env.GITHUB_RUN_ID,
+            node: process.version,
+            audit: process.env.AUDIT_OUTCOME,
+            tests: process.env.TEST_OUTCOME
+          };
+          fs.writeFileSync(path.join(process.env.RUNNER_TEMP, "skill-effectiveness-canonical", "receipt.json"), JSON.stringify(receipt, null, 2) + "\n");
+          NODE
+
+      - name: Upload canonical dependency and validation evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: skill-effectiveness-canonical-audit
+          path: ${{ runner.temp }}/skill-effectiveness-canonical/
+          include-hidden-files: false
+          if-no-files-found: error
+          retention-days: 7
